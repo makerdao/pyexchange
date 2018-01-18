@@ -287,7 +287,7 @@ class BiboxApi:
 
         return result == "撤销中"
 
-    def get_trade_history(self, pair: str, number_of_trades: int, retry: bool = False) -> List[Trade]:
+    def get_trades(self, pair: str, number_of_trades: int, retry: bool = False) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(number_of_trades, int))
         assert(isinstance(retry, bool))
@@ -320,3 +320,12 @@ class BiboxApi:
                                            money=Wad.from_number(item['money']),
                                            money_symbol=item['currency_symbol'],
                                            fee=Wad.from_number(item['fee'])), items[:number_of_trades]))
+
+    def get_all_trades(self, pair: str, number_of_trades: int, retry: bool = False) -> List[Trade]:
+        assert(isinstance(pair, str))
+        assert(isinstance(number_of_trades, int))
+        assert(isinstance(retry, bool))
+
+        # can be implemented with `api/deals`
+
+        raise Exception("Not implemented yet")
