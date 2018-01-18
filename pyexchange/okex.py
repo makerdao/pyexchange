@@ -144,17 +144,6 @@ class OKEXApi:
         assert(isinstance(pair, str))
         return self._http_get("/api/v1/depth.do", f"symbol={pair}")
 
-    def trades(self, pair: str) -> List[Trade]:
-        assert(isinstance(pair, str))
-
-        result = self._http_get("/api/v1/trades.do", f"symbol={pair}", False)
-        return list(map(lambda item: Trade(trade_id=item['tid'],
-                                           timestamp=item['date'],
-                                           is_sell=item['type'] == 'sell',
-                                           price=Wad.from_number(item['price']),
-                                           amount=Wad.from_number(item['amount']),
-                                           amount_symbol=pair.split('_')[0].lower()), result))
-    
     def get_balances(self) -> dict:
         return self._http_post("/api/v1/userinfo.do", {})["info"]["funds"]
 
@@ -215,6 +204,21 @@ class OKEXApi:
             self.logger.info(f"Failed to cancel order #{order_id}...")
 
         return success
+
+    def get_trades(self, pair: str):
+        assert(isinstance(pair, str))
+        raise Exception("get_trades() not available for OKEX")
+
+    def get_all_trades(self, pair: str) -> List[Trade]:
+        assert(isinstance(pair, str))
+
+        result = self._http_get("/api/v1/trades.do", f"symbol={pair}", False)
+        return list(map(lambda item: Trade(trade_id=item['tid'],
+                                           timestamp=item['date'],
+                                           is_sell=item['type'] == 'sell',
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad.from_number(item['amount']),
+                                           amount_symbol=pair.split('_')[0].lower()), result))
 
     def _create_signature(self, params: dict):
         assert(isinstance(params, dict))
