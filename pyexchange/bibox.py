@@ -21,7 +21,7 @@ import json
 import logging
 from pprint import pformat
 from random import random
-from typing import List
+from typing import List, Optional
 
 import requests
 import time
@@ -96,7 +96,7 @@ class Order:
 
 class Trade:
     def __init__(self,
-                 trade_id: id,
+                 trade_id: Optional[id],
                  timestamp: int,
                  is_sell: bool,
                  price: Wad,
@@ -104,8 +104,8 @@ class Trade:
                  amount_symbol: str,
                  money: Wad,
                  money_symbol: str,
-                 fee: Wad):
-        assert(isinstance(trade_id, int))
+                 fee: Optional[Wad]):
+        assert(isinstance(trade_id, int) or (trade_id is None))
         assert(isinstance(timestamp, int))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -113,7 +113,7 @@ class Trade:
         assert(isinstance(amount_symbol, str))
         assert(isinstance(money, Wad))
         assert(isinstance(money_symbol, str))
-        assert(isinstance(fee, Wad))
+        assert(isinstance(fee, Wad) or (fee is None))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
@@ -321,11 +321,23 @@ class BiboxApi:
                                            money_symbol=item['currency_symbol'],
                                            fee=Wad.from_number(item['fee'])), items[:number_of_trades]))
 
-    def get_all_trades(self, pair: str, number_of_trades: int, retry: bool = False) -> List[Trade]:
+    def get_all_trades(self, pair: str, retry: bool = False) -> List[Trade]:
         assert(isinstance(pair, str))
-        assert(isinstance(number_of_trades, int))
         assert(isinstance(retry, bool))
 
-        # can be implemented with `api/deals`
+        result = self._request('/v1/mdata', {"cmd": "api/deals",
+                                                    "body": {
+                                                        "pair": pair,
+                                                        "size": 200
+                                                    }}, retry)
+        print(result)
 
-        raise Exception("Not implemented yet")
+        return list(map(lambda item: Trade(trade_id=None,
+                                           timestamp=int(item['time']/1000),
+                                           is_sell=True if item['side'] == 2 else False,
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad.from_number(item['amount']),
+                                           amount_symbol=pair.split('_')[0].upper(),
+                                           money=Wad.from_number(item['price']) * Wad.from_number(item['amount']),
+                                           money_symbol=pair.split('_')[1].upper(),
+                                           fee=None), result))
