@@ -330,7 +330,6 @@ class BiboxApi:
                                                         "pair": pair,
                                                         "size": 200
                                                     }}, retry)
-        print(result)
 
         return list(map(lambda item: Trade(trade_id=None,
                                            timestamp=int(item['time']/1000),
