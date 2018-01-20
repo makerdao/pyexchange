@@ -40,4 +40,4 @@ for order in gate.get_orders('mkr_eth'):
 # print(gate.cancel_all_orders('mkr_eth'))
 print(gate.get_orders('mkr_eth'))
 # print(gate.cancel_order('267040896','btc_usdt'))
-print(gate.get_trade_history('etc_btc'))
+print(gate.get_trades('mkr_eth'))
