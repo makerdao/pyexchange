@@ -65,9 +65,7 @@ class Order:
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        #TODO
-        pass
-        #return (self.amount - self.deal_amount) if self.is_sell else (self.amount - self.deal_amount)*self.price
+        return self.amount if self.is_sell else self.amount*self.price
 
     def __eq__(self, other):
         assert(isinstance(other, Order))
