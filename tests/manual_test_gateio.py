@@ -18,7 +18,7 @@
 import sys
 
 from pyexchange.gateio import GateIOApi
-
+from pymaker.numeric import Wad
 
 gate = GateIOApi('https://data.gate.io', sys.argv[1], sys.argv[2], 9.5)
 
@@ -29,7 +29,9 @@ print(gate.ticker('mkr_eth'))
 print(gate.order_book('btc_usdt'))
 print(gate.all_trade_history('btc_usdt'))
 print(gate.get_balances())
-# print(gate.buy('etc_btc','0.001','123'))
+#{'result': 'true', 'message': 'Success', 'code': 0, 'orderNumber': 368042106}
+print(gate.place_order('mkr_eth', False, Wad.from_number(1.35), Wad.from_number(0.01)))
+print(gate.place_order('mkr_eth', True, Wad.from_number(1.45), Wad.from_number(0.01)))
 # print(gate.sell('etc_btc','0.001','123'))
 # print(gate.getOrder('267040896','eth_btc'))
 print(gate.get_orders('mkr_eth'))

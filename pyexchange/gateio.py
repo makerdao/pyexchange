@@ -144,7 +144,7 @@ class GateIOApi:
         assert(isinstance(order_id, int))
         return self._http_post("/api2/1/private/getOrder", {'orderNumber': order_id, 'currencyPair': pair})
 
-    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad):
+    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -154,12 +154,12 @@ class GateIOApi:
                          f" price {price})...")
 
         url = "/api2/1/private/sell" if is_sell else "/api2/1/private/buy"
-        self._http_post(url, {'currencyPair': pair, 'rate': float(price), 'amount': float(amount)})
-
-        # TODO return order id, check if we get it...?
+        result = self._http_post(url, {'currencyPair': pair, 'rate': float(price), 'amount': float(amount)})
 
         self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
                          f" price {price})")
+
+        return result['orderNumber']
 
     def cancel_order(self, pair: str, order_id: int):
         assert(isinstance(pair, str))
