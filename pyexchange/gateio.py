@@ -121,8 +121,12 @@ class GateIOApi:
     def get_balances(self):
         return self._http_post("/api2/1/private/balances", {})
 
-    def get_orders(self) -> List[Order]:
+    def get_orders(self, pair: str) -> List[Order]:
+        assert(isinstance(pair, str))
+
         result = self._http_post("/api2/1/private/openOrders", {})['orders']
+        result = filter(lambda item: item['currencyPair'] == pair, result)
+
         return list(map(lambda item: Order(order_id=int(item['orderNumber']),
                                            timestamp=int(item['timestamp']),
                                            pair=item['currencyPair'],
