@@ -205,11 +205,12 @@ class GateIOApi:
 
         url = "/api2/1/private/sell" if is_sell else "/api2/1/private/buy"
         result = self._http_post(url, {'currencyPair': pair, 'rate': float(price), 'amount': float(amount)})
+        order_id = result['orderNumber']
 
         self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
-                         f" price {price})")
+                         f" price {price}) as #{order_id}")
 
-        return result['orderNumber']
+        return order_id
 
     def cancel_order(self, pair: str, order_id: int):
         assert(isinstance(pair, str))
