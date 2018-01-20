@@ -166,8 +166,16 @@ class GateIOApi:
         assert(isinstance(order_id, int))
 
         self.logger.info(f"Cancelling order #{order_id}...")
-        self._http_post("/api2/1/private/cancelOrder", {'orderNumber': order_id, 'currencyPair': pair})
-        self.logger.info(f"Cancelled order #{order_id}...")
+
+        result = self._http_post("/api2/1/private/cancelOrder", {'orderNumber': order_id, 'currencyPair': pair})
+        success = result['message'] == 'Success'
+
+        if success:
+            self.logger.info(f"Cancelled order #{order_id}...")
+        else:
+            self.logger.info(f"Failed to cancel order #{order_id}...")
+
+        return success
 
     def cancel_all_orders(self, pair: str) -> bool:
         assert(isinstance(pair, str))
