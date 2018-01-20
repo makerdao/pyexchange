@@ -169,9 +169,11 @@ class GateIOApi:
         self._http_post("/api2/1/private/cancelOrder", {'orderNumber': order_id, 'currencyPair': pair})
         self.logger.info(f"Cancelled order #{order_id}...")
 
-    def cancel_all_orders(self, pair: str):
+    def cancel_all_orders(self, pair: str) -> bool:
         assert(isinstance(pair, str))
-        return self._http_post("/api2/1/private/cancelAllOrders", {'type': -1, 'currencyPair': pair})
+
+        result = self._http_post("/api2/1/private/cancelAllOrders", {'type': -1, 'currencyPair': pair})
+        return result['message'] == 'Success'
 
     def get_trade_history(self, pair: str):
         #TODO add trade parsing
@@ -188,7 +190,7 @@ class GateIOApi:
     def _result(result) -> dict:
         data = result.json()
 
-        if 'result' not in data or data['result'] != 'true':
+        if 'result' not in data or data['result'] not in [True, 'true']:
             raise Exception(f"Negative Gate.io response: {data}")
 
         return data
