@@ -20,7 +20,7 @@ import logging
 import urllib
 import hmac
 from pprint import pformat
-from typing import List
+from typing import List, Optional
 
 import requests
 
@@ -85,7 +85,7 @@ class Order:
 class Trade:
     def __init__(self,
                  trade_id: id,
-                 order_id: int,
+                 order_id: Optional[int],
                  timestamp: int,
                  pair: str,
                  is_sell: bool,
@@ -95,7 +95,7 @@ class Trade:
                  money: Wad,
                  money_symbol: str):
         assert(isinstance(trade_id, int))
-        assert(isinstance(order_id, int))
+        assert(isinstance(order_id, int) or (order_id is None))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
@@ -249,8 +249,8 @@ class GateIOApi:
 
         result = self._http_post("/api2/1/private/tradeHistory", {'currencyPair': pair})['trades']
 
-        return list(map(lambda item: Trade(order_id=int(item['orderNumber']),
-                                           trade_id=int(item['tradeID']),
+        return list(map(lambda item: Trade(trade_id=int(item['tradeID']),
+                                           order_id=int(item['orderNumber']),
                                            timestamp=int(item['time_unix']),
                                            pair=item['pair'],
                                            is_sell=item['type'] == 'sell',
@@ -259,6 +259,22 @@ class GateIOApi:
                                            amount_symbol=item['pair'].split('_')[0],
                                            money=Wad.from_number(item['total']),
                                            money_symbol=item['pair'].split('_')[1]), result))
+
+    def get_all_trades(self, pair: str) -> List[Trade]:
+        assert(isinstance(pair, str))
+
+        result = self._http_get(f"/api2/1/tradeHistory", pair)['data']
+
+        return list(map(lambda item: Trade(trade_id=int(item['tradeID']),
+                                           order_id=None,
+                                           timestamp=int(item['timestamp']),
+                                           pair=pair,
+                                           is_sell=item['type'] == 'sell',
+                                           price=Wad.from_number(item['rate']),
+                                           amount=Wad.from_number(item['amount']),
+                                           amount_symbol=pair.split('_')[0],
+                                           money=Wad.from_number(item['total']),
+                                           money_symbol=pair.split('_')[1]), result))
 
     def _http_get(self, resource: str, params: str):
         assert(isinstance(resource, str))
