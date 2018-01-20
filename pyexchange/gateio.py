@@ -48,12 +48,6 @@ class GateIOApi:
         self.secret_key = secret_key
         self.timeout = timeout
 
-    def marketinfo(self):
-        return self._http_get("/api2/1/marketinfo", '')
-
-    def marketlist(self):
-        return self._http_get("/api2/1/marketlist", '')
-
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
         return self._http_get("/api2/1/ticker", pair)

@@ -23,8 +23,6 @@ from pyexchange.gateio import GateIOApi
 gate = GateIOApi('https://data.gate.io', sys.argv[1], sys.argv[2], 9.5)
 
 # print (gate.pairs())
-print (gate.marketinfo())
-print (gate.marketlist())
 # print (gate.tickers())
 print (gate.ticker('mkr_eth'))
 # print (gate.orderBooks())
