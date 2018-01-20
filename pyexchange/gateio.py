@@ -174,10 +174,6 @@ class GateIOApi:
         assert(isinstance(pair, str))
         return self._http_get("/api2/1/orderBook", pair)
 
-    def all_trade_history(self, pair: str):
-        assert(isinstance(pair, str))
-        return self._http_get("/api2/1/tradeHistory", pair)
-
     # output is: {'result': 'true', 'available': {'AAA': '0.0064128', 'BBB': '0.02'}, 'locked': {'AAA': '0.0135872'}}
     def get_balances(self):
         return self._http_post("/api2/1/private/balances", {})
@@ -199,11 +195,6 @@ class GateIOApi:
                                            money_symbol=item['currencyPair'].split('_')[1],
                                            initial_amount=Wad.from_number(item['initialAmount']),
                                            filled_amount=Wad.from_number(item['filledAmount'])), result))
-
-    def get_order(self, pair: str, order_id: int):
-        assert(isinstance(pair, str))
-        assert(isinstance(order_id, int))
-        return self._http_post("/api2/1/private/getOrder", {'orderNumber': order_id, 'currencyPair': pair})
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
         assert(isinstance(pair, str))

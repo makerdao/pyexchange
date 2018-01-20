@@ -27,7 +27,6 @@ gate = GateIOApi('https://data.gate.io', sys.argv[1], sys.argv[2], 9.5)
 print(gate.ticker('mkr_eth'))
 # print(gate.orderBooks())
 print(gate.order_book('btc_usdt'))
-print(gate.all_trade_history('btc_usdt'))
 print(gate.get_balances())
 #{'result': 'true', 'message': 'Success', 'code': 0, 'orderNumber': 368042106}
 print(gate.place_order('mkr_eth', False, Wad.from_number(1.35), Wad.from_number(0.01)))
