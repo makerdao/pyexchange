@@ -176,7 +176,7 @@ class BiboxApi:
         self.secret = secret
         self.timeout = timeout
 
-    def _request(self, path: str, cmd: dict, retry: bool):
+    def _request(self, path: str, cmd: dict, retry: bool, retry_count: int = MAX_RETRIES):
         assert(isinstance(path, str))
         assert(isinstance(cmd, dict))
         assert(isinstance(retry, bool))
@@ -188,11 +188,11 @@ class BiboxApi:
             "sign": self._sign(cmds)
         }
 
-        for try_number in range(1, self.MAX_RETRIES+1):
+        for try_number in range(1, retry_count+1):
             result = requests.post(self.api_path + path, json=call, timeout=self.timeout)
             result_json = result.json()
 
-            if retry and try_number < self.MAX_RETRIES:
+            if retry and try_number < retry_count:
                 try:
                     if str(result_json['error']['code']) == '4003':
                         self.logger.info(f"BiBox API busy for '{cmd['cmd']}' ({result_json['error']['code']}:"
@@ -287,7 +287,7 @@ class BiboxApi:
 
         return result == "撤销中"
 
-    def get_trades(self, pair: str, number_of_trades: int, retry: bool = False) -> List[Trade]:
+    def get_trades(self, pair: str, number_of_trades: int, retry: bool = False, retry_count: int = MAX_RETRIES) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(number_of_trades, int))
         assert(isinstance(retry, bool))
@@ -300,7 +300,7 @@ class BiboxApi:
                                                             "account_type": 0,
                                                             "page": page,
                                                             "size": 200
-                                                        }}, retry)['items']
+                                                        }}, retry, retry_count)['items']
 
             # We are interested in limit orders only ("order_type":2)
             items = items + list(filter(lambda item: item['order_type'] == 2, result))
