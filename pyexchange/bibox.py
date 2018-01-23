@@ -190,20 +190,31 @@ class BiboxApi:
 
         for try_number in range(1, retry_count+1):
             result = requests.post(self.api_path + path, json=call, timeout=self.timeout)
-            result_json = result.json()
 
             if retry and try_number < retry_count:
+                if not result.ok:
+                    self.logger.info(f"Bibox API invalid HTTP response for '{cmd['cmd']}'"
+                                     f" ({result.status_code} {result.reason}), retrying")
+                    time.sleep(self.MIN_RETRY_DELAY + random()*(self.MAX_RETRY_DELAY-self.MIN_RETRY_DELAY))
+                    continue
+
                 try:
-                    if str(result_json['error']['code']) == '4003':
-                        self.logger.info(f"BiBox API busy for '{cmd['cmd']}' ({result_json['error']['code']}:"
-                                         f" '{result_json['error']['msg']}'), retrying")
+                    if str(result.json()['error']['code']) == '4003':
+                        self.logger.info(f"Bibox API busy for '{cmd['cmd']}' ({result.json()['error']['code']}:"
+                                         f" '{result.json()['error']['msg']}'), retrying")
                         time.sleep(self.MIN_RETRY_DELAY + random()*(self.MAX_RETRY_DELAY-self.MIN_RETRY_DELAY))
                         continue
                 except:
                     pass
 
+            if not result.ok:
+                raise Exception(f"Bibox API invalid HTTP response for '{cmd['cmd']}':"
+                                f" {result.status_code} {result.reason}")
+
+            result_json = result.json()
             if 'error' in result_json:
-                raise Exception(f"API error, code {result_json['error']['code']}, msg: '{result_json['error']['msg']}'")
+                raise Exception(f"Bibox API error for '{cmd['cmd']}': code {result_json['error']['code']},"
+                                f" msg: '{result_json['error']['msg']}'")
 
             return result_json['result'][0]['result']
 
