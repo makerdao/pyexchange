@@ -155,14 +155,35 @@ class OKEXApi:
             'order_id': '-1'
         })
 
-        orders = filter(lambda item: item['type'] in ['buy', 'sell'], result['orders'])
-        return list(map(lambda item: Order(order_id=item['order_id'],
-                                           timestamp=int(item['create_date']/1000),
-                                           pair=item['symbol'],
-                                           is_sell=item['type'] == 'sell',
-                                           price=Wad.from_number(item['price']),
-                                           amount=Wad.from_number(item['amount']),
-                                           deal_amount=Wad.from_number(item['deal_amount'])), orders))
+        orders = filter(self._filter_order, result['orders'])
+        return list(map(self._parse_order, orders))
+
+    def get_orders_history(self, pair: str, number_of_orders: int) -> List[Order]:
+        assert(isinstance(pair, str))
+        assert(isinstance(number_of_orders, int))
+
+        orders = []
+        page_length = 200
+        for page in range(1, 100):
+            result = self._http_post("/api/v1/order_history.do", {
+                'symbol': pair,
+                'status': 100,
+                'current_page': page,
+                'page_length': page_length
+            })['orders']
+
+            orders = orders + list(filter(self._filter_order, result))
+
+            if len(result) == 0:
+                break
+
+            if len(result) < page_length:
+                break
+
+            if len(orders) >= number_of_orders:
+                break
+
+        return list(map(self._parse_order, orders[:number_of_orders]))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
         assert(isinstance(pair, str))
@@ -219,6 +240,22 @@ class OKEXApi:
                                            price=Wad.from_number(item['price']),
                                            amount=Wad.from_number(item['amount']),
                                            amount_symbol=pair.split('_')[0].lower()), result))
+
+    @staticmethod
+    def _filter_order(item: dict) -> bool:
+        assert(isinstance(item, dict))
+        return item['type'] in ['buy', 'sell']
+
+    @staticmethod
+    def _parse_order(item: dict) -> Order:
+        assert(isinstance(item, dict))
+        return Order(order_id=item['order_id'],
+                     timestamp=int(item['create_date']/1000),
+                     pair=item['symbol'],
+                     is_sell=item['type'] == 'sell',
+                     price=Wad.from_number(item['price']),
+                     amount=Wad.from_number(item['amount']),
+                     deal_amount=Wad.from_number(item['deal_amount']))
 
     def _create_signature(self, params: dict):
         assert(isinstance(params, dict))
