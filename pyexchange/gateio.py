@@ -222,9 +222,9 @@ class GateIOApi:
         success = result['message'] == 'Success'
 
         if success:
-            self.logger.info(f"Cancelled order #{order_id}...")
+            self.logger.info(f"Cancelled order #{order_id}")
         else:
-            self.logger.info(f"Failed to cancel order #{order_id}...")
+            self.logger.info(f"Failed to cancel order #{order_id}")
 
         return success
 

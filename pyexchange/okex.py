@@ -220,9 +220,9 @@ class OKEXApi:
         success = int(result['order_id']) == order_id
 
         if success:
-            self.logger.info(f"Cancelled order #{order_id}...")
+            self.logger.info(f"Cancelled order #{order_id}")
         else:
-            self.logger.info(f"Failed to cancel order #{order_id}...")
+            self.logger.info(f"Failed to cancel order #{order_id}")
 
         return success
 
