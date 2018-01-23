@@ -15,8 +15,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import time
-
 import sys
 
 from pyexchange.okex import OKEXApi
@@ -24,6 +22,5 @@ from pyexchange.okex import OKEXApi
 
 okex = OKEXApi('https://www.okex.com', sys.argv[1], sys.argv[2], 15.5)
 
-x = time.time()
 print(okex.get_balances())
-print(time.time() - x)
+print(len(okex.get_orders_history('mkr_eth', 1000)))
