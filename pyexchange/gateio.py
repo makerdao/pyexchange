@@ -232,7 +232,14 @@ class GateIOApi:
         assert(isinstance(pair, str))
 
         result = self._http_post("/api2/1/private/cancelAllOrders", {'type': -1, 'currencyPair': pair})
-        return result['message'] == 'Success'
+        success = result['message'] == 'Success'
+
+        if success:
+            self.logger.info(f"Cancelled all orders")
+        else:
+            self.logger.info(f"Failed to cancel all orders")
+
+        return success
 
     def get_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
