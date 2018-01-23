@@ -270,8 +270,10 @@ class OKEXApi:
     def _result(result, check_result: bool) -> dict:
         assert(isinstance(check_result, bool))
 
-        data = result.json()
+        if not result.ok:
+            raise Exception(f"OKCoin API invalid HTTP response: {result.status_code} {result.reason}")
 
+        data = result.json()
         if check_result:
             if 'error_code' in data:
                 raise Exception(f"OKCoin API error: {data['error_code']}")

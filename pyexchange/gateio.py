@@ -274,8 +274,10 @@ class GateIOApi:
 
     @staticmethod
     def _result(result) -> dict:
-        data = result.json()
+        if not result.ok:
+            raise Exception(f"Gate.io API invalid HTTP response: {result.status_code} {result.reason}")
 
+        data = result.json()
         if 'result' not in data or data['result'] not in [True, 'true']:
             raise Exception(f"Negative Gate.io response: {data}")
 
