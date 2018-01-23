@@ -273,7 +273,11 @@ class OKEXApi:
         if not result.ok:
             raise Exception(f"OKCoin API invalid HTTP response: {result.status_code} {result.reason}")
 
-        data = result.json()
+        try:
+            data = result.json()
+        except Exception:
+            raise Exception(f"OKCoin API invalid JSON response: {result.text}")
+
         if check_result:
             if 'error_code' in data:
                 raise Exception(f"OKCoin API error: {data['error_code']}")

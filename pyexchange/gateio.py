@@ -284,7 +284,11 @@ class GateIOApi:
         if not result.ok:
             raise Exception(f"Gate.io API invalid HTTP response: {result.status_code} {result.reason}")
 
-        data = result.json()
+        try:
+            data = result.json()
+        except Exception:
+            raise Exception(f"Gate.io API invalid JSON response: {result.text}")
+
         if 'result' not in data or data['result'] not in [True, 'true']:
             raise Exception(f"Negative Gate.io response: {data}")
 

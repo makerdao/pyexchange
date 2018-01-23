@@ -211,7 +211,11 @@ class BiboxApi:
                 raise Exception(f"Bibox API invalid HTTP response for '{cmd['cmd']}':"
                                 f" {result.status_code} {result.reason}")
 
-            result_json = result.json()
+            try:
+                result_json = result.json()
+            except Exception:
+                raise Exception(f"Bibox API invalid JSON response for '{cmd['cmd']}': {result.text}")
+
             if 'error' in result_json:
                 raise Exception(f"Bibox API error for '{cmd['cmd']}': code {result_json['error']['code']},"
                                 f" msg: '{result_json['error']['msg']}'")
