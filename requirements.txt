@@ -3,3 +3,4 @@ eth-testrpc == 1.3.0
 requests == 2.18.4
 appdirs == 1.4.3
 tinydb == 3.7.0
+filelock == 3.0.0

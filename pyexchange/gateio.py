@@ -25,6 +25,8 @@ from typing import List, Optional
 import os
 
 import errno
+
+import filelock
 import requests
 from appdirs import user_cache_dir
 from tinydb import TinyDB, JSONStorage, Query
@@ -266,14 +268,16 @@ class GateIOApi:
                                              money_symbol=item['pair'].split('_')[1]), result))
 
         if use_cache:
-            with self._get_db('trades', pair) as db:
-                table = db.table()
+            db_file = self._get_db_file('trades', pair)
+            with filelock.FileLock(db_file + ".lock"):
+                with self._get_db(db_file) as db:
+                    table = db.table()
 
-                cached_trades = map(self._trade_from_dict, table.all())
-                trades = list(set(trades).union(set(cached_trades)))
+                    cached_trades = map(self._trade_from_dict, table.all())
+                    trades = list(set(trades).union(set(cached_trades)))
 
-                table.purge()
-                table.insert_multiple(map(self._trade_to_dict, trades))
+                    table.purge()
+                    table.insert_multiple(map(self._trade_to_dict, trades))
 
         return sorted(trades, key=lambda trade: trade.timestamp, reverse=True)
 
@@ -338,7 +342,7 @@ class GateIOApi:
                                                    "SIGN": self._create_signature(params)},
                                           timeout=self.timeout))
 
-    def _get_db(self, role: str, pair: str):
+    def _get_db_file(self, role: str, pair: str):
         assert(isinstance(role, str))
         assert(isinstance(pair, str))
 
@@ -351,7 +355,10 @@ class GateIOApi:
                 raise
 
         key = 'gateio' + self.api_server + self.api_key + role + pair
-        db_file = os.path.join(db_folder, hashlib.sha1(bytes(key, 'utf-8')).hexdigest().lower() + ".hdb")
+        return os.path.join(db_folder, hashlib.sha1(bytes(key, 'utf-8')).hexdigest().lower() + ".hdb")
+
+    def _get_db(self, db_file: str):
+        assert(isinstance(db_file, str))
         return TinyDB(db_file, storage=CachingMiddleware(JSONStorage))
 
     @staticmethod
