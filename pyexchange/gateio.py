@@ -261,6 +261,7 @@ class GateIOApi:
         assert(isinstance(pair, str))
 
         result = self._http_get(f"/api2/1/tradeHistory", pair)['data']
+        result = list(filter(lambda item: item['timestamp'] is not None, result))
 
         return list(map(lambda item: Trade(trade_id=int(item['tradeID']),
                                            order_id=None,
