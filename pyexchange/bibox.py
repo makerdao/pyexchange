@@ -26,6 +26,7 @@ from typing import List, Optional
 import requests
 import time
 
+from pyexchange.util import get_db_file, get_lock, get_db, sort_trades, filter_trades
 from pymaker.numeric import Wad
 
 
@@ -98,6 +99,7 @@ class Trade:
     def __init__(self,
                  trade_id: Optional[id],
                  timestamp: int,
+                 pair: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad,
@@ -107,6 +109,7 @@ class Trade:
                  fee: Optional[Wad]):
         assert(isinstance(trade_id, int) or (trade_id is None))
         assert(isinstance(timestamp, int))
+        assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
@@ -117,6 +120,7 @@ class Trade:
 
         self.trade_id = trade_id
         self.timestamp = timestamp
+        self.pair = pair
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -129,6 +133,7 @@ class Trade:
         assert(isinstance(other, Trade))
         return self.trade_id == other.trade_id and \
                self.timestamp == other.timestamp and \
+               self.pair == other.pair and \
                self.is_sell == other.is_sell and \
                self.price == other.price and \
                self.amount == other.amount and \
@@ -140,6 +145,7 @@ class Trade:
     def __hash__(self):
         return hash((self.trade_id,
                      self.timestamp,
+                     self.pair,
                      self.is_sell,
                      self.price,
                      self.amount,
@@ -171,7 +177,7 @@ class BiboxApi:
         assert(isinstance(secret, str))
         assert(isinstance(timeout, float))
 
-        self.api_path = api_server
+        self.api_server = api_server
         self.api_key = api_key
         self.secret = secret
         self.timeout = timeout
@@ -189,7 +195,7 @@ class BiboxApi:
         }
 
         for try_number in range(1, retry_count+1):
-            result = requests.post(self.api_path + path, json=call, timeout=self.timeout)
+            result = requests.post(self.api_server + path, json=call, timeout=self.timeout)
 
             if retry and try_number < retry_count:
                 if not result.ok:
@@ -302,39 +308,72 @@ class BiboxApi:
 
         return result == "撤销中"
 
-    def get_trades(self, pair: str, number_of_trades: int, retry: bool = False, retry_count: int = MAX_RETRIES) -> List[Trade]:
+    def get_trades(self, pair: str, retry: bool = False, retry_count: int = MAX_RETRIES, **kwargs) -> List[Trade]:
         assert(isinstance(pair, str))
-        assert(isinstance(number_of_trades, int))
         assert(isinstance(retry, bool))
+        assert(isinstance(retry_count, int))
 
-        items = []
-        for page in range(1, 100):
-            result = self._request('/v1/orderpending', {"cmd": "orderpending/orderHistoryList",
-                                                        "body": {
-                                                            "pair": pair,
-                                                            "account_type": 0,
-                                                            "page": page,
-                                                            "size": 200
-                                                        }}, retry, retry_count)['items']
+        trades = self.sync_trades(pair)
+        trades = sort_trades(trades)
+        trades = filter_trades(trades, **kwargs)
 
-            # We are interested in limit orders only ("order_type":2)
-            items = items + list(filter(lambda item: item['order_type'] == 2, result))
+        return trades
 
-            if len(result) == 0:
-                break
+    def sync_trades(self, pair: str, retry: bool = False, retry_count: int = MAX_RETRIES) -> List[Trade]:
+        assert(isinstance(pair, str))
+        assert(isinstance(retry, bool))
+        assert(isinstance(retry_count, int))
 
-            if len(items) >= number_of_trades:
-                break
+        db_file = get_db_file('bibox', self.api_server, self.api_key, 'trades', pair)
+        with get_lock(db_file):
+            with get_db(db_file) as db:
+                table = db.table()
 
-        return list(map(lambda item: Trade(trade_id=item['id'],
-                                           timestamp=int(item['createdAt']/1000),
-                                           is_sell=True if item['order_side'] == 2 else False,
-                                           price=Wad.from_number(item['price']),
-                                           amount=Wad.from_number(item['amount']),
-                                           amount_symbol=item['coin_symbol'],
-                                           money=Wad.from_number(item['money']),
-                                           money_symbol=item['currency_symbol'],
-                                           fee=Wad.from_number(item['fee'])), items[:number_of_trades]))
+                trades_in_db = list(map(self._trade_from_dict, table.all()))
+                trades_in_db_ids = set(map(lambda trade: trade.trade_id, trades_in_db))
+
+                trades_to_add_to_db = []
+
+                for page in range(1, 1000000):
+                    result = self._request('/v1/orderpending', {"cmd": "orderpending/orderHistoryList",
+                                                                "body": {
+                                                                    "pair": pair,
+                                                                    "account_type": 0,
+                                                                    "page": page,
+                                                                    "size": 200
+                                                                }}, retry, retry_count)['items']
+
+                    # It probably means we reached past the last page
+                    if len(result) == 0:
+                        break
+
+                    # We are interested in limit orders only ("order_type":2)
+                    trades_in_page = list(filter(lambda item: item['order_type'] == 2, result))
+                    trades_in_page = list(map(lambda item: Trade(trade_id=item['id'],
+                                                                 timestamp=int(item['createdAt']/1000),
+                                                                 pair=pair,
+                                                                 is_sell=True if item['order_side'] == 2 else False,
+                                                                 price=Wad.from_number(item['price']),
+                                                                 amount=Wad.from_number(item['amount']),
+                                                                 amount_symbol=item['coin_symbol'],
+                                                                 money=Wad.from_number(item['money']),
+                                                                 money_symbol=item['currency_symbol'],
+                                                                 fee=Wad.from_number(item['fee'])), trades_in_page))
+
+                    old_orders_found = False
+                    for trade in trades_in_page:
+                        if trade.trade_id not in trades_in_db_ids:
+                            trades_to_add_to_db.append(self._trade_to_dict(trade))
+                            trades_in_db_ids.add(trade.trade_id)
+                        else:
+                            old_orders_found = True
+
+                    if old_orders_found:
+                        break
+
+                table.insert_multiple(trades_to_add_to_db)
+
+                return list(map(self._trade_from_dict, table.all()))
 
     def get_all_trades(self, pair: str, retry: bool = False) -> List[Trade]:
         assert(isinstance(pair, str))
@@ -348,6 +387,7 @@ class BiboxApi:
 
         return list(map(lambda item: Trade(trade_id=None,
                                            timestamp=int(item['time']/1000),
+                                           pair=pair,
                                            is_sell=True if item['side'] == 2 else False,
                                            price=Wad.from_number(item['price']),
                                            amount=Wad.from_number(item['amount']),
@@ -355,3 +395,33 @@ class BiboxApi:
                                            money=Wad.from_number(item['price']) * Wad.from_number(item['amount']),
                                            money_symbol=pair.split('_')[1].upper(),
                                            fee=None), result))
+
+    @staticmethod
+    def _trade_to_dict(trade: Trade) -> dict:
+        assert(isinstance(trade, Trade))
+        return {
+            'trade_id': trade.trade_id,
+            'timestamp': trade.timestamp,
+            'pair': trade.pair,
+            'is_sell': trade.is_sell,
+            'price': str(trade.price),
+            'amount': str(trade.amount),
+            'amount_symbol': trade.amount_symbol,
+            'money': str(trade.money),
+            'money_symbol': trade.money_symbol,
+            'fee': str(trade.fee) if trade.fee is not None else None
+        }
+
+    @staticmethod
+    def _trade_from_dict(d: dict) -> Trade:
+        assert(isinstance(d, dict))
+        return Trade(trade_id=d['trade_id'],
+                     timestamp=d['timestamp'],
+                     pair=d['pair'],
+                     is_sell=d['is_sell'],
+                     price=Wad.from_number(d['price']),
+                     amount=Wad.from_number(d['amount']),
+                     amount_symbol=d['amount_symbol'],
+                     money=Wad.from_number(d['money']),
+                     money_symbol=d['money_symbol'],
+                     fee=Wad.from_number(d['fee']) if 'fee' in d and d['fee'] is not None else None)

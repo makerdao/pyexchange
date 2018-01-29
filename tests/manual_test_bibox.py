@@ -15,9 +15,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import logging
+import sys
+
 from pyexchange.bibox import BiboxApi
 
 
-bibox = BiboxApi("https://api.bibox.com", 'none', 'none', 9.5)
+logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=logging.INFO)
 
-print(bibox.get_all_trades('MKR_BTC', True))
+bibox = BiboxApi("https://api.bibox.com", sys.argv[1], sys.argv[2], 9.5)
+
+print(len(bibox.get_trades('ETH_DAI', True, 50)))
+# print(bibox.get_all_trades('MKR_BTC', True))
