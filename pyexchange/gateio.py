@@ -32,6 +32,7 @@ from appdirs import user_cache_dir
 from tinydb import TinyDB, JSONStorage, Query
 from tinydb.middlewares import CachingMiddleware
 
+from pyexchange.util import get_db_file, get_db, get_lock, filter_trades, sort_trades
 from pymaker.numeric import Wad
 
 
@@ -251,35 +252,42 @@ class GateIOApi:
 
         return success
 
-    def get_trades(self, pair: str, use_cache: bool = False) -> List[Trade]:
+    def get_trades(self, pair: str, **kwargs) -> List[Trade]:
         assert(isinstance(pair, str))
-        assert(isinstance(use_cache, bool))
+
+        trades = self.sync_trades(pair)
+        trades = sort_trades(trades)
+        trades = filter_trades(trades, **kwargs)
+
+        return trades
+
+    def sync_trades(self, pair: str) -> List[Trade]:
+        assert(isinstance(pair, str))
 
         result = self._http_post("/api2/1/private/tradeHistory", {'currencyPair': pair})['trades']
-        trades = list(map(lambda item: Trade(trade_id=int(item['tradeID']),
-                                             order_id=int(item['orderNumber']),
-                                             timestamp=int(item['time_unix']),
-                                             pair=item['pair'],
-                                             is_sell=item['type'] == 'sell',
-                                             price=Wad.from_number(item['rate']),
-                                             amount=Wad.from_number(item['amount']),
-                                             amount_symbol=item['pair'].split('_')[0],
-                                             money=Wad.from_number(item['total']),
-                                             money_symbol=item['pair'].split('_')[1]), result))
+        new_trades = list(map(lambda item: Trade(trade_id=int(item['tradeID']),
+                                                 order_id=int(item['orderNumber']),
+                                                 timestamp=int(item['time_unix']),
+                                                 pair=item['pair'],
+                                                 is_sell=item['type'] == 'sell',
+                                                 price=Wad.from_number(item['rate']),
+                                                 amount=Wad.from_number(item['amount']),
+                                                 amount_symbol=item['pair'].split('_')[0],
+                                                 money=Wad.from_number(item['total']),
+                                                 money_symbol=item['pair'].split('_')[1]), result))
 
-        if use_cache:
-            db_file = self._get_db_file('trades', pair)
-            with filelock.FileLock(db_file + ".lock"):
-                with self._get_db(db_file) as db:
-                    table = db.table()
+        db_file = get_db_file('gateio', self.api_server, self.api_key, 'trades', pair)
+        with get_lock(db_file):
+            with get_db(db_file) as db:
+                table = db.table()
 
-                    cached_trades = map(self._trade_from_dict, table.all())
-                    trades = list(set(trades).union(set(cached_trades)))
+                trades_in_db = map(self._trade_from_dict, table.all())
+                trades = list(set(new_trades).union(set(trades_in_db)))
 
-                    table.purge()
-                    table.insert_multiple(map(self._trade_to_dict, trades))
+                table.purge()
+                table.insert_multiple(map(self._trade_to_dict, trades))
 
-        return sorted(trades, key=lambda trade: trade.timestamp, reverse=True)
+                return trades
 
     # TODO: for some reason a call to http://data.gate.io/api2/1/tradeHistory/aaa_bbb does not return
     # TODO: some trades even if they were very recent. At the same time they can be downloaded using
@@ -344,25 +352,6 @@ class GateIOApi:
                                                    "KEY": self.api_key,
                                                    "SIGN": self._create_signature(params)},
                                           timeout=self.timeout))
-
-    def _get_db_file(self, role: str, pair: str):
-        assert(isinstance(role, str))
-        assert(isinstance(pair, str))
-
-        db_folder = user_cache_dir("pyexchange", "maker")
-
-        try:
-            os.makedirs(db_folder)
-        except OSError as e:
-            if e.errno != errno.EEXIST:
-                raise
-
-        key = 'gateio' + self.api_server + self.api_key + role + pair
-        return os.path.join(db_folder, hashlib.sha1(bytes(key, 'utf-8')).hexdigest().lower() + ".hdb")
-
-    def _get_db(self, db_file: str):
-        assert(isinstance(db_file, str))
-        return TinyDB(db_file, storage=CachingMiddleware(JSONStorage))
 
     @staticmethod
     def _trade_to_dict(trade: Trade) -> dict:
