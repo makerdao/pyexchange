@@ -281,6 +281,9 @@ class GateIOApi:
 
         return sorted(trades, key=lambda trade: trade.timestamp, reverse=True)
 
+    # TODO: for some reason a call to http://data.gate.io/api2/1/tradeHistory/aaa_bbb does not return
+    # TODO: some trades even if they were very recent. At the same time they can be downloaded using
+    # TODO: the http://data.gate.io/api2/1/tradeHistory/aaa_bbb/<TID> endpoint
     def get_all_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
 
