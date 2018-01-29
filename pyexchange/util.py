@@ -26,7 +26,7 @@ from tinydb.middlewares import CachingMiddleware
 
 
 def sort_trades(trades: list) -> list:
-    return sorted(trades, key=lambda trade: trade.timestamp, reverse=True)
+    return sorted(trades, key=lambda trade: trade.timestamp)
 
 
 def filter_trades(trades: list, **kwargs) -> list:
