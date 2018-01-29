@@ -313,7 +313,7 @@ class BiboxApi:
         assert(isinstance(retry, bool))
         assert(isinstance(retry_count, int))
 
-        trades = self.sync_trades(pair)
+        trades = self.sync_trades(pair, retry, retry_count)
         trades = sort_trades(trades)
         trades = filter_trades(trades, **kwargs)
 
