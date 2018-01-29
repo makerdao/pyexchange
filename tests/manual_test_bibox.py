@@ -25,5 +25,6 @@ logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=l
 
 bibox = BiboxApi("https://api.bibox.com", sys.argv[1], sys.argv[2], 9.5)
 
-print(len(bibox.get_trades('ETH_DAI', True, 50)))
-# print(bibox.get_all_trades('MKR_BTC', True))
+# print(len(bibox.get_trades('ETH_DAI', True, 50)))
+print(len(bibox.get_trades('MKR_ETH', True, 50)))
+print(len(bibox.get_trades('MKR_BTC', True, 50)))

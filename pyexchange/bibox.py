@@ -360,15 +360,17 @@ class BiboxApi:
                                                                  money_symbol=item['currency_symbol'],
                                                                  fee=Wad.from_number(item['fee'])), trades_in_page))
 
-                    old_orders_found = False
+                    old_trades_found = 0
                     for trade in trades_in_page:
                         if trade.trade_id not in trades_in_db_ids:
                             trades_to_add_to_db.append(self._trade_to_dict(trade))
                             trades_in_db_ids.add(trade.trade_id)
                         else:
-                            old_orders_found = True
+                            old_trades_found += 1
 
-                    if old_orders_found:
+                    # If we reached a page which has predominantly or only old trades,
+                    # we know we won't find any new trades by fetching subsequent pages
+                    if old_trades_found == len(trades_in_page) or old_trades_found > 190:
                         break
 
                 table.insert_multiple(trades_to_add_to_db)
