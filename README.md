@@ -21,7 +21,7 @@ Python API wrappers for Bibox, OKEX and gate.io.
   (<http://tinydb.readthedocs.io/en/latest/>) and kept in a cache directory in an os-specific location thanks
   to _appdirs_ (<https://pypi.python.org/pypi/appdirs>).
 
-* This library depends on `pymaker` because it uses that `Wad` class which is defined there.
+* This library depends on `pymaker` because it uses the `Wad` class which is defined there.
 
 * There is zero test coverage as of today.
 
