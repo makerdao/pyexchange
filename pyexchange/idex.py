@@ -20,7 +20,7 @@ from typing import List
 
 from web3 import Web3
 
-from pymaker import Contract, Address, Transact
+from pymaker import Contract, Address, Transact, Wad
 from pymaker.token import ERC20Token
 
 
@@ -73,7 +73,7 @@ class IDEX(Contract):
         return Address(self._contract.call().feeAccount())
 
     def approve(self, tokens: List[ERC20Token], approval_function):
-        """Approve the IKEX Exchange contract to fully access balances of specified tokens.
+        """Approve the IDEX Exchange contract to fully access balances of specified tokens.
 
         For available approval functions (i.e. approval modes) see `directly` and `via_tx_manager`
         in `pymaker.approval`.
@@ -87,6 +87,95 @@ class IDEX(Contract):
 
         for token in tokens:
             approval_function(token, self.address, 'IDEX Exchange contract')
+
+    def deposit(self, amount: Wad) -> Transact:
+        """Deposits `amount` of raw ETH to IDEX.
+
+        Args:
+            amount: Amount of raw ETH to be deposited on IDEX.
+
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+        assert(isinstance(amount, Wad))
+        return Transact(self, self.web3, self.abi, self.address, self._contract, 'deposit', [], {'value': amount.value})
+
+    def withdraw(self, amount: Wad) -> Transact:
+        """Withdraws `amount` of raw ETH from IDEX.
+
+        The withdrawn ETH will get transferred to the calling account.
+
+        Args:
+            amount: Amount of raw ETH to be withdrawn from IDEX.
+
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+        assert(isinstance(amount, Wad))
+        return Transact(self, self.web3, self.abi, self.address, self._contract, 'withdraw',
+                        [self._ZERO_ADDRESS.address, amount.value])
+
+    def balance_of(self, user: Address) -> Wad:
+        """Returns the amount of raw ETH deposited by the specified user.
+
+        Args:
+            user: Address of the user to check the balance of.
+
+        Returns:
+            The raw ETH balance kept in the IDEX Exchange contract by the specified user.
+        """
+        assert(isinstance(user, Address))
+        return Wad(self._contract.call().balanceOf(self._ZERO_ADDRESS.address, user.address))
+
+    def deposit_token(self, token: Address, amount: Wad) -> Transact:
+        """Deposits `amount` of ERC20 token `token` to IDEX.
+
+        Tokens will be pulled from the calling account, so the IDEX contract needs
+        to have appropriate allowance. Either call `approve()` or set the allowance manually
+        before trying to deposit tokens.
+
+        Args:
+            token: Address of the ERC20 token to be deposited.
+            amount: Amount of token `token` to be deposited to IDEX.
+
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+        assert(isinstance(token, Address))
+        assert(isinstance(amount, Wad))
+        return Transact(self, self.web3, self.abi, self.address, self._contract, 'depositToken',
+                        [token.address, amount.value])
+
+    def withdraw_token(self, token: Address, amount: Wad) -> Transact:
+        """Withdraws `amount` of ERC20 token `token` from IDEX.
+
+        Tokens will get transferred to the calling account.
+
+        Args:
+            token: Address of the ERC20 token to be withdrawn.
+            amount: Amount of token `token` to be withdrawn from IDEX.
+
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+        assert(isinstance(token, Address))
+        assert(isinstance(amount, Wad))
+        return Transact(self, self.web3, self.abi, self.address, self._contract, 'withdraw',
+                        [token.address, amount.value])
+
+    def balance_of_token(self, token: Address, user: Address) -> Wad:
+        """Returns the amount of ERC20 token `token` deposited by the specified user.
+
+        Args:
+            token: Address of the ERC20 token return the balance of.
+            user: Address of the user to check the balance of.
+
+        Returns:
+            The ERC20 token `token` balance kept in the IDEX contract by the specified user.
+        """
+        assert(isinstance(token, Address))
+        assert(isinstance(user, Address))
+        return Wad(self._contract.call().balanceOf(token.address, user.address))
 
     def __repr__(self):
         return f"IDEX('{self.address}')"

@@ -31,8 +31,10 @@ class TestIDEX:
         self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
         self.our_address = Address(self.web3.eth.defaultAccount)
         self.idex = IDEX.deploy(self.web3, self.our_address)
-        self.token1 = DSToken.deploy(self.web3, 'AAA')
-        self.token1.mint(Wad.from_number(100)).transact()
+        self.idex._contract.transact().setInactivityReleasePeriod(0)
+
+        self.token = DSToken.deploy(self.web3, 'AAA')
+        self.token.mint(Wad.from_number(100)).transact()
 
     def test_fail_when_no_contract_under_that_address(self):
         # expect
@@ -47,13 +49,42 @@ class TestIDEX:
 
     def test_approval(self):
         # given
-        assert self.token1.allowance_of(self.our_address, self.idex.address) == Wad(0)
+        assert self.token.allowance_of(self.our_address, self.idex.address) == Wad(0)
 
         # when
-        self.idex.approve([self.token1], directly())
+        self.idex.approve([self.token], directly())
 
         # then
-        assert self.token1.allowance_of(self.our_address, self.idex.address) > Wad(0)
+        assert self.token.allowance_of(self.our_address, self.idex.address) > Wad(0)
+
+    def test_deposit_and_balance_of_and_withdraw_for_raw_eth(self):
+        # when
+        self.idex.deposit(Wad.from_number(13)).transact()
+
+        # then
+        assert self.idex.balance_of(self.our_address) == Wad.from_number(13)
+
+        # when
+        self.idex.withdraw(Wad.from_number(2.5)).transact()
+
+        # then
+        assert self.idex.balance_of(self.our_address) == Wad.from_number(10.5)
+
+    def test_deposit_and_balance_of_and_withdraw_for_token(self):
+        # given
+        self.idex.approve([self.token], directly())
+
+        # when
+        self.idex.deposit_token(self.token.address, Wad.from_number(13)).transact()
+
+        # then
+        assert self.idex.balance_of_token(self.token.address, self.our_address) == Wad.from_number(13)
+
+        # when
+        self.idex.withdraw_token(self.token.address, Wad.from_number(2.5)).transact()
+
+        # then
+        assert self.idex.balance_of_token(self.token.address, self.our_address) == Wad.from_number(10.5)
 
     def test_should_have_printable_representation(self):
         assert repr(self.idex) == f"IDEX('{self.idex.address}')"
