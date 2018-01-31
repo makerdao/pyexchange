@@ -1,6 +1,6 @@
 # pyexchange
 
-Python API wrappers for Bibox, OKEX and gate.io.
+Python API wrappers for Bibox, OKEX and gate.io. IDEX integration is currently work in progress.
 
 [![Build Status](https://travis-ci.org/makerdao/pyexchange.svg?branch=master)](https://travis-ci.org/makerdao/pyexchange)
 [![codecov](https://codecov.io/gh/makerdao/pyexchange/branch/master/graph/badge.svg)](https://codecov.io/gh/makerdao/pyexchange)
@@ -21,7 +21,8 @@ Python API wrappers for Bibox, OKEX and gate.io.
   (<http://tinydb.readthedocs.io/en/latest/>) and kept in a cache directory in an os-specific location thanks
   to _appdirs_ (<https://pypi.python.org/pypi/appdirs>).
 
-* This library depends on `pymaker` because it uses the `Wad` class which is defined there.
+* This library depends on `pymaker` because IDEX integration involves interacting with its smart contract.
+  In addition to that, other exchange APIs use the `Wad` class which is defined `pymaker`.
 
 * There is zero test coverage as of today.
 
