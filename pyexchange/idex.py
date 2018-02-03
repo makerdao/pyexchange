@@ -18,6 +18,7 @@
 import logging
 from typing import List
 
+import requests
 from web3 import Web3
 
 from pymaker import Contract, Address, Transact, Wad
@@ -192,12 +193,38 @@ class IDEXApi:
     logger = logging.getLogger()
     timeout = 15.5
 
-    def __init__(self, idex: IDEX, api_server: str):
+    def __init__(self, idex: IDEX, api_server: str, timeout: float):
         assert(isinstance(idex, IDEX))
         assert(isinstance(api_server, str))
+        assert(isinstance(timeout, float))
 
         self.idex = idex
         self.api_server = api_server
+        self.timeout = timeout
+
+    def ticker(self, pair: str):
+        assert(isinstance(pair, str))
+        return self._http_post("/returnTicker", {'market': pair})
+
+    @staticmethod
+    def _result(result) -> dict:
+        if not result.ok:
+            raise Exception(f"IDEX API invalid HTTP response: {result.status_code} {result.reason}")
+
+        try:
+            data = result.json()
+        except Exception:
+            raise Exception(f"IDEX API invalid JSON response: {result.text}")
+
+        return data
+
+    def _http_post(self, resource: str, params: dict):
+        assert(isinstance(resource, str))
+        assert(isinstance(params, dict))
+
+        return self._result(requests.post(url=f"{self.api_server}{resource}",
+                                          json=params,
+                                          timeout=self.timeout))
 
     def __repr__(self):
         return f"IDEXApi()"
