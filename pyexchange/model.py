@@ -15,13 +15,26 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
+from pprint import pformat
 
-from pyexchange.okex import OKEXApi
+from pymaker import Wad
 
 
-okex = OKEXApi('https://www.okex.com', sys.argv[1], sys.argv[2], 15.5)
+class Candle:
+    def __init__(self, timestamp: int, open: Wad, close: Wad, high: Wad, low: Wad, volume: Wad):
+        assert(isinstance(timestamp, int))
+        assert(isinstance(open, Wad))
+        assert(isinstance(close, Wad))
+        assert(isinstance(high, Wad))
+        assert(isinstance(low, Wad))
+        assert(isinstance(volume, Wad))
 
-print(okex.candles('eth_usdt', '1min', 75))
-# print(okex.get_balances())
-# print(len(okex.get_orders_history('mkr_eth', 1000)))
+        self.timestamp = timestamp
+        self.open = open
+        self.close = close
+        self.high = high
+        self.low = low
+        self.volume = volume
+
+    def __repr__(self):
+        return pformat(vars(self))

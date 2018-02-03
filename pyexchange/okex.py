@@ -23,6 +23,7 @@ from typing import List
 
 import requests
 
+from pyexchange.model import Candle
 from pymaker.numeric import Wad
 
 
@@ -143,6 +144,23 @@ class OKEXApi:
     def depth(self, pair: str):
         assert(isinstance(pair, str))
         return self._http_get("/api/v1/depth.do", f"symbol={pair}")
+
+    def candles(self, pair: str, type: str, size: int) -> List[Candle]:
+        assert(isinstance(pair, str))
+        assert(isinstance(type, str))
+        assert(isinstance(size, int))
+
+        assert(type in ("1min", "3min", "5min", "15min", "30min", "1day", "3day", "1week",
+                        "1hour", "2hour", "4hour","6hour", "12hour"))
+
+        result = self._http_get("/api/v1/kline.do", f"symbol={pair}&type={type}&size={size}", False)
+
+        return list(map(lambda item: Candle(timestamp=int(item[0]/1000),
+                                            open=Wad.from_number(item[1]),
+                                            close=Wad.from_number(item[4]),
+                                            high=Wad.from_number(item[2]),
+                                            low=Wad.from_number(item[3]),
+                                            volume=Wad.from_number(item[5])), result))
 
     def get_balances(self) -> dict:
         return self._http_post("/api/v1/userinfo.do", {})["info"]["funds"]
