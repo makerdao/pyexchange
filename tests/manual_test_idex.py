@@ -46,6 +46,7 @@ print(idex_api.place_order(pay_token=Address('0x00000000000000000000000000000000
                            buy_token=Address('0x89d24a6b4ccb1b6faa2625fe562bdd9a23260359'),
                            buy_amount=Wad.from_number(999)))
 
+print(idex_api.get_orders('DAI_ETH'))
 
 for order in idex_api.get_orders('DAI_ETH'):
     idex_api.cancel_order(order)

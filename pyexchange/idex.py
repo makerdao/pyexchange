@@ -20,10 +20,10 @@ from pprint import pformat
 from typing import List
 
 import requests
-from eth_abi.encoding import get_single_encoder
 from web3 import Web3
 
 from pymaker import Contract, Address, Transact, Wad
+from pymaker.tightly_packed import encode_address, encode_uint256, encode_bytes
 from pymaker.token import ERC20Token
 from pymaker.util import eth_sign, to_vrs, bytes_to_hexstring, hexstring_to_bytes
 
@@ -31,18 +31,6 @@ try:
     from sha3 import keccak_256
 except ImportError:
     from sha3 import sha3_256 as keccak_256
-
-
-def encode_address(address: Address) -> bytes:
-    return get_single_encoder("address", None, None)(address.address)[12:]
-
-
-def encode_uint256(value: int) -> bytes:
-    return get_single_encoder("uint", 256, None)(value)
-
-
-def encode_bytes(value: bytes) -> bytes:
-    return get_single_encoder("bytes", len(value), None)(value)
 
 
 class Order:
