@@ -254,12 +254,12 @@ class IDEXApi:
         result = self._http_post("/returnOpenOrders", {'market': pair, 'address': self._our_address()})
         return list(map(self._json_to_order, result))
 
-    def create_order(self,
-                     pay_token: Address,
-                     pay_amount: Wad,
-                     buy_token: Address,
-                     buy_amount: Wad) -> Order:
-        """Creates a new order.
+    def place_order(self,
+                    pay_token: Address,
+                    pay_amount: Wad,
+                    buy_token: Address,
+                    buy_amount: Wad) -> Order:
+        """Places a new order.
 
         Args:
             pay_token: Address of the ERC20 token you want to put on sale.
