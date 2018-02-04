@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
+from pprint import pformat
 from typing import List
 
 import requests
@@ -25,6 +26,39 @@ from web3 import Web3
 from pymaker import Contract, Address, Transact, Wad
 from pymaker.token import ERC20Token
 from pymaker.util import eth_sign, to_vrs, bytes_to_hexstring
+
+
+class Order:
+    def __init__(self,
+                 order_id: int,
+                 order_hash: str,
+                 nonce: int,
+                 timestamp: int,
+                 is_sell: bool,
+                 price: Wad,
+                 amount: Wad,
+                 money: Wad):
+
+        assert(isinstance(order_id, int))
+        assert(isinstance(order_hash, str))
+        assert(isinstance(nonce, int))
+        assert(isinstance(timestamp, int))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(money, Wad))
+
+        self.order_id = order_id
+        self.order_hash = order_hash
+        self.nonce = nonce
+        self.timestamp = timestamp
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+        self.money = money
+
+    def __repr__(self):
+        return pformat(vars(self))
 
 
 class IDEX(Contract):
@@ -209,36 +243,22 @@ class IDEXApi:
         return self._http_post("/returnTicker", {'market': pair})
 
     def next_nonce(self) -> int:
-        return int(self._http_post("/returnNextNonce", {'address': self.idex.web3.eth.defaultAccount})['nonce'])
+        return int(self._http_post("/returnNextNonce", {'address': self._our_address()})['nonce'])
 
     def get_balances(self):
-        return self._http_post("/returnCompleteBalances", {'address': self.idex.web3.eth.defaultAccount})
+        return self._http_post("/returnCompleteBalances", {'address': self._our_address()})
 
-    def get_orders(self, pair: str):
+    def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        result = self._http_post("/returnOpenOrders", {'market': pair, 'address': self.idex.web3.eth.defaultAccount})
-        return result
-
-        result = filter(lambda item: item['currencyPair'] == pair, result)
-
-        return list(map(lambda item: Order(order_id=int(item['orderNumber']),
-                                           timestamp=int(item['timestamp']),
-                                           pair=item['currencyPair'],
-                                           is_sell=item['type'] == 'sell',
-                                           price=Wad.from_number(item['rate']),
-                                           amount=Wad.from_number(item['amount']),
-                                           amount_symbol=item['currencyPair'].split('_')[0],
-                                           money=Wad.from_number(item['total']),
-                                           money_symbol=item['currencyPair'].split('_')[1],
-                                           initial_amount=Wad.from_number(item['initialAmount']),
-                                           filled_amount=Wad.from_number(item['filledAmount'])), result))
+        result = self._http_post("/returnOpenOrders", {'market': pair, 'address': self._our_address()})
+        return list(map(self._json_to_order, result))
 
     def create_order(self,
                      pay_token: Address,
                      pay_amount: Wad,
                      buy_token: Address,
-                     buy_amount: Wad):
+                     buy_amount: Wad) -> Order:
         """Creates a new order.
 
         Args:
@@ -276,7 +296,7 @@ class IDEXApi:
                                 encode_uint256(pay_amount.value) +
                                 encode_uint256(expires) +
                                 encode_uint256(nonce) +
-                                encode_address(Address(self.idex.web3.eth.defaultAccount))).digest()
+                                encode_address(Address(self._our_address()))).digest()
 
         signature = eth_sign(self.idex.web3, order_hash)
         v, r, s = to_vrs(signature)
@@ -295,8 +315,23 @@ class IDEXApi:
         }
 
         result = self._http_post("/order", data)
+        return self._json_to_order(result)
 
-        return result
+    def _our_address(self) -> str:
+        return self.idex.web3.eth.defaultAccount.lower()
+
+    @staticmethod
+    def _json_to_order(data: dict) -> Order:
+        assert(isinstance(data, dict))
+
+        return Order(order_id=data['orderNumber'],
+                     order_hash=data['orderHash'],
+                     nonce=data['params']['nonce'],
+                     timestamp=data['timestamp'],
+                     is_sell=data['type'] == 'sell',
+                     price=Wad.from_number(data['price']),
+                     amount=Wad.from_number(data['amount']),
+                     money=Wad.from_number(data['total']))
 
     @staticmethod
     def _result(result) -> dict:
