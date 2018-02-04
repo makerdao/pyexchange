@@ -19,10 +19,12 @@ import logging
 from typing import List
 
 import requests
+from eth_abi.encoding import get_single_encoder
 from web3 import Web3
 
 from pymaker import Contract, Address, Transact, Wad
 from pymaker.token import ERC20Token
+from pymaker.util import eth_sign, to_vrs, bytes_to_hexstring
 
 
 class IDEX(Contract):
@@ -206,6 +208,96 @@ class IDEXApi:
         assert(isinstance(pair, str))
         return self._http_post("/returnTicker", {'market': pair})
 
+    def next_nonce(self) -> int:
+        return int(self._http_post("/returnNextNonce", {'address': self.idex.web3.eth.defaultAccount})['nonce'])
+
+    def get_balances(self):
+        return self._http_post("/returnCompleteBalances", {'address': self.idex.web3.eth.defaultAccount})
+
+    def get_orders(self, pair: str):
+        assert(isinstance(pair, str))
+
+        result = self._http_post("/returnOpenOrders", {'market': pair, 'address': self.idex.web3.eth.defaultAccount})
+        return result
+
+        result = filter(lambda item: item['currencyPair'] == pair, result)
+
+        return list(map(lambda item: Order(order_id=int(item['orderNumber']),
+                                           timestamp=int(item['timestamp']),
+                                           pair=item['currencyPair'],
+                                           is_sell=item['type'] == 'sell',
+                                           price=Wad.from_number(item['rate']),
+                                           amount=Wad.from_number(item['amount']),
+                                           amount_symbol=item['currencyPair'].split('_')[0],
+                                           money=Wad.from_number(item['total']),
+                                           money_symbol=item['currencyPair'].split('_')[1],
+                                           initial_amount=Wad.from_number(item['initialAmount']),
+                                           filled_amount=Wad.from_number(item['filledAmount'])), result))
+
+    def create_order(self,
+                     pay_token: Address,
+                     pay_amount: Wad,
+                     buy_token: Address,
+                     buy_amount: Wad):
+        """Creates a new order.
+
+        Args:
+            pay_token: Address of the ERC20 token you want to put on sale.
+            pay_amount: Amount of the `pay_token` token you want to put on sale.
+            buy_token: Address of the ERC20 token you want to be paid with.
+            buy_amount: Amount of the `buy_token` you want to receive.
+
+        Returns:
+            New order as an instance of the :py:class:`pyexchange.idex.Order` class.
+        """
+        assert(isinstance(pay_token, Address))
+        assert(isinstance(pay_amount, Wad))
+        assert(isinstance(buy_token, Address))
+        assert(isinstance(buy_amount, Wad))
+
+        def encode_address(address: Address) -> bytes:
+            return get_single_encoder("address", None, None)(address.address)[12:]
+
+        def encode_uint256(value: int) -> bytes:
+            return get_single_encoder("uint", 256, None)(value)
+
+        expires = 0
+        nonce = self.next_nonce()
+
+        try:
+            from sha3 import keccak_256
+        except ImportError:
+            from sha3 import sha3_256 as keccak_256
+
+        order_hash = keccak_256(encode_address(self.idex.address) +
+                                encode_address(buy_token) +
+                                encode_uint256(buy_amount.value) +
+                                encode_address(pay_token) +
+                                encode_uint256(pay_amount.value) +
+                                encode_uint256(expires) +
+                                encode_uint256(nonce) +
+                                encode_address(Address(self.idex.web3.eth.defaultAccount))).digest()
+
+        signature = eth_sign(self.idex.web3, order_hash)
+        v, r, s = to_vrs(signature)
+
+        data = {
+            'tokenBuy': buy_token.address,
+            'amountBuy': str(buy_amount.value),
+            'tokenSell': pay_token.address,
+            'amountSell': str(pay_amount.value),
+            'address': self.idex.web3.eth.defaultAccount,
+            'nonce': str(nonce),
+            'expires': expires,
+            'v': v,
+            'r': bytes_to_hexstring(r),
+            's': bytes_to_hexstring(s)
+        }
+
+        result = self._http_post("/order", data)
+
+        return result
+
     @staticmethod
     def _result(result) -> dict:
         if not result.ok:
@@ -215,6 +307,9 @@ class IDEXApi:
             data = result.json()
         except Exception:
             raise Exception(f"IDEX API invalid JSON response: {result.text}")
+
+        if 'error' in data:
+            raise Exception(f"IDEX API error: {data}")
 
         return data
 

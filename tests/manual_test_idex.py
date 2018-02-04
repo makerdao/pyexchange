@@ -15,14 +15,32 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import logging
+import sys
 from web3 import Web3, HTTPProvider
 
 from pyexchange.idex import IDEXApi, IDEX
-from pymaker import Address
+from pymaker import Address, Wad
 
+
+logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=logging.INFO)
 
 web3 = Web3(HTTPProvider("http://localhost:8545", request_kwargs={"timeout": 600}))
+web3.eth.defaultAccount = sys.argv[1]
 idex = IDEX(web3, Address('0x2a0c0dbecc7e4d658f48e01e3fa353f44050c208'))
 idex_api = IDEXApi(idex, 'https://api.idex.market', 15.5)
 
+# print(idex.balance_of(Address(web3.eth.defaultAccount)))
+# idex.deposit(Wad.from_number(0.5)).transact()
+
+print(idex.balance_of(Address(web3.eth.defaultAccount)))
+
+print(idex_api.next_nonce())
 print(idex_api.ticker('DAI_ETH'))
+print(idex_api.get_balances())
+print(idex_api.get_orders('DAI_ETH'))
+
+print(idex_api.create_order(pay_token=Address('0x0000000000000000000000000000000000000000'),
+                            pay_amount=Wad.from_number(0.2),
+                            buy_token=Address('0x89d24a6b4ccb1b6faa2625fe562bdd9a23260359'),
+                            buy_amount=Wad.from_number(999)))
