@@ -39,6 +39,10 @@ print(idex_api.next_nonce())
 print(idex_api.ticker('DAI_ETH'))
 print(idex_api.get_balances())
 print(idex_api.get_orders('DAI_ETH'))
+
+for order in idex_api.get_orders('DAI_ETH'):
+    idex_api.cancel_order(order)
+print(idex_api.get_orders('DAI_ETH'))
 exit(-1)
 
 print(idex_api.place_order(pay_token=Address('0x0000000000000000000000000000000000000000'),

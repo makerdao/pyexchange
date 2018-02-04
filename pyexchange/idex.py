@@ -25,7 +25,24 @@ from web3 import Web3
 
 from pymaker import Contract, Address, Transact, Wad
 from pymaker.token import ERC20Token
-from pymaker.util import eth_sign, to_vrs, bytes_to_hexstring
+from pymaker.util import eth_sign, to_vrs, bytes_to_hexstring, hexstring_to_bytes
+
+try:
+    from sha3 import keccak_256
+except ImportError:
+    from sha3 import sha3_256 as keccak_256
+
+
+def encode_address(address: Address) -> bytes:
+    return get_single_encoder("address", None, None)(address.address)[12:]
+
+
+def encode_uint256(value: int) -> bytes:
+    return get_single_encoder("uint", 256, None)(value)
+
+
+def encode_bytes(value: bytes) -> bytes:
+    return get_single_encoder("bytes", len(value), None)(value)
 
 
 class Order:
@@ -275,20 +292,8 @@ class IDEXApi:
         assert(isinstance(buy_token, Address))
         assert(isinstance(buy_amount, Wad))
 
-        def encode_address(address: Address) -> bytes:
-            return get_single_encoder("address", None, None)(address.address)[12:]
-
-        def encode_uint256(value: int) -> bytes:
-            return get_single_encoder("uint", 256, None)(value)
-
         expires = 0
         nonce = self.next_nonce()
-
-        try:
-            from sha3 import keccak_256
-        except ImportError:
-            from sha3 import sha3_256 as keccak_256
-
         order_hash = keccak_256(encode_address(self.idex.address) +
                                 encode_address(buy_token) +
                                 encode_uint256(buy_amount.value) +
@@ -306,7 +311,7 @@ class IDEXApi:
             'amountBuy': str(buy_amount.value),
             'tokenSell': pay_token.address,
             'amountSell': str(pay_amount.value),
-            'address': self.idex.web3.eth.defaultAccount,
+            'address': self._our_address(),
             'nonce': str(nonce),
             'expires': expires,
             'v': v,
@@ -316,6 +321,28 @@ class IDEXApi:
 
         result = self._http_post("/order", data)
         return self._json_to_order(result)
+
+    def cancel_order(self, order: Order) -> bool:
+        assert(isinstance(order, Order))
+
+        nonce = self.next_nonce()
+        singed_data = keccak_256(encode_bytes(hexstring_to_bytes(order.order_hash)) +
+                                 encode_uint256(nonce)).digest()
+
+        signature = eth_sign(self.idex.web3, singed_data)
+        v, r, s = to_vrs(signature)
+
+        data = {
+            'orderHash': order.order_hash,
+            'nonce': str(nonce),
+            'address': self._our_address(),
+            'v': v,
+            'r': bytes_to_hexstring(r),
+            's': bytes_to_hexstring(s)
+        }
+
+        result = self._http_post("/cancel", data)
+        return result['success'] == 1
 
     def _our_address(self) -> str:
         return self.idex.web3.eth.defaultAccount.lower()
