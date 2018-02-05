@@ -319,8 +319,14 @@ class IDEXApi:
             's': bytes_to_hexstring(s)
         }
 
+        self.logger.info(f"Placing order selling {pay_amount} {pay_token} for {buy_amount} {buy_token}...")
+
         result = self._http_post("/order", data)
-        return self._json_to_order(result)
+        order = self._json_to_order(result)
+
+        self.logger.info(f"Placed order selling {pay_amount} {pay_token} for {buy_amount} {buy_token} as #{order.order_id}")
+
+        return order
 
     def cancel_order(self, order: Order) -> bool:
         assert(isinstance(order, Order))
@@ -341,8 +347,17 @@ class IDEXApi:
             's': bytes_to_hexstring(s)
         }
 
+        self.logger.info(f"Cancelling order #{order.order_id}...")
+
         result = self._http_post("/cancel", data)
-        return result['success'] == 1
+        success = result['success'] == 1
+
+        if success:
+            self.logger.info(f"Cancelled order #{order.order_id}")
+        else:
+            self.logger.info(f"Failed to cancel order #{order.order_id}")
+
+        return success
 
     def _our_address(self) -> str:
         return self.idex.web3.eth.defaultAccount.lower()
