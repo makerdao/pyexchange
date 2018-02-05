@@ -62,6 +62,18 @@ class Order:
         self.amount = amount
         self.money = money
 
+    @property
+    def sell_to_buy_price(self) -> Wad:
+        return self.price
+
+    @property
+    def buy_to_sell_price(self) -> Wad:
+        return self.price
+
+    @property
+    def remaining_sell_amount(self) -> Wad:
+        return self.amount
+
     def __repr__(self):
         return pformat(vars(self))
 
