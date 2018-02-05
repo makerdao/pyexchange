@@ -83,7 +83,7 @@ class IDEX(Contract):
     abi = Contract._load_abi(__name__, 'abi/IDEX.abi')
     bin = Contract._load_bin(__name__, 'abi/IDEX.bin')
 
-    _ZERO_ADDRESS = Address("0x0000000000000000000000000000000000000000")
+    ETH_TOKEN = Address("0x0000000000000000000000000000000000000000")
 
     @staticmethod
     def deploy(web3: Web3, fee_account: Address):
@@ -155,7 +155,7 @@ class IDEX(Contract):
         """
         assert(isinstance(amount, Wad))
         return Transact(self, self.web3, self.abi, self.address, self._contract, 'withdraw',
-                        [self._ZERO_ADDRESS.address, amount.value])
+                        [self.ETH_TOKEN.address, amount.value])
 
     def balance_of(self, user: Address) -> Wad:
         """Returns the amount of raw ETH deposited by the specified user.
@@ -167,7 +167,7 @@ class IDEX(Contract):
             The raw ETH balance kept in the IDEX Exchange contract by the specified user.
         """
         assert(isinstance(user, Address))
-        return Wad(self._contract.call().balanceOf(self._ZERO_ADDRESS.address, user.address))
+        return Wad(self._contract.call().balanceOf(self.ETH_TOKEN.address, user.address))
 
     def deposit_token(self, token: Address, amount: Wad) -> Transact:
         """Deposits `amount` of ERC20 token `token` to IDEX.
