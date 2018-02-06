@@ -23,9 +23,10 @@ import requests
 from web3 import Web3
 
 from pymaker import Contract, Address, Transact, Wad
+from pymaker.sign import eth_sign, to_vrs
 from pymaker.tightly_packed import encode_address, encode_uint256, encode_bytes
 from pymaker.token import ERC20Token
-from pymaker.util import eth_sign, to_vrs, bytes_to_hexstring, hexstring_to_bytes
+from pymaker.util import bytes_to_hexstring, hexstring_to_bytes
 
 try:
     from sha3 import keccak_256
@@ -303,7 +304,7 @@ class IDEXApi:
                                 encode_uint256(nonce) +
                                 encode_address(Address(self._our_address()))).digest()
 
-        signature = eth_sign(self.idex.web3, order_hash)
+        signature = eth_sign(order_hash, self.idex.web3)
         v, r, s = to_vrs(signature)
 
         data = {
@@ -332,10 +333,10 @@ class IDEXApi:
         assert(isinstance(order, Order))
 
         nonce = self.next_nonce()
-        singed_data = keccak_256(encode_bytes(hexstring_to_bytes(order.order_hash)) +
+        signed_data = keccak_256(encode_bytes(hexstring_to_bytes(order.order_hash)) +
                                  encode_uint256(nonce)).digest()
 
-        signature = eth_sign(self.idex.web3, singed_data)
+        signature = eth_sign(signed_data, self.idex.web3)
         v, r, s = to_vrs(signature)
 
         data = {

@@ -25,11 +25,12 @@ from typing import List, Optional
 
 import requests
 from eth_utils import force_bytes
+from ethereum.utils import int_to_bytes
 from web3 import Web3
 
 from pyexchange.util import get_db_file, get_db, get_lock, filter_trades, sort_trades
 from pymaker.numeric import Wad
-from pymaker.util import eth_sign
+from pymaker.sign import eth_sign_with_keyfile
 
 
 class ParadexApi:
@@ -41,15 +42,19 @@ class ParadexApi:
 
     logger = logging.getLogger()
 
-    def __init__(self, web3: Web3, api_server: str, api_key: str, timeout: float):
+    def __init__(self, web3: Web3, api_server: str, api_key: str, key_file: str, key_password: str, timeout: float):
         assert(isinstance(web3, Web3))
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
+        assert(isinstance(key_file, str))
+        assert(isinstance(key_password, str))
         assert(isinstance(timeout, float))
 
         self.web3 = web3
         self.api_server = api_server
         self.api_key = api_key
+        self.key_file = key_file
+        self.key_password = key_password
         self.timeout = timeout
 
     def ticker(self, pair: str):
@@ -62,7 +67,7 @@ class ParadexApi:
         result = self._http_post("/v0/orders", {
             'market': pair,
             'state': 'open',
-            'nonce': 8
+            'nonce': 21
         })
 
         return result
@@ -85,7 +90,7 @@ class ParadexApi:
 
         return data
 
-    def _create_signature(self, params):
+    def _create_signature(self, params: dict):
         assert(isinstance(params, dict))
 
         keys = ''
@@ -93,14 +98,20 @@ class ParadexApi:
         for key in sorted(params.keys()):
             keys += key
             values += str(params[key])
-        sign = keys + values
 
-        sign = keccak_256(force_bytes(sign)).digest()
+        raw_message = keccak_256(force_bytes(keys + values)).digest()
+        signature = eth_sign_with_keyfile(raw_message, True, self.key_file, self.key_password)
+        assert(len(signature) == 132)
 
-        # signature = eth_sign(self.web3, bytes(sign, 'utf-8'))
-        signature = eth_sign(self.web3, sign)
+        if signature.endswith("1c"):
+            signature = signature[0:130] + "01"
+        elif signature.endswith("1b"):
+            signature = signature[0:130] + "00"
+        else:
+            raise Exception(f"Invalid signature: {signature}")
 
         print(signature)
+
         return signature
 
     def _http_get(self, resource: str, params: str):
