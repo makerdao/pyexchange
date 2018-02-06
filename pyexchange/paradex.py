@@ -15,21 +15,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import hashlib
 import logging
-import urllib
-import hmac
-from _pysha3 import keccak_256
-from pprint import pformat
-from typing import List, Optional
+from typing import Optional
 
 import requests
-from eth_utils import force_bytes
-from ethereum.utils import int_to_bytes
 from web3 import Web3
 
-from pyexchange.util import get_db_file, get_db, get_lock, filter_trades, sort_trades
-from pymaker.numeric import Wad
 from pymaker.sign import eth_sign_with_keyfile
 
 
@@ -56,6 +47,7 @@ class ParadexApi:
         self.key_file = key_file
         self.key_password = key_password
         self.timeout = timeout
+        self.nonce = 0
 
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
@@ -66,8 +58,7 @@ class ParadexApi:
 
         result = self._http_post("/v0/orders", {
             'market': pair,
-            'state': 'open',
-            'nonce': 22
+            'state': 'open'
         })
 
         return result
@@ -75,8 +66,7 @@ class ParadexApi:
         # orders = filter(self._filter_order, result['orders'])
         # return list(map(self._parse_order, orders))
 
-    @staticmethod
-    def _result(result) -> dict:
+    def _result(self, result) -> Optional[dict]:
         if not result.ok:
             raise Exception(f"Paradex API invalid HTTP response: {result.status_code} {result.reason}")
 
@@ -86,12 +76,24 @@ class ParadexApi:
             raise Exception(f"Paradex API invalid JSON response: {result.text}")
 
         if 'error' in data:
+            if 'code' in data['error'] and data['error']['code'] == 107:
+                new_nonce = data['error']['currentNonce'] + 1
+                self.logger.info(f"Invalid nonce, tried {self.nonce - 1} but instructed to change to {new_nonce}")
+                self.nonce = new_nonce
+
+                return None
+
             raise Exception(f"Negative Paradex response: {data}")
 
         return data
 
     def _create_signature(self, params: dict) -> str:
         assert(isinstance(params, dict))
+
+        try:
+            from sha3 import keccak_256
+        except ImportError:
+            from sha3 import sha3_256 as keccak_256
 
         keys = ''
         values = ''
@@ -125,7 +127,23 @@ class ParadexApi:
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
 
-        return self._result(requests.post(url=f"{self.api_server}{resource}",
-                                          json=params,
-                                          headers={"API-KEY": self.api_key, "API-VRS": self._create_vrs_header(params)},
-                                          timeout=self.timeout))
+        max_attempts = 3
+        for attempt in range(0, max_attempts):
+            params_with_nonce = params.copy()
+            params_with_nonce['nonce'] = self.nonce
+            self.nonce += 1
+
+            result = self._result(requests.post(url=f"{self.api_server}{resource}",
+                                                json=params_with_nonce,
+                                                headers={
+                                                    "API-KEY": self.api_key,
+                                                    "API-VRS": self._create_vrs_header(params_with_nonce)
+                                                },
+                                                timeout=self.timeout))
+
+            # result will be `None` if we need to readjust nonce
+            # in this case we will try again in the next iteration
+            if result is not None:
+                return result
+
+        raise Exception(f"Couldn't get a response despite {max_attempts} attempts to readjust the nonce")
