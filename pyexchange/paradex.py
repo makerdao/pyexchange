@@ -67,7 +67,7 @@ class ParadexApi:
         result = self._http_post("/v0/orders", {
             'market': pair,
             'state': 'open',
-            'nonce': 21
+            'nonce': 22
         })
 
         return result
@@ -90,7 +90,7 @@ class ParadexApi:
 
         return data
 
-    def _create_signature(self, params: dict):
+    def _create_signature(self, params: dict) -> str:
         assert(isinstance(params, dict))
 
         keys = ''
@@ -99,20 +99,19 @@ class ParadexApi:
             keys += key
             values += str(params[key])
 
-        raw_message = keccak_256(force_bytes(keys + values)).digest()
-        signature = eth_sign_with_keyfile(raw_message, True, self.key_file, self.key_password)
-        assert(len(signature) == 132)
+        raw_message = keccak_256(bytes(keys + values, 'utf-8')).digest()
+        return eth_sign_with_keyfile(raw_message, True, self.key_file, self.key_password)
 
+    def _create_vrs_header(self, params: dict):
+        assert(isinstance(params, dict))
+
+        signature = self._create_signature(params)
         if signature.endswith("1c"):
-            signature = signature[0:130] + "01"
+            return (signature[0:130] + "01")[2:]
         elif signature.endswith("1b"):
-            signature = signature[0:130] + "00"
+            return (signature[0:130] + "00")[2:]
         else:
             raise Exception(f"Invalid signature: {signature}")
-
-        print(signature)
-
-        return signature
 
     def _http_get(self, resource: str, params: str):
         assert(isinstance(resource, str))
@@ -128,5 +127,5 @@ class ParadexApi:
 
         return self._result(requests.post(url=f"{self.api_server}{resource}",
                                           json=params,
-                                          headers={"API-KEY": self.api_key, "API-VRS": self._create_signature(params)[2:]},
+                                          headers={"API-KEY": self.api_key, "API-VRS": self._create_vrs_header(params)},
                                           timeout=self.timeout))
