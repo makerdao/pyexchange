@@ -15,13 +15,59 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import datetime
 import logging
-from typing import Optional
+import time
+from pprint import pformat
+from typing import Optional, List
 
+import pytz
 import requests
 from web3 import Web3
 
+import pymaker.zrx
+from pymaker import Wad
 from pymaker.sign import eth_sign_with_keyfile
+from pymaker.zrx import ZrxExchange
+
+
+class Order:
+    def __init__(self,
+                 order_id: int,
+                 pair: str,
+                 is_sell: bool,
+                 price: Wad,
+                 amount: Wad,
+                 amount_remaining: Wad):
+
+        assert(isinstance(order_id, int))
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(amount_remaining, Wad))
+
+        self.order_id = order_id
+        self.pair = pair
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+        self.amount_remaining = amount_remaining
+
+    @property
+    def sell_to_buy_price(self) -> Wad:
+        return self.price
+
+    @property
+    def buy_to_sell_price(self) -> Wad:
+        return self.price
+
+    @property
+    def remaining_sell_amount(self) -> Wad:
+        return self.amount_remaining if self.is_sell else self.amount_remaining*self.price
+
+    def __repr__(self):
+        return pformat(vars(self))
 
 
 class ParadexApi:
@@ -33,8 +79,9 @@ class ParadexApi:
 
     logger = logging.getLogger()
 
-    def __init__(self, web3: Web3, api_server: str, api_key: str, key_file: str, key_password: str, timeout: float):
+    def __init__(self, web3: Web3, zrx_exchange: ZrxExchange, api_server: str, api_key: str, key_file: str, key_password: str, timeout: float):
         assert(isinstance(web3, Web3))
+        assert(isinstance(zrx_exchange, ZrxExchange))
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
         assert(isinstance(key_file, str))
@@ -42,6 +89,7 @@ class ParadexApi:
         assert(isinstance(timeout, float))
 
         self.web3 = web3
+        self.zrx_exchange = zrx_exchange
         self.api_server = api_server
         self.api_key = api_key
         self.key_file = key_file
@@ -53,18 +101,75 @@ class ParadexApi:
         assert(isinstance(pair, str))
         return self._http_get("/v0/ticker", f"market={pair}")
 
-    def get_orders(self, pair: str):
+    def get_balances(self):
+        return self._http_post("/v0/balances", {})
+
+    def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        result = self._http_post("/v0/orders", {
+        orders_open = self._http_post("/v0/orders", {
             'market': pair,
             'state': 'open'
         })
 
-        return result
+        orders_unfunded = self._http_post("/v0/orders", {
+            'market': pair,
+            'state': 'unfunded'
+        })
 
-        # orders = filter(self._filter_order, result['orders'])
-        # return list(map(self._parse_order, orders))
+        return list(map(lambda item: Order(order_id=int(item['id']),
+                                           pair=pair,
+                                           is_sell=item['type'] == 'sell',
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad.from_number(item['amount']),
+                                           amount_remaining=Wad.from_number(item['amountRemaining'])),
+                        list(orders_open) + list(orders_unfunded)))
+
+    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad, expiry: int) -> int:
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(expiry, int))
+
+        self.logger.info(f"Placing order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
+                         f" price {price})...")
+
+        order_params = self._http_post("/v0/orderParams", {
+            'market': pair,
+            'orderType': 'sell' if is_sell else 'buy',
+            'price': str(price),
+            'amount': str(amount),
+            'expirationDate': datetime.datetime.fromtimestamp(time.time() + expiry, pytz.UTC).strftime("%Y-%m-%d %H:%M:%S.000000%z")
+        })
+
+        order = pymaker.zrx.Order.from_json(self.zrx_exchange, order_params['zrxOrder'])
+        order = self.zrx_exchange.sign_order(order)
+
+        result = self._http_post("/v0/order", {
+            'exchangeContractAddress': str(order.exchange_contract_address.address),
+            'expirationUnixTimestampSec': str(order.expiration),
+            'feeRecipient': str(order.fee_recipient.address),
+            'maker': str(order.maker.address),
+            'makerFee': str(order.maker_fee.value),
+            'makerTokenAddress': str(order.pay_token.address),
+            'makerTokenAmount': str(order.pay_amount.value),
+            'salt': str(order.salt),
+            'taker': str(order.taker.address),
+            'takerFee': str(order.taker_fee.value),
+            'takerTokenAddress': str(order.buy_token.address),
+            'takerTokenAmount': str(order.buy_amount.value),
+            'v': str(order.ec_signature_v),
+            'r': str(order.ec_signature_r),
+            's': str(order.ec_signature_s),
+            'feeId': order_params['fee']['id']
+        })
+        order_id = result['id']
+
+        self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
+                         f" price {price}) as #{order_id}")
+
+        return order_id
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
