@@ -171,6 +171,23 @@ class ParadexApi:
 
         return order_id
 
+    def cancel_order(self, order_id: int) -> bool:
+        assert(isinstance(order_id, int))
+
+        self.logger.info(f"Cancelling order #{order_id}...")
+
+        result = self._http_post("/v0/orderCancel", {
+            'id': order_id
+        })
+        success = result['status']
+
+        if success:
+            self.logger.info(f"Cancelled order #{order_id}")
+        else:
+            self.logger.info(f"Failed to cancel order #{order_id}")
+
+        return success
+
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
             raise Exception(f"Paradex API invalid HTTP response: {result.status_code} {result.reason}")
