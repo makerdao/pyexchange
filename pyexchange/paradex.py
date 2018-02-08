@@ -81,6 +81,8 @@ class Trade:
                  price: Wad,
                  amount: Wad,
                  amount_symbol: str,
+                 money: Wad,
+                 money_symbol: str,
                  base_fee: Wad,
                  trading_fee: Wad):
         assert(isinstance(trade_id, int))
@@ -89,6 +91,9 @@ class Trade:
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
+        assert(isinstance(amount_symbol, str))
+        assert(isinstance(money, Wad))
+        assert(isinstance(money_symbol, str))
         assert(isinstance(base_fee, Wad))
         assert(isinstance(trading_fee, Wad))
 
@@ -99,6 +104,8 @@ class Trade:
         self.price = price
         self.amount = amount
         self.amount_symbol = amount_symbol
+        self.money = money
+        self.money_symbol = money_symbol
         self.base_fee = base_fee
         self.trading_fee = trading_fee
 
@@ -111,6 +118,8 @@ class Trade:
                self.price == other.price and \
                self.amount == other.amount and \
                self.amount_symbol == other.amount_symbol and \
+               self.money == other.money and \
+               self.money_symbol == other.money_symbol and \
                self.base_fee == other.base_fee and \
                self.trading_fee == other.trading_fee
 
@@ -122,6 +131,8 @@ class Trade:
                      self.price,
                      self.amount,
                      self.amount_symbol,
+                     self.money,
+                     self.money_symbol,
                      self.base_fee,
                      self.trading_fee))
 
@@ -261,6 +272,8 @@ class ParadexApi:
                                              price=Wad.from_number(item['price']),
                                              amount=Wad.from_number(item['amount']),
                                              amount_symbol=item['baseToken'],
+                                             money=Wad.from_number(item['amount'])*Wad.from_number(item['price']),
+                                             money_symbol=item['quoteToken'],
                                              base_fee=Wad.from_number(item['baseFee']),
                                              trading_fee=Wad.from_number(item['tradingFee'])), result))
 
