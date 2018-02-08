@@ -24,7 +24,6 @@ from typing import Optional, List
 import dateutil.parser
 import pytz
 import requests
-from web3 import Web3
 
 import pymaker.zrx
 from pyexchange.util import sort_trades, filter_trades
@@ -149,16 +148,14 @@ class ParadexApi:
 
     logger = logging.getLogger()
 
-    def __init__(self, web3: Web3, zrx_exchange: ZrxExchange, api_server: str, api_key: str, timeout: float, key_file: str, key_password: str):
-        assert(isinstance(web3, Web3))
-        assert(isinstance(zrx_exchange, ZrxExchange))
+    def __init__(self, zrx_exchange: ZrxExchange, api_server: str, api_key: str, timeout: float, key_file: str, key_password: str):
+        assert(isinstance(zrx_exchange, ZrxExchange) or (zrx_exchange is None))
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
         assert(isinstance(timeout, float))
         assert(isinstance(key_file, str))
         assert(isinstance(key_password, str))
 
-        self.web3 = web3
         self.zrx_exchange = zrx_exchange
         self.api_server = api_server
         self.api_key = api_key
@@ -201,6 +198,9 @@ class ParadexApi:
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
         assert(isinstance(expiry, int))
+
+        # `zrx_exchange` has to be present if we want to place orders
+        assert(self.zrx_exchange is not None)
 
         self.logger.info(f"Placing order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
                          f" price {price})...")
