@@ -21,11 +21,13 @@ import time
 from pprint import pformat
 from typing import Optional, List
 
+import dateutil.parser
 import pytz
 import requests
 from web3 import Web3
 
 import pymaker.zrx
+from pyexchange.util import sort_trades, filter_trades
 from pymaker import Wad
 from pymaker.sign import eth_sign_with_keyfile
 from pymaker.zrx import ZrxExchange
@@ -65,6 +67,63 @@ class Order:
     @property
     def remaining_sell_amount(self) -> Wad:
         return self.amount_remaining if self.is_sell else self.amount_remaining*self.price
+
+    def __repr__(self):
+        return pformat(vars(self))
+
+
+class Trade:
+    def __init__(self,
+                 trade_id: id,
+                 timestamp: int,
+                 pair: str,
+                 is_sell: bool,
+                 price: Wad,
+                 amount: Wad,
+                 amount_symbol: str,
+                 base_fee: Wad,
+                 trading_fee: Wad):
+        assert(isinstance(trade_id, int))
+        assert(isinstance(timestamp, int))
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(base_fee, Wad))
+        assert(isinstance(trading_fee, Wad))
+
+        self.trade_id = trade_id
+        self.timestamp = timestamp
+        self.pair = pair
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+        self.amount_symbol = amount_symbol
+        self.base_fee = base_fee
+        self.trading_fee = trading_fee
+
+    def __eq__(self, other):
+        assert(isinstance(other, Trade))
+        return self.trade_id == other.trade_id and \
+               self.timestamp == other.timestamp and \
+               self.pair == other.pair and \
+               self.is_sell == other.is_sell and \
+               self.price == other.price and \
+               self.amount == other.amount and \
+               self.amount_symbol == other.amount_symbol and \
+               self.base_fee == other.base_fee and \
+               self.trading_fee == other.trading_fee
+
+    def __hash__(self):
+        return hash((self.trade_id,
+                     self.timestamp,
+                     self.pair,
+                     self.is_sell,
+                     self.price,
+                     self.amount,
+                     self.amount_symbol,
+                     self.base_fee,
+                     self.trading_fee))
 
     def __repr__(self):
         return pformat(vars(self))
@@ -187,6 +246,28 @@ class ParadexApi:
             self.logger.info(f"Failed to cancel order #{order_id}")
 
         return success
+
+    def get_trades(self, pair: str, **kwargs) -> List[Trade]:
+        assert(isinstance(pair, str))
+
+        result = self._http_post("/v0/trades", {
+            'market': pair
+        })
+
+        trades = list(map(lambda item: Trade(trade_id=int(item['id']),
+                                             timestamp=int(dateutil.parser.parse(item['completedAt']).timestamp()),
+                                             pair=pair,
+                                             is_sell=item['type'] == 'sell',
+                                             price=Wad.from_number(item['price']),
+                                             amount=Wad.from_number(item['amount']),
+                                             amount_symbol=item['baseToken'],
+                                             base_fee=Wad.from_number(item['baseFee']),
+                                             trading_fee=Wad.from_number(item['tradingFee'])), result))
+
+        trades = sort_trades(trades)
+        trades = filter_trades(trades, **kwargs)
+
+        return trades
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
