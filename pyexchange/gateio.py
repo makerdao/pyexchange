@@ -288,7 +288,7 @@ class GateIOApi:
                 table.insert_multiple(map(self._trade_to_dict, trades))
 
                 # gate.io API sometimes returns dodgy trades, so we remove them
-                trades = list(filter(lambda trade: trade.money > 0 and trade.amount > 0, trades))
+                trades = list(filter(lambda trade: trade.money > Wad(0) and trade.amount > Wad(0), trades))
 
                 return trades
 
