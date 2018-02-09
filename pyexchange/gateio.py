@@ -287,6 +287,9 @@ class GateIOApi:
                 table.purge()
                 table.insert_multiple(map(self._trade_to_dict, trades))
 
+                # gate.io API sometimes returns dodgy trades, so we remove them
+                trades = list(filter(lambda trade: trade.money > 0 and trade.amount > 0, trades))
+
                 return trades
 
     # TODO: for some reason a call to http://data.gate.io/api2/1/tradeHistory/aaa_bbb does not return
