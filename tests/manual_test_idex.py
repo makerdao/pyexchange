@@ -34,19 +34,22 @@ idex_api = IDEXApi(idex, 'https://api.idex.market', 15.5)
 # idex.deposit(Wad.from_number(0.5)).transact()
 
 print(idex.balance_of(Address(web3.eth.defaultAccount)))
+print(idex.balance_of_token(Address('0x89d24a6b4ccb1b6faa2625fe562bdd9a23260359'), Address(web3.eth.defaultAccount)))
 
-print(idex_api.next_nonce())
-print(idex_api.ticker('DAI_ETH'))
-print(idex_api.get_balances())
+# print(idex_api.next_nonce())
+# print(idex_api.ticker('DAI_ETH'))
+# print(idex_api.get_balances())
+# print(idex_api.get_orders('DAI_ETH'))
 print(idex_api.get_orders('DAI_ETH'))
-print(idex_api.get_orders('DAI_ETH'))
+exit(-1)
 
 print(idex_api.place_order(pay_token=Address('0x0000000000000000000000000000000000000000'),
                            pay_amount=Wad.from_number(0.2),
                            buy_token=Address('0x89d24a6b4ccb1b6faa2625fe562bdd9a23260359'),
-                           buy_amount=Wad.from_number(999)))
+                           buy_amount=Wad.from_number(170)))
 
 print(idex_api.get_orders('DAI_ETH'))
+exit(-1)
 
 for order in idex_api.get_orders('DAI_ETH'):
     idex_api.cancel_order(order)

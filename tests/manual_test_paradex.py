@@ -15,15 +15,30 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import logging
 import sys
 
 from web3 import Web3, HTTPProvider
 
 from pyexchange.paradex import ParadexApi
+from pymaker import Wad, Address
+from pymaker.zrx import ZrxExchange
+
+
+logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=logging.INFO)
 
 web3 = Web3(HTTPProvider("http://localhost:8545", request_kwargs={"timeout": 600}))
 web3.eth.defaultAccount = sys.argv[2]
-paradex = ParadexApi(web3, 'https://api.paradex.io/consumer', sys.argv[1], 15.5)
+zrx_exchange = ZrxExchange(web3, Address('0x12459C951127e0c374FF9105DdA097662A027093'))
+paradex = ParadexApi(zrx_exchange, 'https://api.paradex.io/consumer', sys.argv[1], 15.5)
 
-# print(paradex.ticker('WETH/DAI'))
+print(paradex.ticker('WETH/DAI'))
+print(paradex.get_balances())
 print(paradex.get_orders('WETH/DAI'))
+
+# paradex.place_order('WETH/DAI', True, Wad.from_number(995), Wad.from_number(0.1), expiry=1000)
+# for order in paradex.get_orders('WETH/DAI'):
+#     paradex.cancel_order(order.order_id)
+
+print(paradex.get_orders('WETH/DAI'))
+print(paradex.get_trades('WETH/DAI'))
