@@ -28,7 +28,7 @@ import requests
 import pymaker.zrx
 from pyexchange.util import sort_trades, filter_trades
 from pymaker import Wad
-from pymaker.sign import eth_sign_with_keyfile
+from pymaker.sign import eth_sign
 from pymaker.zrx import ZrxExchange
 
 
@@ -148,20 +148,16 @@ class ParadexApi:
 
     logger = logging.getLogger()
 
-    def __init__(self, zrx_exchange: ZrxExchange, api_server: str, api_key: str, timeout: float, key_file: str, key_password: str):
+    def __init__(self, zrx_exchange: ZrxExchange, api_server: str, api_key: str, timeout: float):
         assert(isinstance(zrx_exchange, ZrxExchange) or (zrx_exchange is None))
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
         assert(isinstance(timeout, float))
-        assert(isinstance(key_file, str))
-        assert(isinstance(key_password, str))
 
         self.zrx_exchange = zrx_exchange
         self.api_server = api_server
         self.api_key = api_key
         self.timeout = timeout
-        self.key_file = key_file
-        self.key_password = key_password
         self.nonce = 0
 
     def ticker(self, pair: str):
@@ -317,10 +313,10 @@ class ParadexApi:
             keys += key
             values += str(params[key])
 
-        raw_message = keccak_256(bytes(keys + values, 'utf-8')).digest()
-        return eth_sign_with_keyfile(raw_message, True, self.key_file, self.key_password)
+        message = bytes(keys + values, 'utf-8')
+        return eth_sign(message, self.zrx_exchange.web3)
 
-    def _create_vrs_header(self, params: dict):
+    def _create_sig_header(self, params: dict):
         assert(isinstance(params, dict))
 
         signature = self._create_signature(params)
@@ -353,7 +349,7 @@ class ParadexApi:
                                                 json=params_with_nonce,
                                                 headers={
                                                     "API-KEY": self.api_key,
-                                                    "API-VRS": self._create_vrs_header(params_with_nonce)
+                                                    "API-SIG": self._create_sig_header(params_with_nonce)
                                                 },
                                                 timeout=self.timeout))
 
