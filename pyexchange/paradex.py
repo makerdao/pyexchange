@@ -211,6 +211,7 @@ class ParadexApi:
 
         order = pymaker.zrx.Order.from_json(self.zrx_exchange, order_params['zrxOrder'])
         order = self.zrx_exchange.sign_order(order)
+        fee = self._calculate_fee(is_sell, price, amount, order)
 
         result = self._http_post("/v0/order", {
             'exchangeContractAddress': str(order.exchange_contract_address.address),
@@ -233,7 +234,7 @@ class ParadexApi:
         order_id = result['id']
 
         self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
-                         f" price {price}) as #{order_id}")
+                         f" price {price}, fee {float(fee)*100:.4f}%) as #{order_id}")
 
         return order_id
 
@@ -298,6 +299,20 @@ class ParadexApi:
             raise Exception(f"Negative Paradex response: {data}")
 
         return data
+
+    @staticmethod
+    def _calculate_fee(is_sell: bool, price: Wad, amount: Wad, zrx_order: pymaker.zrx.Order) -> Wad:
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(zrx_order, pymaker.zrx.Order))
+
+        if is_sell:
+            expected_buy_amount = amount*price
+        else:
+            expected_buy_amount = amount
+
+        return (expected_buy_amount - zrx_order.buy_amount) / expected_buy_amount
 
     def _create_signature(self, params: dict) -> str:
         assert(isinstance(params, dict))
