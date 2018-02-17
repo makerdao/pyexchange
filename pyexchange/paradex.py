@@ -262,6 +262,7 @@ class ParadexApi:
             'market': pair
         })
 
+        result = filter(lambda item: item['completedAt'] is not None, result)
         trades = list(map(lambda item: Trade(trade_id=int(item['id']),
                                              timestamp=int(dateutil.parser.parse(item['completedAt']).timestamp()),
                                              pair=pair,
