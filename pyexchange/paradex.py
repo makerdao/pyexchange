@@ -164,6 +164,9 @@ class ParadexApi:
         assert(isinstance(pair, str))
         return self._http_get("/v0/ticker", f"market={pair}")
 
+    def get_markets(self):
+        return self._http_get("/v0/markets", f"")
+
     def get_balances(self):
         return self._http_post("/v0/balances", {})
 
