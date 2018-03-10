@@ -32,13 +32,18 @@ web3.eth.defaultAccount = sys.argv[2]
 zrx_exchange = ZrxExchange(web3, Address('0x12459C951127e0c374FF9105DdA097662A027093'))
 paradex = ParadexApi(zrx_exchange, 'https://api.paradex.io/consumer', sys.argv[1], 15.5)
 
-print(paradex.ticker('WETH/DAI'))
+# print(paradex.ticker('WETH/DAI'))
 print(paradex.get_balances())
-print(paradex.get_orders('WETH/DAI'))
+print(paradex.get_balances())
+print(paradex.get_balances())
+print(paradex.get_balances())
+print(paradex.get_balances())
+print(paradex.get_balances())
+# print(paradex.get_orders('WETH/DAI'))
 
 # paradex.place_order('WETH/DAI', True, Wad.from_number(995), Wad.from_number(0.1), expiry=1000)
 # for order in paradex.get_orders('WETH/DAI'):
 #     paradex.cancel_order(order.order_id)
 
-print(paradex.get_orders('WETH/DAI'))
-print(paradex.get_trades('WETH/DAI'))
+# print(paradex.get_orders('WETH/DAI'))
+# print(paradex.get_trades('WETH/DAI'))

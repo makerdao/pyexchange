@@ -17,6 +17,7 @@
 
 import datetime
 import logging
+import threading
 import time
 from pprint import pformat
 from typing import Optional, List
@@ -158,7 +159,8 @@ class ParadexApi:
         self.api_server = api_server
         self.api_key = api_key
         self.timeout = timeout
-        self.nonce = 0
+        self.last_nonce = 0
+        self.last_nonce_lock = threading.Lock()
 
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
@@ -283,7 +285,7 @@ class ParadexApi:
 
         return trades
 
-    def _result(self, result) -> Optional[dict]:
+    def _result(self, result, our_nonce: Optional[int] = None) -> Optional[dict]:
         if not result.ok:
             raise Exception(f"Paradex API invalid HTTP response: {result.status_code} {result.reason}")
 
@@ -294,9 +296,11 @@ class ParadexApi:
 
         if 'error' in data:
             if 'code' in data['error'] and data['error']['code'] == 107:
-                new_nonce = data['error']['currentNonce'] + 1
-                self.logger.info(f"Invalid nonce, tried {self.nonce - 1} but instructed to change to {new_nonce}")
-                self.nonce = new_nonce
+                with self.last_nonce_lock:
+                    self.last_nonce = data['error']['currentNonce']
+
+                    self.logger.warning(f"Our request got rejected because of invalid nonce, we tried '{our_nonce}'")
+                    self.logger.warning(f"But the server instructed us that the last value was '{self.last_nonce}'")
 
                 return None
 
@@ -317,6 +321,20 @@ class ParadexApi:
             expected_buy_amount = amount
 
         return (expected_buy_amount - zrx_order.buy_amount) / expected_buy_amount
+
+    def _choose_nonce(self) -> int:
+        with self.last_nonce_lock:
+            timed_nonce = int(time.time()*1000)
+
+            if self.last_nonce + 1 > timed_nonce:
+                self.logger.warning(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}'")
+                self.logger.warning(f"In this case using '{self.last_nonce + 1}' instead")
+
+                self.last_nonce += 1
+            else:
+                self.last_nonce = timed_nonce
+
+            return self.last_nonce
 
     def _create_signature(self, params: dict) -> str:
         assert(isinstance(params, dict))
@@ -360,9 +378,10 @@ class ParadexApi:
 
         max_attempts = 3
         for attempt in range(0, max_attempts):
+            our_nonce = self._choose_nonce()
+
             params_with_nonce = params.copy()
-            params_with_nonce['nonce'] = self.nonce
-            self.nonce += 1
+            params_with_nonce['nonce'] = our_nonce
 
             result = self._result(requests.post(url=f"{self.api_server}{resource}",
                                                 json=params_with_nonce,
@@ -370,7 +389,7 @@ class ParadexApi:
                                                     "API-KEY": self.api_key,
                                                     "API-SIG": self._create_sig_header(params_with_nonce)
                                                 },
-                                                timeout=self.timeout))
+                                                timeout=self.timeout), our_nonce)
 
             # result will be `None` if we need to readjust nonce
             # in this case we will try again in the next iteration
