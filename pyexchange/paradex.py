@@ -168,17 +168,17 @@ class ParadexApi:
         return self._http_get("/v0/markets", f"")
 
     def get_balances(self):
-        return self._http_post("/v0/balances", {})
+        return self._http_post_signed("/v0/balances", {})
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders_open = self._http_post("/v0/orders", {
+        orders_open = self._http_post_signed("/v0/orders", {
             'market': pair,
             'state': 'open'
         })
 
-        orders_unfunded = self._http_post("/v0/orders", {
+        orders_unfunded = self._http_post_signed("/v0/orders", {
             'market': pair,
             'state': 'unfunded'
         })
@@ -204,7 +204,7 @@ class ParadexApi:
         self.logger.info(f"Placing order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
                          f" price {price})...")
 
-        order_params = self._http_post("/v0/orderParams", {
+        order_params = self._http_post_signed("/v0/orderParams", {
             'market': pair,
             'orderType': 'sell' if is_sell else 'buy',
             'price': str(price),
@@ -216,7 +216,7 @@ class ParadexApi:
         order = self.zrx_exchange.sign_order(order)
         fee = self._calculate_fee(is_sell, price, amount, order)
 
-        result = self._http_post("/v0/order", {
+        result = self._http_post_signed("/v0/order", {
             'exchangeContractAddress': str(order.exchange_contract_address.address),
             'expirationUnixTimestampSec': str(order.expiration),
             'feeRecipient': str(order.fee_recipient.address),
@@ -246,7 +246,7 @@ class ParadexApi:
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        result = self._http_post("/v0/orderCancel", {
+        result = self._http_post_signed("/v0/orderCancel", {
             'id': order_id
         })
         success = result['status']
@@ -261,7 +261,7 @@ class ParadexApi:
     def get_trades(self, pair: str, **kwargs) -> List[Trade]:
         assert(isinstance(pair, str))
 
-        result = self._http_post("/v0/trades", {
+        result = self._http_post_signed("/v0/trades", {
             'market': pair
         })
 
@@ -354,7 +354,7 @@ class ParadexApi:
                                          headers={"API-KEY": self.api_key},
                                          timeout=self.timeout))
 
-    def _http_post(self, resource: str, params: dict):
+    def _http_post_signed(self, resource: str, params: dict):
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
 
