@@ -32,6 +32,9 @@ web3.eth.defaultAccount = sys.argv[2]
 zrx_exchange = ZrxExchange(web3, Address('0x12459C951127e0c374FF9105DdA097662A027093'))
 paradex = ParadexApi(zrx_exchange, 'https://api.paradex.io/consumer', sys.argv[1], 15.5)
 
+print(paradex.get_all_trades('WETH/DAI'))
+exit(-1)
+
 # print(paradex.ticker('WETH/DAI'))
 print(paradex.get_balances())
 print(paradex.get_balances())
