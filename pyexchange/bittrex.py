@@ -31,21 +31,18 @@ class Trade:
                  timestamp: int,
                  is_sell: bool,
                  price: Wad,
-                 amount: Wad,
-                 money: Wad):
+                 amount: Wad):
         assert(isinstance(trade_id, int))
         assert(isinstance(timestamp, int))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        assert(isinstance(money, Wad))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
-        self.money = money
 
     def __eq__(self, other):
         assert(isinstance(other, Trade))
@@ -53,16 +50,14 @@ class Trade:
                self.timestamp == other.timestamp and \
                self.is_sell == other.is_sell and \
                self.price == other.price and \
-               self.amount == other.amount and \
-               self.money == other.money
+               self.amount == other.amount
 
     def __hash__(self):
         return hash((self.trade_id,
                      self.timestamp,
                      self.is_sell,
                      self.price,
-                     self.amount,
-                     self.money))
+                     self.amount))
 
     def __repr__(self):
         return pformat(vars(self))
@@ -92,8 +87,7 @@ class BittrexApi:
                                            timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
                                            is_sell=item['OrderType'] == 'SELL',
                                            price=Wad.from_number(item['Price']),
-                                           amount=Wad.from_number(item['Quantity']),
-                                           money=Wad.from_number(item['Total'])), result))
+                                           amount=Wad.from_number(item['Quantity'])), result))
 
     @staticmethod
     def _result(result) -> dict:
