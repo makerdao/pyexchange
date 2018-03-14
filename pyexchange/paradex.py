@@ -261,10 +261,11 @@ class ParadexApi:
 
         return trades
 
-    def get_all_trades(self, pair: str) -> List[Trade]:
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
 
-        result = self._http_get("/v0/tradeHistory", f"market={pair}")['trades'] #TODO add 'per_page=50'
+        result = self._http_get("/v0/tradeHistory", f"market={pair}&page={page_number}")['trades'] #TODO add 'per_page=50'
 
         result = filter(lambda item: item['state'] == 'confirmed', result)
         result = filter(lambda item: item['completed'] is not None, result)
