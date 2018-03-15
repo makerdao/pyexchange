@@ -15,9 +15,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from pyexchange.gdax import GDAXApi
+from pyexchange.upbit import UpbitApi
 
 
-gdax = GDAXApi('https://api.gdax.com', 15.5)
+upbit = UpbitApi(15.5)
 
-print(gdax.candles('BTC-USD', 60))
+print(upbit.candles('KRW-BTC', 1, 60))
