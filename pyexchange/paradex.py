@@ -265,7 +265,7 @@ class ParadexApi:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
 
-        result = self._http_get("/v0/tradeHistory", f"market={pair}&page={page_number}")['trades'] #TODO add 'per_page=50'
+        result = self._http_get("/v0/tradeHistory", f"market={pair}&page={page_number}&per_page=50")['trades']
 
         result = filter(lambda item: item['state'] == 'confirmed', result)
         result = filter(lambda item: item['completed'] is not None, result)
