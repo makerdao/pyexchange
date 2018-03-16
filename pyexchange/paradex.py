@@ -150,17 +150,17 @@ class ParadexApi:
         return self._http_get("/v0/markets", f"")
 
     def get_balances(self):
-        return self._http_post_signed("/v0/balances", {})
+        return self._http_post("/v0/balances", {})
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders_open = self._http_post_signed("/v0/orders", {
+        orders_open = self._http_post("/v0/orders", {
             'market': pair,
             'state': 'open'
         })
 
-        orders_unfunded = self._http_post_signed("/v0/orders", {
+        orders_unfunded = self._http_post("/v0/orders", {
             'market': pair,
             'state': 'unfunded'
         })
@@ -243,7 +243,7 @@ class ParadexApi:
     def get_trades(self, pair: str, **kwargs) -> List[Trade]:
         assert(isinstance(pair, str))
 
-        result = self._http_post_signed("/v0/trades", {
+        result = self._http_post("/v0/trades", {
             'market': pair
         })
 
@@ -364,6 +364,17 @@ class ParadexApi:
         return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
                                          headers={"API-KEY": self.api_key},
                                          timeout=self.timeout))
+
+    def _http_post(self, resource: str, params: dict):
+        assert(isinstance(resource, str))
+        assert(isinstance(params, dict))
+
+        return self._result(requests.post(url=f"{self.api_server}{resource}",
+                                          json=params,
+                                          headers={
+                                              "API-KEY": self.api_key
+                                          },
+                                          timeout=self.timeout))
 
     def _http_post_signed(self, resource: str, params: dict):
         assert(isinstance(resource, str))
