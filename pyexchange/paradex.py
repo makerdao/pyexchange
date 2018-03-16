@@ -273,7 +273,7 @@ class ParadexApi:
         return list(map(lambda item: Trade(trade_id=int(item['id']),
                                            timestamp=int(dateutil.parser.parse(item['created']).timestamp()),
                                            pair=pair,
-                                           is_sell=item['type'] == 1, #TODO check meaning of 1/2
+                                           is_sell=item['type'] == 'sell',
                                            price=Wad.from_number(item['price']),
                                            amount=Wad.from_number(item['amount']),
                                            money=Wad.from_number(item['total'])), result))
