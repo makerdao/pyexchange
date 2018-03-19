@@ -18,10 +18,104 @@
 import base64
 import hashlib
 import hmac
+import json
 import logging
 import time
+from pprint import pformat
+from typing import List, Optional
 
+import dateutil.parser
 import requests
+
+from pyexchange.util import sort_trades, filter_trades
+from pymaker import Wad
+
+
+class Order:
+    def __init__(self,
+                 order_id: int,
+                 pair: str,
+                 is_sell: bool,
+                 price: Wad,
+                 amount: Wad,
+                 amount_remaining: Optional[Wad]):
+
+        assert(isinstance(order_id, int))
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(amount_remaining, Wad) or (amount_remaining is None))
+
+        self.order_id = order_id
+        self.pair = pair
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+        self.amount_remaining = amount_remaining
+
+    @property
+    def sell_to_buy_price(self) -> Wad:
+        return self.price
+
+    @property
+    def buy_to_sell_price(self) -> Wad:
+        return self.price
+
+    @property
+    def remaining_sell_amount(self) -> Wad:
+        return self.amount_remaining if self.is_sell else self.amount_remaining*self.price
+
+    def __repr__(self):
+        return pformat(vars(self))
+
+
+class Trade:
+    def __init__(self,
+                 trade_id: id,
+                 timestamp: int,
+                 pair: str,
+                 is_sell: bool,
+                 price: Wad,
+                 amount: Wad,
+                 money: Wad):
+        assert(isinstance(trade_id, int))
+        assert(isinstance(timestamp, int))
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(money, Wad))
+
+        self.trade_id = trade_id
+        self.timestamp = timestamp
+        self.pair = pair
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+        self.money = money
+
+    def __eq__(self, other):
+        assert(isinstance(other, Trade))
+        return self.trade_id == other.trade_id and \
+               self.timestamp == other.timestamp and \
+               self.pair == other.pair and \
+               self.is_sell == other.is_sell and \
+               self.price == other.price and \
+               self.amount == other.amount and \
+               self.money == other.money
+
+    def __hash__(self):
+        return hash((self.trade_id,
+                     self.timestamp,
+                     self.pair,
+                     self.is_sell,
+                     self.price,
+                     self.amount,
+                     self.money))
+
+    def __repr__(self):
+        return pformat(vars(self))
 
 
 class GOPAXApi:
@@ -45,7 +139,76 @@ class GOPAXApi:
         self.timeout = timeout
 
     def get_balances(self):
-        return self._http_get("/balances")
+        return self._http_get("/balances", "")
+
+    def get_orders(self) -> List[Order]:
+        result = self._http_get("/orders", "")
+
+        return list(map(lambda item: Order(order_id=int(item['id']),
+                                           pair=str(item['tradingPairName']),
+                                           is_sell=item['side'] == 'sell',
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad.from_number(item['amount']),
+                                           amount_remaining=None), result))
+
+    def get_order(self, order_id: int) -> Order:
+        assert(isinstance(order_id, int))
+
+        item = self._http_get(f"/orders/{order_id}", "")
+
+        order = Order(order_id=int(item['id']),
+                      pair=str(item['tradingPairName']),
+                      is_sell=item['side'] == 'sell',
+                      price=Wad.from_number(item['price']),
+                      amount=Wad.from_number(item['amount']),
+                      amount_remaining=Wad.from_number(item['remaining']))
+
+        return order
+
+    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
+        params = {
+            "type": "limit",
+            "side": "sell" if is_sell else "buy",
+            "price": str(price),
+            "amount": str(amount),
+            "tradingPairName": pair
+        }
+        result = self._http_post("/orders", params)
+
+        return int(result['id'])
+
+    def cancel_order(self, order_id: int) -> bool:
+        assert(isinstance(order_id, int))
+
+        self.logger.info(f"Cancelling order #{order_id}...")
+
+        result = self._http_delete(f"/orders/{order_id}")
+        success = result == {}
+
+        if success:
+            self.logger.info(f"Cancelled order #{order_id}")
+        else:
+            self.logger.info(f"Failed to cancel order #{order_id}")
+
+        return success
+
+    def get_trades(self, pair: str, **kwargs) -> List[Trade]:
+        assert(isinstance(pair, str))
+
+        result = self._http_get("/trades", f"trading-pair-name={pair}")
+
+        trades = list(map(lambda item: Trade(trade_id=int(item['id']),
+                                             timestamp=int(dateutil.parser.parse(item['timestamp']).timestamp()),
+                                             pair=str(item['tradingPairName']),
+                                             is_sell=item['side'] == 'sell',
+                                             price=Wad.from_number(item['price']),
+                                             amount=Wad.from_number(item['baseAmount']),
+                                             money=Wad.from_number(item['quoteAmount'])), result))
+
+        trades = sort_trades(trades)
+        trades = filter_trades(trades, **kwargs)
+
+        return trades
 
     @staticmethod
     def _result(result) -> dict:
@@ -90,10 +253,11 @@ class GOPAXApi:
 
         return base64.b64encode(signature.digest())
 
-    def _http_get(self, resource: str):
+    def _http_get(self, resource: str, params: str):
         assert(isinstance(resource, str))
+        assert(isinstance(params, str))
 
-        return self._result(requests.get(url=f"{self.api_server}{resource}",
+        return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
                                          headers=self._prepare_headers('GET', resource, ''),
                                          timeout=self.timeout))
 
@@ -101,4 +265,19 @@ class GOPAXApi:
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
 
-        #TODO
+        data = json.dumps(params)
+
+        return self._result(requests.post(url=f"{self.api_server}{resource}",
+                                          data=data,
+                                          headers={
+                                              **self._prepare_headers('POST', resource, data),
+                                              **{"Content-Type": "application/json"}
+                                          },
+                                          timeout=self.timeout))
+
+    def _http_delete(self, resource: str):
+        assert(isinstance(resource, str))
+
+        return self._result(requests.delete(url=f"{self.api_server}{resource}",
+                                            headers=self._prepare_headers('DELETE', resource, ''),
+                                            timeout=self.timeout))

@@ -20,11 +20,21 @@ import logging
 import sys
 
 from pyexchange.gopax import GOPAXApi
-
+from pymaker import Wad
 
 logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=logging.INFO)
 
 gopax_api = GOPAXApi('https://api.gopax.co.kr', sys.argv[1], sys.argv[2], 9.5)
 
-print(gopax_api.get_balances())
-
+# print(gopax_api.get_balances())
+# print(gopax_api.get_orders())
+# print(gopax_api.get_trades("ZRX-BTC"))
+# print(gopax_api.get_orders())
+# print(gopax_api.place_order('ZRX-BTC', True, Wad.from_number(0.00006950), Wad.from_number(10)))
+# print(gopax_api.place_order('ZRX-BTC', False, Wad.from_number(0.00006950), Wad.from_number(1)))
+print(gopax_api.get_orders())
+for order in gopax_api.get_orders():
+    print(gopax_api.get_order(order.order_id))
+# for order in gopax_api.get_orders():
+#     gopax_api.cancel_order(order.order_id)
+# print(gopax_api.get_orders())
