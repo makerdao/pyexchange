@@ -172,6 +172,14 @@ class GOPAXApi:
         return order
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+
+        self.logger.info(f"Placing order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
+                         f" price {price})...")
+
         params = {
             "type": "limit",
             "side": "sell" if is_sell else "buy",
@@ -180,8 +188,12 @@ class GOPAXApi:
             "tradingPairName": pair
         }
         result = self._http_post("/orders", params)
+        order_id = int(result['id'])
 
-        return int(result['id'])
+        self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
+                         f" price {price}) as #{order_id}")
+
+        return order_id
 
     def cancel_order(self, order_id: int) -> bool:
         assert(isinstance(order_id, int))
