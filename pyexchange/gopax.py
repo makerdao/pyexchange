@@ -141,15 +141,21 @@ class GOPAXApi:
     def get_balances(self):
         return self._http_get("/balances", "")
 
-    def get_orders(self) -> List[Order]:
+    def get_orders(self, pair: str) -> List[Order]:
+        assert(isinstance(pair, str))
+
         result = self._http_get("/orders", "")
 
-        return list(map(lambda item: Order(order_id=int(item['id']),
-                                           pair=str(item['tradingPairName']),
-                                           is_sell=item['side'] == 'sell',
-                                           price=Wad.from_number(item['price']),
-                                           amount=Wad.from_number(item['amount']),
-                                           amount_remaining=None), result))
+        orders = list(map(lambda item: Order(order_id=int(item['id']),
+                                             pair=str(item['tradingPairName']),
+                                             is_sell=item['side'] == 'sell',
+                                             price=Wad.from_number(item['price']),
+                                             amount=Wad.from_number(item['amount']),
+                                             amount_remaining=None), result))
+
+        orders = list(filter(lambda order: order.pair == pair, orders))
+
+        return orders
 
     def get_order(self, order_id: int) -> Order:
         assert(isinstance(order_id, int))
