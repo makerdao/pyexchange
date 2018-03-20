@@ -248,7 +248,6 @@ class ParadexApi:
         })
 
         result = filter(lambda item: item['state'] == 'confirmed', result)
-        result = filter(lambda item: item['completedAt'] is not None, result)
 
         trades = list(map(lambda item: Trade(trade_id=int(item['id']),
                                              timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
@@ -270,7 +269,6 @@ class ParadexApi:
         result = self._http_get("/v0/tradeHistory", f"market={pair}&page={page_number}&per_page=50")['trades']
 
         result = filter(lambda item: item['state'] == 'confirmed', result)
-        result = filter(lambda item: item['completed'] is not None, result)
 
         return list(map(lambda item: Trade(trade_id=int(item['id']),
                                            timestamp=int(dateutil.parser.parse(item['created']).timestamp()),

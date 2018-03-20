@@ -31,10 +31,10 @@ print(gopax_api.get_balances())
 # print(gopax_api.get_trades("ZRX-BTC"))
 # print(gopax_api.get_orders())
 # print(gopax_api.place_order('ZRX-BTC', True, Wad.from_number(0.00006950), Wad.from_number(10)))
-print(gopax_api.place_order('ZRX-BTC', False, Wad.from_number(0.00006950), Wad.from_number(1)))
+# print(gopax_api.place_order('ZRX-BTC', False, Wad.from_number(0.00006950), Wad.from_number(1)))
 # print(gopax_api.get_orders('ZRX-BTC'))
 # for order in gopax_api.get_orders('ZRX-BTC'):
 #     print(gopax_api.get_order(order.order_id))
-for order in gopax_api.get_orders('ZRX-BTC'):
-    gopax_api.cancel_order(order.order_id)
+# for order in gopax_api.get_orders('ZRX-BTC'):
+#     gopax_api.cancel_order(order.order_id)
 # print(gopax_api.get_orders())
