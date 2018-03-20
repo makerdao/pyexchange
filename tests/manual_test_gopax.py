@@ -26,7 +26,8 @@ logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=l
 
 gopax_api = GOPAXApi('https://api.gopax.co.kr', sys.argv[1], sys.argv[2], 9.5)
 
-print(gopax_api.get_balances())
+# print(gopax_api.get_balances())
+print(gopax_api.get_all_trades("ZRX-BTC"))
 # print(gopax_api.get_orders())
 # print(gopax_api.get_trades("ZRX-BTC"))
 # print(gopax_api.get_orders())

@@ -77,15 +77,13 @@ class Trade:
                  pair: str,
                  is_sell: bool,
                  price: Wad,
-                 amount: Wad,
-                 money: Wad):
+                 amount: Wad):
         assert(isinstance(trade_id, int))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        assert(isinstance(money, Wad))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
@@ -93,7 +91,6 @@ class Trade:
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
-        self.money = money
 
     def __eq__(self, other):
         assert(isinstance(other, Trade))
@@ -220,13 +217,24 @@ class GOPAXApi:
                                              pair=str(item['tradingPairName']),
                                              is_sell=item['side'] == 'sell',
                                              price=Wad.from_number(item['price']),
-                                             amount=Wad.from_number(item['baseAmount']),
-                                             money=Wad.from_number(item['quoteAmount'])), result))
+                                             amount=Wad.from_number(item['baseAmount'])), result))
 
         trades = sort_trades(trades)
         trades = filter_trades(trades, **kwargs)
 
         return trades
+
+    def get_all_trades(self, pair: str) -> List[Trade]:
+        assert(isinstance(pair, str))
+
+        result = self._http_unauthenticated_get(f"/trading-pairs/{pair}/trades", "")
+
+        return list(map(lambda item: Trade(trade_id=int(item['id']),
+                                           timestamp=int(dateutil.parser.parse(item['time']).timestamp()),
+                                           pair=pair,
+                                           is_sell=item['side'] == 'sell',
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad.from_number(item['amount'])), result))
 
     @staticmethod
     def _result(result) -> dict:
@@ -270,6 +278,13 @@ class GOPAXApi:
         signature = hmac.new(key, what, hashlib.sha512)
 
         return base64.b64encode(signature.digest())
+
+    def _http_unauthenticated_get(self, resource: str, params: str):
+        assert(isinstance(resource, str))
+        assert(isinstance(params, str))
+
+        return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
+                                         timeout=self.timeout))
 
     def _http_get(self, resource: str, params: str):
         assert(isinstance(resource, str))
