@@ -27,7 +27,7 @@ import pytz
 import requests
 
 import pymaker.zrx
-from pyexchange.util import sort_trades, filter_trades
+from pyexchange.util import sort_trades
 from pymaker import Wad
 from pymaker.sign import eth_sign
 from pymaker.zrx import ZrxExchange
@@ -240,7 +240,7 @@ class ParadexApi:
 
         return success
 
-    def get_trades(self, pair: str, **kwargs) -> List[Trade]:
+    def get_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
 
         result = self._http_post("/v0/trades", {
@@ -257,10 +257,7 @@ class ParadexApi:
                                              amount=Wad.from_number(item['amount']),
                                              money=Wad.from_number(item['amount'])*Wad.from_number(item['price'])), result))
 
-        trades = sort_trades(trades)
-        trades = filter_trades(trades, **kwargs)
-
-        return trades
+        return sort_trades(trades)
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))

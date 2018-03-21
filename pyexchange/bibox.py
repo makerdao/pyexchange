@@ -26,7 +26,7 @@ from typing import List, Optional
 import requests
 import time
 
-from pyexchange.util import get_db_file, get_lock, get_db, sort_trades, filter_trades
+from pyexchange.util import sort_trades
 from pymaker.numeric import Wad
 
 
@@ -308,74 +308,33 @@ class BiboxApi:
 
         return result == "撤销中"
 
-    def get_trades(self, pair: str, retry: bool = False, retry_count: int = MAX_RETRIES, **kwargs) -> List[Trade]:
+    def get_trades(self, pair: str, retry: bool = False) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(retry, bool))
-        assert(isinstance(retry_count, int))
 
-        trades = self.sync_trades(pair, retry, retry_count)
-        trades = sort_trades(trades)
-        trades = filter_trades(trades, **kwargs)
+        result = self._request('/v1/orderpending', {"cmd": "orderpending/orderHistoryList",
+                                                    "body": {
+                                                        "pair": pair,
+                                                        "account_type": 0,
+                                                        "page": 1,
+                                                        "size": 200
+                                                    }}, retry)['items']
 
-        return trades
+        # We are interested in limit orders only ("order_type":2)
+        trades = list(filter(lambda item: item['order_type'] == 2, result))
 
-    def sync_trades(self, pair: str, retry: bool = False, retry_count: int = MAX_RETRIES) -> List[Trade]:
-        assert(isinstance(pair, str))
-        assert(isinstance(retry, bool))
-        assert(isinstance(retry_count, int))
+        trades = list(map(lambda item: Trade(trade_id=item['id'],
+                                             timestamp=int(item['createdAt']/1000),
+                                             pair=pair,
+                                             is_sell=True if item['order_side'] == 2 else False,
+                                             price=Wad.from_number(item['price']),
+                                             amount=Wad.from_number(item['amount']),
+                                             amount_symbol=item['coin_symbol'],
+                                             money=Wad.from_number(item['money']),
+                                             money_symbol=item['currency_symbol'],
+                                             fee=Wad.from_number(item['fee'])), trades))
 
-        db_file = get_db_file('bibox', self.api_server, self.api_key, 'trades', pair)
-        with get_lock(db_file):
-            with get_db(db_file) as db:
-                table = db.table()
-
-                trades_in_db = list(map(self._trade_from_dict, table.all()))
-                trades_in_db_ids = set(map(lambda trade: trade.trade_id, trades_in_db))
-
-                trades_to_add_to_db = []
-
-                for page in range(1, 1000000):
-                    result = self._request('/v1/orderpending', {"cmd": "orderpending/orderHistoryList",
-                                                                "body": {
-                                                                    "pair": pair,
-                                                                    "account_type": 0,
-                                                                    "page": page,
-                                                                    "size": 200
-                                                                }}, retry, retry_count)['items']
-
-                    # It probably means we reached past the last page
-                    if len(result) == 0:
-                        break
-
-                    # We are interested in limit orders only ("order_type":2)
-                    trades_in_page = list(filter(lambda item: item['order_type'] == 2, result))
-                    trades_in_page = list(map(lambda item: Trade(trade_id=item['id'],
-                                                                 timestamp=int(item['createdAt']/1000),
-                                                                 pair=pair,
-                                                                 is_sell=True if item['order_side'] == 2 else False,
-                                                                 price=Wad.from_number(item['price']),
-                                                                 amount=Wad.from_number(item['amount']),
-                                                                 amount_symbol=item['coin_symbol'],
-                                                                 money=Wad.from_number(item['money']),
-                                                                 money_symbol=item['currency_symbol'],
-                                                                 fee=Wad.from_number(item['fee'])), trades_in_page))
-
-                    old_trades_found = 0
-                    for trade in trades_in_page:
-                        if trade.trade_id not in trades_in_db_ids:
-                            trades_to_add_to_db.append(self._trade_to_dict(trade))
-                            trades_in_db_ids.add(trade.trade_id)
-                        else:
-                            old_trades_found += 1
-
-                    # If we reached a page which has predominantly or only old trades,
-                    # we know we won't find any new trades by fetching subsequent pages
-                    if old_trades_found == len(trades_in_page) or old_trades_found > 190:
-                        break
-
-                table.insert_multiple(trades_to_add_to_db)
-
-                return list(map(self._trade_from_dict, table.all()))
+        return sort_trades(trades)
 
     def get_all_trades(self, pair: str, retry: bool = False) -> List[Trade]:
         assert(isinstance(pair, str))
