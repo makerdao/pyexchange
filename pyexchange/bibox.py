@@ -67,6 +67,10 @@ class Order:
         return self.money / self.amount
 
     @property
+    def remaining_buy_amount(self) -> Wad:
+        return self.money if self.is_sell else self.amount
+
+    @property
     def remaining_sell_amount(self) -> Wad:
         return self.amount if self.is_sell else self.money
 
