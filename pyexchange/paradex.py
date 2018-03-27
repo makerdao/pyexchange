@@ -296,8 +296,8 @@ class ParadexApi:
                 with self.last_nonce_lock:
                     self.last_nonce = data['error']['currentNonce']
 
-                    self.logger.warning(f"Our request got rejected because of invalid nonce, we tried '{our_nonce}'")
-                    self.logger.warning(f"But the server instructed us that the last value was '{self.last_nonce}'")
+                    self.logger.info(f"Our request got rejected because of invalid nonce, we tried '{our_nonce}'")
+                    self.logger.info(f"But the server instructed us that the last value was '{self.last_nonce}'")
 
                 return None
 
