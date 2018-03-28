@@ -22,17 +22,9 @@ import hmac
 from pprint import pformat
 from typing import List, Optional
 
-import os
-
-import errno
-
-import filelock
 import requests
-from appdirs import user_cache_dir
-from tinydb import TinyDB, JSONStorage, Query
-from tinydb.middlewares import CachingMiddleware
 
-from pyexchange.util import get_db_file, get_db, get_lock, filter_trades, sort_trades
+from pyexchange.util import sort_trades
 from pymaker.numeric import Wad
 
 
@@ -256,45 +248,26 @@ class GateIOApi:
 
         return success
 
-    def get_trades(self, pair: str, **kwargs) -> List[Trade]:
-        assert(isinstance(pair, str))
-
-        trades = self.sync_trades(pair)
-        trades = sort_trades(trades)
-        trades = filter_trades(trades, **kwargs)
-
-        return trades
-
-    def sync_trades(self, pair: str) -> List[Trade]:
+    def get_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
 
         result = self._http_post("/api2/1/private/tradeHistory", {'currencyPair': pair})['trades']
-        new_trades = list(map(lambda item: Trade(trade_id=int(item['tradeID']),
-                                                 order_id=int(item['orderNumber']),
-                                                 timestamp=int(item['time_unix']),
-                                                 pair=item['pair'],
-                                                 is_sell=item['type'] == 'sell',
-                                                 price=Wad.from_number(item['rate']),
-                                                 amount=Wad.from_number(item['amount']),
-                                                 amount_symbol=item['pair'].split('_')[0],
-                                                 money=Wad.from_number(item['total']),
-                                                 money_symbol=item['pair'].split('_')[1]), result))
 
-        db_file = get_db_file('gateio', self.api_server, self.api_key, 'trades', pair)
-        with get_lock(db_file):
-            with get_db(db_file) as db:
-                table = db.table()
+        trades = list(map(lambda item: Trade(trade_id=int(item['tradeID']),
+                                             order_id=int(item['orderNumber']),
+                                             timestamp=int(item['time_unix']),
+                                             pair=item['pair'],
+                                             is_sell=item['type'] == 'sell',
+                                             price=Wad.from_number(item['rate']),
+                                             amount=Wad.from_number(item['amount']),
+                                             amount_symbol=item['pair'].split('_')[0],
+                                             money=Wad.from_number(item['total']),
+                                             money_symbol=item['pair'].split('_')[1]), result))
 
-                trades_in_db = map(self._trade_from_dict, table.all())
-                trades = list(set(new_trades).union(set(trades_in_db)))
+        # gate.io API sometimes returns dodgy trades, so we remove them
+        trades = list(filter(lambda trade: trade.money > Wad(0) and trade.amount > Wad(0), trades))
 
-                table.purge()
-                table.insert_multiple(map(self._trade_to_dict, trades))
-
-                # gate.io API sometimes returns dodgy trades, so we remove them
-                trades = list(filter(lambda trade: trade.money > Wad(0) and trade.amount > Wad(0), trades))
-
-                return trades
+        return sort_trades(trades)
 
     # TODO: for some reason a call to http://data.gate.io/api2/1/tradeHistory/aaa_bbb does not return
     # TODO: some trades even if they were very recent. At the same time they can be downloaded using

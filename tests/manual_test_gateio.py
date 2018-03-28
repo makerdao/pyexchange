@@ -41,9 +41,7 @@ gate = GateIOApi('https://data.gate.io', sys.argv[1], sys.argv[2], 9.5)
 # print(gate.cancel_order('267040896','btc_usdt'))
 # print(gate.get_trades('mkr_eth'))
 
-print(len(gate.get_trades('mkr_eth', use_cache=False)))
-print(len(gate.get_trades('mkr_eth', use_cache=True)))
-print(len(gate.get_trades('mkr_usdt', use_cache=False)))
-print(len(gate.get_trades('mkr_usdt', use_cache=True)))
+print(len(gate.get_trades('mkr_eth')))
+print(len(gate.get_trades('mkr_usdt')))
 
 # print(gate.get_all_trades('mkr_eth'))

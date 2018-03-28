@@ -27,7 +27,7 @@ from typing import List, Optional
 import dateutil.parser
 import requests
 
-from pyexchange.util import sort_trades, filter_trades
+from pyexchange.util import sort_trades
 from pymaker import Wad
 
 
@@ -211,7 +211,7 @@ class GOPAXApi:
 
         return success
 
-    def get_trades(self, pair: str, **kwargs) -> List[Trade]:
+    def get_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
 
         result = self._http_get("/trades", f"trading-pair-name={pair}")
@@ -223,10 +223,7 @@ class GOPAXApi:
                                              price=Wad.from_number(item['price']),
                                              amount=Wad.from_number(item['baseAmount'])), result))
 
-        trades = sort_trades(trades)
-        trades = filter_trades(trades, **kwargs)
-
-        return trades
+        return sort_trades(trades)
 
     def get_all_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
