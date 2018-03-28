@@ -321,8 +321,8 @@ class ParadexApi:
             timed_nonce = int(time.time()*1000)
 
             if self.last_nonce + 1 > timed_nonce:
-                self.logger.warning(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}'")
-                self.logger.warning(f"In this case using '{self.last_nonce + 1}' instead")
+                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}'")
+                self.logger.info(f"In this case using '{self.last_nonce + 1}' instead")
 
                 self.last_nonce += 1
             else:
