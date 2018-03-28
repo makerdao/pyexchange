@@ -25,6 +25,7 @@ import requests
 
 from pyexchange.model import Candle
 from pymaker.numeric import Wad
+from pymaker.util import http_response_summary
 
 
 class Order:
@@ -293,19 +294,19 @@ class OKEXApi:
         assert(isinstance(check_result, bool))
 
         if not result.ok:
-            raise Exception(f"OKCoin API invalid HTTP response: {result.status_code} {result.reason}")
+            raise Exception(f"OKCoin API invalid HTTP response: {http_response_summary(result)}")
 
         try:
             data = result.json()
         except Exception:
-            raise Exception(f"OKCoin API invalid JSON response: {result.text}")
+            raise Exception(f"OKCoin API invalid JSON response: {http_response_summary(result)}")
 
         if check_result:
             if 'error_code' in data:
-                raise Exception(f"OKCoin API error: {data['error_code']}")
+                raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
 
             if 'result' not in data or data['result'] is not True:
-                raise Exception(f"Negative OKCoin response: {data}")
+                raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
 
         return data
 

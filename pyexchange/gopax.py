@@ -29,6 +29,7 @@ import requests
 
 from pyexchange.util import sort_trades
 from pymaker import Wad
+from pymaker.util import http_response_summary
 
 
 class Order:
@@ -240,15 +241,15 @@ class GOPAXApi:
     @staticmethod
     def _result(result) -> dict:
         if not result.ok:
-            raise Exception(f"GOPAX API invalid HTTP response: {result.status_code} {result.reason}")
+            raise Exception(f"GOPAX API invalid HTTP response: {http_response_summary(result)}")
 
         try:
             data = result.json()
         except Exception:
-            raise Exception(f"GOPAX API invalid JSON response: {result.text}")
+            raise Exception(f"GOPAX API invalid JSON response: {http_response_summary(result)}")
 
         if 'errormsg' in data:
-            raise Exception(f"Negative GOPAX response: {data}")
+            raise Exception(f"GOPAX API negative response: {http_response_summary(result)}")
 
         return data
 

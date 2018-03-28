@@ -23,6 +23,7 @@ import requests
 
 from pyexchange.model import Candle
 from pymaker.numeric import Wad
+from pymaker.util import http_response_summary
 
 
 class UpbitApi:
@@ -48,7 +49,7 @@ class UpbitApi:
                                 f"code=CRIX.UPBIT.{pair}&count={count}", timeout=self.timeout)
 
         if not response.ok:
-            raise Exception(f"Invalid response from the Upbit API: {response.status_code} {response.reason}")
+            raise Exception(f"Upbit API invalid HTTP response: {http_response_summary(response)}")
 
         return list(map(lambda item: Candle(timestamp=int(dateutil.parser.parse(item['candleDateTime']).timestamp()),
                                             open=Wad.from_number(item['openingPrice']),

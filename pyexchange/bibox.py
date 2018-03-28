@@ -28,6 +28,7 @@ import time
 
 from pyexchange.util import sort_trades
 from pymaker.numeric import Wad
+from pymaker.util import http_response_summary
 
 
 class Order:
@@ -203,32 +204,28 @@ class BiboxApi:
 
             if retry and try_number < retry_count:
                 if not result.ok:
-                    self.logger.info(f"Bibox API invalid HTTP response for '{cmd['cmd']}'"
-                                     f" ({result.status_code} {result.reason}), retrying")
+                    self.logger.info(f"Bibox API invalid HTTP response for '{cmd['cmd']}': {http_response_summary(result)}, retrying")
                     time.sleep(self.MIN_RETRY_DELAY + random()*(self.MAX_RETRY_DELAY-self.MIN_RETRY_DELAY))
                     continue
 
                 try:
                     if str(result.json()['error']['code']) == '4003':
-                        self.logger.info(f"Bibox API busy for '{cmd['cmd']}' ({result.json()['error']['code']}:"
-                                         f" '{result.json()['error']['msg']}'), retrying")
+                        self.logger.info(f"Bibox API busy for '{cmd['cmd']}': {http_response_summary(result)}, retrying")
                         time.sleep(self.MIN_RETRY_DELAY + random()*(self.MAX_RETRY_DELAY-self.MIN_RETRY_DELAY))
                         continue
                 except:
                     pass
 
             if not result.ok:
-                raise Exception(f"Bibox API invalid HTTP response for '{cmd['cmd']}':"
-                                f" {result.status_code} {result.reason}")
+                raise Exception(f"Bibox API invalid HTTP response for '{cmd['cmd']}': {http_response_summary(result)}")
 
             try:
                 result_json = result.json()
             except Exception:
-                raise Exception(f"Bibox API invalid JSON response for '{cmd['cmd']}': {result.text}")
+                raise Exception(f"Bibox API invalid JSON response for '{cmd['cmd']}': {http_response_summary(result)}")
 
             if 'error' in result_json:
-                raise Exception(f"Bibox API error for '{cmd['cmd']}': code {result_json['error']['code']},"
-                                f" msg: '{result_json['error']['msg']}'")
+                raise Exception(f"Bibox API negative response for '{cmd['cmd']}': {http_response_summary(result)}")
 
             return result_json['result'][0]['result']
 

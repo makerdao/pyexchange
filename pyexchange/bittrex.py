@@ -23,6 +23,7 @@ import dateutil.parser
 import requests
 
 from pymaker.numeric import Wad
+from pymaker.util import http_response_summary
 
 
 class Trade:
@@ -92,15 +93,15 @@ class BittrexApi:
     @staticmethod
     def _result(result) -> dict:
         if not result.ok:
-            raise Exception(f"Bittrex API invalid HTTP response: {result.status_code} {result.reason}")
+            raise Exception(f"Bittrex API invalid HTTP response: {http_response_summary(result)}")
 
         try:
             data = result.json()
         except Exception:
-            raise Exception(f"Bittrex API invalid JSON response: {result.text}")
+            raise Exception(f"Bittrex API invalid JSON response: {http_response_summary(result)}")
 
         if 'success' not in data or data['success'] is not True:
-            raise Exception(f"Negative Bittrex response: {data}")
+            raise Exception(f"Bittrex API negative response: {http_response_summary(result)}")
 
         return data
 

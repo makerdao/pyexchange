@@ -30,6 +30,7 @@ import pymaker.zrx
 from pyexchange.util import sort_trades
 from pymaker import Wad
 from pymaker.sign import eth_sign
+from pymaker.util import http_response_summary
 from pymaker.zrx import ZrxExchange
 
 
@@ -281,12 +282,12 @@ class ParadexApi:
 
     def _result(self, result, our_nonce: Optional[int] = None) -> Optional[dict]:
         if not result.ok:
-            raise Exception(f"Paradex API invalid HTTP response: {result.status_code} {result.reason}")
+            raise Exception(f"Paradex API invalid HTTP response: {http_response_summary(result)}")
 
         try:
             data = result.json()
         except Exception:
-            raise Exception(f"Paradex API invalid JSON response: {result.text}")
+            raise Exception(f"Paradex API invalid JSON response: {http_response_summary(result)}")
 
         if 'error' in data:
             if 'code' in data['error'] and data['error']['code'] == 107:
@@ -298,7 +299,7 @@ class ParadexApi:
 
                 return None
 
-            raise Exception(f"Negative Paradex response: {data}")
+            raise Exception(f"Paradex API negative response: {http_response_summary(result)}")
 
         return data
 
@@ -401,4 +402,4 @@ class ParadexApi:
             if result is not None:
                 return result
 
-        raise Exception(f"Couldn't get a response despite {max_attempts} attempts to readjust the nonce")
+        raise Exception(f"Couldn't get a Paradex response despite {max_attempts} attempts to readjust the nonce")

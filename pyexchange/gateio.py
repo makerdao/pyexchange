@@ -26,6 +26,7 @@ import requests
 
 from pyexchange.util import sort_trades
 from pymaker.numeric import Wad
+from pymaker.util import http_response_summary
 
 
 class Order:
@@ -298,15 +299,15 @@ class GateIOApi:
     @staticmethod
     def _result(result) -> dict:
         if not result.ok:
-            raise Exception(f"Gate.io API invalid HTTP response: {result.status_code} {result.reason}")
+            raise Exception(f"Gate.io API invalid HTTP response: {http_response_summary(result)}")
 
         try:
             data = result.json()
         except Exception:
-            raise Exception(f"Gate.io API invalid JSON response: {result.text}")
+            raise Exception(f"Gate.io API invalid JSON response: {http_response_summary(result)}")
 
         if 'result' not in data or data['result'] not in [True, 'true']:
-            raise Exception(f"Negative Gate.io response: {data}")
+            raise Exception(f"Gate.io API negative response: {http_response_summary(result)}")
 
         return data
 

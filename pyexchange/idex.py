@@ -26,7 +26,7 @@ from pymaker import Contract, Address, Transact, Wad
 from pymaker.sign import eth_sign, to_vrs
 from pymaker.tightly_packed import encode_address, encode_uint256, encode_bytes
 from pymaker.token import ERC20Token
-from pymaker.util import bytes_to_hexstring, hexstring_to_bytes
+from pymaker.util import bytes_to_hexstring, hexstring_to_bytes, http_response_summary
 
 try:
     from sha3 import keccak_256
@@ -383,15 +383,15 @@ class IDEXApi:
     @staticmethod
     def _result(result) -> dict:
         if not result.ok:
-            raise Exception(f"IDEX API invalid HTTP response: {result.status_code} {result.reason}")
+            raise Exception(f"IDEX API invalid HTTP response: {http_response_summary(result)}")
 
         try:
             data = result.json()
         except Exception:
-            raise Exception(f"IDEX API invalid JSON response: {result.text}")
+            raise Exception(f"IDEX API invalid JSON response: {http_response_summary(result)}")
 
         if 'error' in data:
-            raise Exception(f"IDEX API error: {data}")
+            raise Exception(f"IDEX API negative response: {http_response_summary(result)}")
 
         return data
 
