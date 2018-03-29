@@ -83,7 +83,7 @@ class BittrexApi:
     def get_all_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
 
-        result = self._http_get("/api/v1.1/public/getmarkethistory", f"market={pair}")["result"]
+        result = self._http_get("/api/v1.1/public/getmarkethistory", f"market={pair}")
         return list(map(lambda item: Trade(trade_id=int(item['Id']),
                                            timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
                                            is_sell=item['OrderType'] == 'SELL',
@@ -103,7 +103,10 @@ class BittrexApi:
         if 'success' not in data or data['success'] is not True:
             raise Exception(f"Bittrex API negative response: {http_response_summary(result)}")
 
-        return data
+        if 'result' not in data or data['result'] is None:
+            raise Exception(f"Bittrex API negative response: {http_response_summary(result)}")
+
+        return data['result']
 
     def _http_get(self, resource: str, params: str):
         assert(isinstance(resource, str))
