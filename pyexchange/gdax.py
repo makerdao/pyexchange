@@ -22,6 +22,7 @@ import requests
 
 from pyexchange.model import Candle
 from pymaker.numeric import Wad
+from pymaker.util import http_response_summary
 
 
 class GDAXApi:
@@ -47,11 +48,22 @@ class GDAXApi:
         assert(granularity in (60, 300, 900, 3600, 21600, 86400))
 
         result = requests.get(f"{self.api_server}/products/{pair}/candles?"
-                              f"granularity={granularity}", timeout=self.timeout).json()
+                              f"granularity={granularity}", timeout=self.timeout)
+
+        if not result.ok:
+            raise Exception(f"GDAX API invalid HTTP response: {http_response_summary(result)}")
+
+        try:
+            data = result.json()
+        except Exception:
+            raise Exception(f"GDAX API invalid JSON response: {http_response_summary(result)}")
+
+        if 'message' in data:
+            raise Exception(f"GDAX API negative response: {http_response_summary(result)}")
 
         return list(map(lambda item: Candle(timestamp=int(item[0]),
                                             open=Wad.from_number(item[3]),
                                             close=Wad.from_number(item[4]),
                                             high=Wad.from_number(item[2]),
                                             low=Wad.from_number(item[1]),
-                                            volume=Wad.from_number(item[5])), result))
+                                            volume=Wad.from_number(item[5])), data))
