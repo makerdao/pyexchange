@@ -89,8 +89,8 @@ class EthfinexApi:
         self.timeout = timeout
 
     def get_balances(self):
-        # return self._http_post("/v1/balances", {}, False)
-        return self._http_post("/v2/auth/r/wallets", {}, True)
+        return self._http_post("/v1/balances", {}, False)
+        # return self._http_post("/v2/auth/r/wallets", {}, True)
 
     def get_orders(self):
         #TODO parsing
@@ -132,38 +132,25 @@ class EthfinexApi:
         if v2:
             msg = bytes("/api" + request_path + nonce + request_body, "utf-8")
 
-            headers = {
+            return {
                 "bfx-apikey": self.api_key,
                 "bfx-signature": self._create_signature(msg),
                 "bfx-nonce": nonce
             }
+
         else:
-            sss = json.dumps({"request": request_path, "nonce": nonce})
-            b = bytes(sss, "utf-8")
-            encode = base64.b64encode(b)
-            msg = encode
+            payload = base64.b64encode(bytes(json.dumps({"request": request_path, "nonce": nonce}), "utf-8"))
 
-            headers = {
+            return {
                 "X-BFX-APIKEY": self.api_key,
-                "X-BFX-SIGNATURE": self._create_signature(msg),
-                "X-BFX-PAYLOAD": base64.b64encode(bytes(json.dumps({"request": request_path, "nonce": nonce}), "utf-8"))
+                "X-BFX-SIGNATURE": self._create_signature(payload),
+                "X-BFX-PAYLOAD": payload
             }
-
-        return headers
 
     def _create_signature(self, msg: bytes):
         assert(isinstance(msg, bytes))
 
-        # if v2:
-            # msg = bytes("/api" + request_path + nonce + request_body, "utf-8")
         key = bytes(self.api_secret, "utf-8")
-        # else:
-        #     sss = json.dumps({"request": request_path, "nonce": nonce})
-        #     b = bytes(sss, "utf-8")
-        #     encode = base64.b64encode(b)
-        #     msg = encode
-        #     key = bytes(self.api_secret, "utf-8")
-
         signature = hmac.new(key, msg, hashlib.sha384)
 
         return signature.digest().hex()
