@@ -15,12 +15,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import hashlib
+import hmac
+import json
 import logging
 from pprint import pformat
 from typing import List
 
-import dateutil.parser
 import requests
+import time
 
 from pymaker.numeric import Wad
 from pymaker.util import http_response_summary
@@ -73,12 +76,19 @@ class EthfinexApi:
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, timeout: float):
+    def __init__(self, api_server: str, api_key: str, api_secret: str, timeout: float):
         assert(isinstance(api_server, str))
+        assert(isinstance(api_key, str))
+        assert(isinstance(api_secret, str))
         assert(isinstance(timeout, float))
 
         self.api_server = api_server
+        self.api_key = api_key
+        self.api_secret = api_secret
         self.timeout = timeout
+
+    def get_balances(self):
+        return self._http_post("/v2/auth/r/wallets", {})
 
     def get_all_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
@@ -102,9 +112,47 @@ class EthfinexApi:
 
         return data
 
+    def _prepare_headers(self, request_path: str, request_body: str):
+        assert(isinstance(request_path, str))
+        assert(isinstance(request_body, str))
+
+        nonce = str(int(time.time()*1000))
+        headers = {
+            "bfx-apikey": self.api_key,
+            "bfx-signature": self._create_signature(nonce, request_path, request_body),
+            "bfx-nonce": nonce
+        }
+
+        return headers
+
+    def _create_signature(self, nonce: str, request_path: str, request_body: str):
+        assert(isinstance(nonce, str))
+        assert(isinstance(request_path, str))
+        assert(isinstance(request_body, str))
+
+        msg = bytes("/api" + request_path + nonce + request_body, "utf-8")
+        key = bytes(self.api_secret, "utf-8")
+        signature = hmac.new(key, msg, hashlib.sha384)
+
+        return signature.digest().hex()
+
     def _http_get(self, resource: str, params: str):
         assert(isinstance(resource, str))
         assert(isinstance(params, str))
 
         return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
                                          timeout=self.timeout))
+
+    def _http_post(self, resource: str, params: dict):
+        assert(isinstance(resource, str))
+        assert(isinstance(params, dict))
+
+        data = json.dumps(params)
+
+        return self._result(requests.post(url=f"{self.api_server}{resource}",
+                                          data=data,
+                                          headers={
+                                              **self._prepare_headers(resource, data),
+                                              **{"Content-Type": "application/json"}
+                                          },
+                                          timeout=self.timeout))

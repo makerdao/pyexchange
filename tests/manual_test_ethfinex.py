@@ -15,9 +15,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import sys
+
 from pyexchange.ethfinex import EthfinexApi
 
 
-ethfinex = EthfinexApi('https://api.ethfinex.com', 15.5)
+ethfinex = EthfinexApi('https://api.ethfinex.com', sys.argv[1], sys.argv[2], 9.5)
 
-print(ethfinex.get_all_trades('BTCUSD'))
+print(ethfinex.get_balances())
+# print(ethfinex.get_all_trades('BTCUSD'))
