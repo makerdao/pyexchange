@@ -23,4 +23,6 @@ from pyexchange.ethfinex import EthfinexApi
 ethfinex = EthfinexApi('https://api.ethfinex.com', sys.argv[1], sys.argv[2], 9.5)
 
 print(ethfinex.get_balances())
+# print(ethfinex.get_orders())
+# print(ethfinex.get_trades("BTCUSD"))
 # print(ethfinex.get_all_trades('BTCUSD'))

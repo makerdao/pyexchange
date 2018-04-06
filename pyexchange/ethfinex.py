@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import base64
 import hashlib
 import hmac
 import json
@@ -88,7 +89,16 @@ class EthfinexApi:
         self.timeout = timeout
 
     def get_balances(self):
-        return self._http_post("/v2/auth/r/wallets", {})
+        # return self._http_post("/v1/balances", {}, False)
+        return self._http_post("/v2/auth/r/wallets", {}, True)
+
+    def get_orders(self):
+        #TODO parsing
+        return self._http_post("/v2/auth/r/orders", {}, True)
+
+    def get_trades(self, pair: str):
+        #TODO parsing
+        return self._http_post(f"/v2/auth/r/trades/t{pair}/hist", {"limit": 250}, True)
 
     def get_all_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
@@ -112,26 +122,48 @@ class EthfinexApi:
 
         return data
 
-    def _prepare_headers(self, request_path: str, request_body: str):
+    def _prepare_headers(self, request_path: str, request_body: str, v2: bool):
         assert(isinstance(request_path, str))
         assert(isinstance(request_body, str))
+        assert(isinstance(v2, bool))
 
         nonce = str(int(time.time()*1000))
-        headers = {
-            "bfx-apikey": self.api_key,
-            "bfx-signature": self._create_signature(nonce, request_path, request_body),
-            "bfx-nonce": nonce
-        }
+
+        if v2:
+            msg = bytes("/api" + request_path + nonce + request_body, "utf-8")
+
+            headers = {
+                "bfx-apikey": self.api_key,
+                "bfx-signature": self._create_signature(msg),
+                "bfx-nonce": nonce
+            }
+        else:
+            sss = json.dumps({"request": request_path, "nonce": nonce})
+            b = bytes(sss, "utf-8")
+            encode = base64.b64encode(b)
+            msg = encode
+
+            headers = {
+                "X-BFX-APIKEY": self.api_key,
+                "X-BFX-SIGNATURE": self._create_signature(msg),
+                "X-BFX-PAYLOAD": base64.b64encode(bytes(json.dumps({"request": request_path, "nonce": nonce}), "utf-8"))
+            }
 
         return headers
 
-    def _create_signature(self, nonce: str, request_path: str, request_body: str):
-        assert(isinstance(nonce, str))
-        assert(isinstance(request_path, str))
-        assert(isinstance(request_body, str))
+    def _create_signature(self, msg: bytes):
+        assert(isinstance(msg, bytes))
 
-        msg = bytes("/api" + request_path + nonce + request_body, "utf-8")
+        # if v2:
+            # msg = bytes("/api" + request_path + nonce + request_body, "utf-8")
         key = bytes(self.api_secret, "utf-8")
+        # else:
+        #     sss = json.dumps({"request": request_path, "nonce": nonce})
+        #     b = bytes(sss, "utf-8")
+        #     encode = base64.b64encode(b)
+        #     msg = encode
+        #     key = bytes(self.api_secret, "utf-8")
+
         signature = hmac.new(key, msg, hashlib.sha384)
 
         return signature.digest().hex()
@@ -143,16 +175,17 @@ class EthfinexApi:
         return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
                                          timeout=self.timeout))
 
-    def _http_post(self, resource: str, params: dict):
+    def _http_post(self, resource: str, params: dict, v2: bool):
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
+        assert(isinstance(v2, bool))
 
         data = json.dumps(params)
 
         return self._result(requests.post(url=f"{self.api_server}{resource}",
                                           data=data,
                                           headers={
-                                              **self._prepare_headers(resource, data),
+                                              **self._prepare_headers(resource, data, v2),
                                               **{"Content-Type": "application/json"}
                                           },
                                           timeout=self.timeout))
