@@ -30,6 +30,46 @@ from pymaker.numeric import Wad
 from pymaker.util import http_response_summary
 
 
+class Order:
+    def __init__(self,
+                 order_id: int,
+                 pair: str,
+                 is_sell: bool,
+                 price: Wad,
+                 amount: Wad):
+
+        assert(isinstance(order_id, int))
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+
+        self.order_id = order_id
+        self.pair = pair
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+
+    @property
+    def sell_to_buy_price(self) -> Wad:
+        return self.price
+
+    @property
+    def buy_to_sell_price(self) -> Wad:
+        return self.price
+
+    @property
+    def remaining_buy_amount(self) -> Wad:
+        return self.amount*self.price if self.is_sell else self.amount
+
+    @property
+    def remaining_sell_amount(self) -> Wad:
+        return self.amount if self.is_sell else self.amount*self.price
+
+    def __repr__(self):
+        return pformat(vars(self))
+
+
 class Trade:
     def __init__(self,
                  trade_id: id,
@@ -89,16 +129,77 @@ class EthfinexApi:
         self.timeout = timeout
 
     def get_balances(self):
-        return self._http_post("/v1/balances", {}, False)
-        # return self._http_post("/v2/auth/r/wallets", {}, True)
+        return self._http_post("/v1/balances", {})
 
-    def get_orders(self):
-        #TODO parsing
-        return self._http_post("/v2/auth/r/orders", {}, True)
+    def get_orders(self, pair: str) -> List[Order]:
+        assert(isinstance(pair, str))
 
-    def get_trades(self, pair: str):
-        #TODO parsing
-        return self._http_post(f"/v2/auth/r/trades/t{pair}/hist", {"limit": 250}, True)
+        result = self._http_post("/v1/orders", {})
+        result = list(filter(lambda item: item['type'] == 'exchange limit', result))
+        result = list(filter(lambda item: item['is_cancelled'] is False, result))
+
+        orders = list(map(lambda item: Order(order_id=int(item['id']),
+                                             pair=str(item['symbol']).upper(),
+                                             is_sell=item['side'] == 'sell',
+                                             price=Wad.from_number(item['price']),
+                                             amount=Wad.from_number(item['remaining_amount'])), result))
+
+        orders = list(filter(lambda order: order.pair == pair, orders))
+
+        return orders
+
+    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+
+        self.logger.info(f"Placing order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
+                         f" price {price})...")
+
+        result = self._http_post("/v1/order/new", {
+            "symbol": pair,
+            "amount": str(amount),
+            "price": str(price),
+            "exchange": "bitfinex",
+            "side": "sell" if is_sell else "buy",
+            "type": "exchange limit"
+        })
+        order_id = int(result['id'])
+
+        self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
+                         f" price {price}) as #{order_id}")
+
+        return order_id
+
+    def cancel_order(self, order_id: int) -> bool:
+        assert(isinstance(order_id, int))
+
+        self.logger.info(f"Cancelling order #{order_id}...")
+
+        result = self._http_post(f"/v1/order/cancel", {"order_id": order_id})
+        success = result['id'] == order_id
+
+        if success:
+            self.logger.info(f"Cancelled order #{order_id}")
+        else:
+            self.logger.info(f"Failed to cancel order #{order_id}")
+
+        return success
+
+    def get_trades(self, pair: str) -> List[Trade]:
+        assert(isinstance(pair, str))
+
+        result = self._http_post(f"/v1/mytrades", {"symbol": pair, "limit_trades": 250})
+        print(result)
+
+        trades = list(map(lambda item: Trade(trade_id=int(item['tid']),
+                                             timestamp=int(float(item['timestamp'])),
+                                             is_sell=item['type'].upper() == 'SELL',
+                                             price=Wad.from_number(item['price']),
+                                             amount=Wad.from_number(item['amount'])), result))
+
+        return trades
 
     def get_all_trades(self, pair: str) -> List[Trade]:
         assert(isinstance(pair, str))
@@ -122,30 +223,36 @@ class EthfinexApi:
 
         return data
 
-    def _prepare_headers(self, request_path: str, request_body: str, v2: bool):
+    def _prepare_headers_v1(self, request_path: str, request_params: dict):
+        assert(isinstance(request_path, str))
+        assert(isinstance(request_params, dict))
+
+        nonce = self.get_nonce()
+        payload = {**{"request": request_path, "nonce": nonce}, **request_params}
+        payload_encoded = base64.b64encode(bytes(json.dumps(payload), "utf-8"))
+
+        return {
+            "X-BFX-APIKEY": self.api_key,
+            "X-BFX-SIGNATURE": self._create_signature(payload_encoded),
+            "X-BFX-PAYLOAD": payload_encoded
+        }
+
+    def _prepare_headers_v2(self, request_path: str, request_body: str):
         assert(isinstance(request_path, str))
         assert(isinstance(request_body, str))
-        assert(isinstance(v2, bool))
 
-        nonce = str(int(time.time()*1000))
+        nonce = self.get_nonce()
+        msg = bytes("/api" + request_path + nonce + request_body, "utf-8")
 
-        if v2:
-            msg = bytes("/api" + request_path + nonce + request_body, "utf-8")
+        return {
+            "bfx-apikey": self.api_key,
+            "bfx-signature": self._create_signature(msg),
+            "bfx-nonce": nonce
+        }
 
-            return {
-                "bfx-apikey": self.api_key,
-                "bfx-signature": self._create_signature(msg),
-                "bfx-nonce": nonce
-            }
-
-        else:
-            payload = base64.b64encode(bytes(json.dumps({"request": request_path, "nonce": nonce}), "utf-8"))
-
-            return {
-                "X-BFX-APIKEY": self.api_key,
-                "X-BFX-SIGNATURE": self._create_signature(payload),
-                "X-BFX-PAYLOAD": payload
-            }
+    @staticmethod
+    def get_nonce():
+        return str(int(time.time() * 1000))
 
     def _create_signature(self, msg: bytes):
         assert(isinstance(msg, bytes))
@@ -162,17 +269,21 @@ class EthfinexApi:
         return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
                                          timeout=self.timeout))
 
-    def _http_post(self, resource: str, params: dict, v2: bool):
+    def _http_post(self, resource: str, params: dict):
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
-        assert(isinstance(v2, bool))
 
-        data = json.dumps(params)
+        if resource.startswith("/v1"):
+            return self._result(requests.post(url=f"{self.api_server}{resource}",
+                                              headers=self._prepare_headers_v1(resource, params),
+                                              timeout=self.timeout))
+        else:
+            data = json.dumps(params)
 
-        return self._result(requests.post(url=f"{self.api_server}{resource}",
-                                          data=data,
-                                          headers={
-                                              **self._prepare_headers(resource, data, v2),
-                                              **{"Content-Type": "application/json"}
-                                          },
-                                          timeout=self.timeout))
+            return self._result(requests.post(url=f"{self.api_server}{resource}",
+                                              data=data,
+                                              headers={
+                                                  **self._prepare_headers_v2(resource, data),
+                                                  **{"Content-Type": "application/json"}
+                                              },
+                                              timeout=self.timeout))
