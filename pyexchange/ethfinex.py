@@ -134,15 +134,15 @@ class EthfinexApi:
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        result = self._http_post("/v1/orders", {})
-        result = list(filter(lambda item: item['type'] == 'exchange limit', result))
-        result = list(filter(lambda item: item['is_cancelled'] is False, result))
+        result = self._http_post(f"/v2/auth/r/orders/t{pair}", {})
+        result = list(filter(lambda item: item[8] == 'EXCHANGE LIMIT', result))
+        result = list(filter(lambda item: item[13] != 'CANCELED', result))
 
-        orders = list(map(lambda item: Order(order_id=int(item['id']),
-                                             pair=str(item['symbol']).upper(),
-                                             is_sell=item['side'] == 'sell',
-                                             price=Wad.from_number(item['price']),
-                                             amount=Wad.from_number(item['remaining_amount'])), result))
+        orders = list(map(lambda item: Order(order_id=int(item[0]),
+                                             pair=str(item[3][1:]).upper(),
+                                             is_sell=Wad.from_number(item[6]) < Wad(0),
+                                             price=Wad.from_number(item[16]),
+                                             amount=abs(Wad.from_number(item[6]))), result))
 
         orders = list(filter(lambda order: order.pair == pair, orders))
 

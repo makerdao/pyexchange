@@ -29,6 +29,10 @@ ethfinex = EthfinexApi('https://api.ethfinex.com', sys.argv[1], sys.argv[2], 9.5
 #     ethfinex.cancel_order(order.order_id)
 # exit(-1)
 
+# print(ethfinex.place_order("ZRXETH", False, Wad.from_number(0.0010), Wad.from_number(25)))
+for _ in range(0, 1000):
+    print(ethfinex.get_orders('ZRXETH'))
+exit(-1)
 print(ethfinex.get_balances())
 print(ethfinex.get_trades('ZRXETH'))
 exit(-1)
