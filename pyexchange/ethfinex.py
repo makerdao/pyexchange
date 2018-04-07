@@ -191,7 +191,6 @@ class EthfinexApi:
         assert(isinstance(pair, str))
 
         result = self._http_post(f"/v1/mytrades", {"symbol": pair, "limit_trades": 250})
-        print(result)
 
         trades = list(map(lambda item: Trade(trade_id=int(item['tid']),
                                              timestamp=int(float(item['timestamp'])),
