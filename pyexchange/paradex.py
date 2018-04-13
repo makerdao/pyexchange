@@ -245,12 +245,13 @@ class ParadexApi:
 
         return success
 
-    def get_trades(self, pair: str) -> List[Trade]:
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
 
         result = self._http_post("/v0/trades", {
             'market': pair,
-            'page': 1,
+            'page': page_number,
             'per_page': 100
         })['trades']
 
