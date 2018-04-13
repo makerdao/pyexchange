@@ -249,8 +249,10 @@ class ParadexApi:
         assert(isinstance(pair, str))
 
         result = self._http_post("/v0/trades", {
-            'market': pair
-        })
+            'market': pair,
+            'page': 1,
+            'per_page': 100
+        })['trades']
 
         result = filter(lambda item: item['state'] == 'confirmed', result)
 
