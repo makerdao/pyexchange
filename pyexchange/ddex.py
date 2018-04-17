@@ -94,8 +94,6 @@ class DdexApi:
         self.web3 = web3
         self.api_server = api_server
         self.timeout = timeout
-        self.last_nonce = 0
-        self.last_nonce_lock = threading.Lock()
 
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
@@ -166,7 +164,7 @@ class DdexApi:
 
         return success
 
-    def _result(self, result, our_nonce: Optional[int] = None) -> Optional[dict]:
+    def _result(self, result) -> Optional[dict]:
         if not result.ok:
             raise Exception(f"Ddex API invalid HTTP response: {http_response_summary(result)}")
 
