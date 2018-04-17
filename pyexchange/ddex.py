@@ -154,7 +154,6 @@ class DdexApi:
         self.logger.info(f"Cancelling order #{order_id}...")
 
         result = self._http_delete_signed(f"/v2/orders/{order_id}", "")
-        print(result)
         success = result['status']
 
         if success == 0:
@@ -214,17 +213,6 @@ class DdexApi:
                                             "Ddex-Authentication": auth_token,
                                          },
                                          timeout=self.timeout))
-
-    def _http_post(self, resource: str, params: dict):
-        assert(isinstance(resource, str))
-        assert(isinstance(params, dict))
-
-        return self._result(requests.post(url=f"{self.api_server}{resource}",
-                                          json=params,
-                                          headers={
-                                              "API-KEY": self.api_key
-                                          },
-                                          timeout=self.timeout))
 
     def _http_post_signed(self, resource: str, params: dict):
         assert(isinstance(resource, str))
