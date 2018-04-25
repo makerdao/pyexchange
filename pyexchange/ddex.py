@@ -118,7 +118,7 @@ class DdexApi:
                                            amount_remaining=Wad.from_number(item['availableAmount'])),
                         list(orders['data']['orders'])))
 
-    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
+    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
