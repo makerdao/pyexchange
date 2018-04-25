@@ -161,7 +161,7 @@ class DdexApi:
         else:
             self.logger.info(f"Failed to cancel order #{order_id}")
 
-        return success
+        return success == 0
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
