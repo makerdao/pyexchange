@@ -188,13 +188,14 @@ class DdexApi:
         message = bytes(msg, 'utf-8')
         return eth_sign(message, self.web3)
 
-    def _create_sig_header(self, staticMessage: str):
-        assert(isinstance(staticMessage, str))
+    def _create_sig_header(self):
 
-        # Ddex-Authentication: tradingAddress#*staticMessage#*signature
+        message = "HYDRO-AUTHENTICATION@" + str(int(time.time() * 1000))
+
+        # https://docs.ddex.io/#authentication
         tradingAddress = self.web3.eth.defaultAccount.lower()
-        signature = self._create_signature(staticMessage)
-        return f"{tradingAddress}#*{staticMessage}#*{signature}"
+        signature = self._create_signature(message)
+        return f"{tradingAddress}#{message}#{signature}"
 
     def _http_get(self, resource: str, params: str):
         assert(isinstance(resource, str))
@@ -207,10 +208,9 @@ class DdexApi:
         assert(isinstance(resource, str))
         assert(isinstance(params, str))
 
-        auth_token = self._create_sig_header('DDEX-SIGN-IN')
         return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
                                          headers={
-                                            "Ddex-Authentication": auth_token,
+                                            "Hydro-Authentication": self._create_sig_header(),
                                          },
                                          timeout=self.timeout))
 
@@ -218,11 +218,10 @@ class DdexApi:
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
 
-        auth_token = self._create_sig_header('DDEX-SIGN-IN')
         return self._result(requests.post(url=f"{self.api_server}{resource}",
                                          json=params,
                                          headers={
-                                            "Ddex-Authentication": auth_token,
+                                            "Hydro-Authentication": self._create_sig_header(),
                                          },
                                          timeout=self.timeout))
 
@@ -230,9 +229,8 @@ class DdexApi:
         assert(isinstance(resource, str))
         assert(isinstance(params, str))
 
-        auth_token = self._create_sig_header('DDEX-SIGN-IN')
         return self._result(requests.delete(url=f"{self.api_server}{resource}?{params}",
                                          headers={
-                                            "Ddex-Authentication": auth_token,
+                                            "Hydro-Authentication": self._create_sig_header(),
                                          },
                                          timeout=self.timeout))
