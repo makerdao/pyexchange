@@ -104,8 +104,7 @@ class Trade:
                self.pair == other.pair and \
                self.is_sell == other.is_sell and \
                self.price == other.price and \
-               self.amount == other.amount and \
-               self.money == other.money
+               self.amount == other.amount
 
     def __hash__(self):
         return hash((self.trade_id,
@@ -113,8 +112,7 @@ class Trade:
                      self.pair,
                      self.is_sell,
                      self.price,
-                     self.amount,
-                     self.money))
+                     self.amount))
 
     def __repr__(self):
         return pformat(vars(self))
