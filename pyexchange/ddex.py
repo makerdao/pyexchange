@@ -108,7 +108,7 @@ class DdexApi:
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders = self._http_get_signed("/v2/orders", f"market_id={pair}")
+        orders = self._http_get_signed("/v2/orders", f"marketId={pair}")
 
         return list(map(lambda item: Order(order_id=item['id'],
                                            pair=pair,
@@ -132,12 +132,13 @@ class DdexApi:
             "amount": str(amount),
             "price": str(price),
             "side": 'sell' if is_sell else 'buy',
-            "market_id": pair,
+            "marketId": pair,
         }
         result = self._http_post_signed("/v2/orders/build", order)
-        order_id = result['data']['orderId']
-        unsignedOrder = result['data']['unsignedOrder']
-        fee = result['data']['feeAmount']
+        print(result)
+        order_id = result['data']['order']['id']
+        unsignedOrder = result['data']['order']['json']
+        fee = result['data']['order']['feeAmount']
 
         # sign order
         signature = eth_sign(hexstring_to_bytes(order_id), self.web3)
