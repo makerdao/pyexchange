@@ -104,8 +104,7 @@ class Trade:
                self.pair == other.pair and \
                self.is_sell == other.is_sell and \
                self.price == other.price and \
-               self.amount == other.amount and \
-               self.money == other.money
+               self.amount == other.amount
 
     def __hash__(self):
         return hash((self.trade_id,
