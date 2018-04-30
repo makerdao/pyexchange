@@ -141,18 +141,18 @@ class DdexApi:
 
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
-        return self._http_get(f"/v2/markets/{pair}/ticker", f"")
+        return self._http_get(f"/v2/markets/{pair}/ticker", {})
 
     def get_markets(self):
-        return self._http_get("/v2/markets", f"")
+        return self._http_get("/v2/markets", {})
 
     def get_balances(self):
-        return self._http_get_signed("/v2/account/lockedBalances", "")
+        return self._http_get_signed("/v2/account/lockedBalances", {})
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders = self._http_get_signed("/v2/orders", f"marketId={pair}")
+        orders = self._http_get_signed(f"/v2/orders?marketId={pair}", {})
 
         return list(map(lambda item: Order(order_id=item['id'],
                                            pair=pair,
@@ -179,7 +179,6 @@ class DdexApi:
             "marketId": pair,
         }
         result = self._http_post_signed("/v2/orders/build", order)
-        print(result)
         order_id = result['data']['order']['id']
         unsignedOrder = result['data']['order']['json']
         fee = result['data']['order']['feeAmount']
@@ -198,7 +197,7 @@ class DdexApi:
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        result = self._http_delete_signed(f"/v2/orders/{order_id}", "")
+        result = self._http_delete_signed(f"/v2/orders/{order_id}", {})
         success = result['status']
 
         if success == 0:
@@ -292,18 +291,20 @@ class DdexApi:
         signature = self._create_signature(message)
         return f"{tradingAddress}#{message}#{signature}"
 
-    def _http_get(self, resource: str, params: str):
+    def _http_get(self, resource: str, params: dict):
         assert(isinstance(resource, str))
-        assert(isinstance(params, str))
+        assert(isinstance(params, dict))
 
-        return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
+        return self._result(requests.get(url=f"{self.api_server}{resource}",
+                                         json=params,
                                          timeout=self.timeout))
 
-    def _http_get_signed(self, resource: str, params: str):
+    def _http_get_signed(self, resource: str, params: dict):
         assert(isinstance(resource, str))
-        assert(isinstance(params, str))
+        assert(isinstance(params, dict))
 
-        return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
+        return self._result(requests.get(url=f"{self.api_server}{resource}",
+                                         json=params,
                                          headers={
                                             "Hydro-Authentication": self._create_sig_header(),
                                          },
@@ -322,9 +323,10 @@ class DdexApi:
 
     def _http_delete_signed(self, resource: str, params: str):
         assert(isinstance(resource, str))
-        assert(isinstance(params, str))
+        assert(isinstance(params, dict))
 
-        return self._result(requests.delete(url=f"{self.api_server}{resource}?{params}",
+        return self._result(requests.delete(url=f"{self.api_server}{resource}",
+                                         json=params,
                                          headers={
                                             "Hydro-Authentication": self._create_sig_header(),
                                          },
