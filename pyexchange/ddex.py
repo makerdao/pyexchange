@@ -15,18 +15,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import datetime
 import logging
-import threading
 import time
 from pprint import pformat
 from typing import Optional, List
 
 import dateutil.parser
-import pytz
 import requests
 
-import pymaker.zrx
 from pyexchange.util import sort_trades
 from pymaker import Wad
 from pymaker.sign import eth_sign
@@ -72,6 +68,54 @@ class Order:
     @property
     def remaining_sell_amount(self) -> Wad:
         return self.amount_remaining if self.is_sell else self.amount_remaining*self.price
+
+    def __repr__(self):
+        return pformat(vars(self))
+
+
+class Trade:
+    def __init__(self,
+                 trade_id: Optional[str],
+                 timestamp: int,
+                 pair: str,
+                 is_sell: Optional[bool],
+                 price: Wad,
+                 amount: Wad,
+                 createdAt: int):
+        assert(isinstance(trade_id, str) or (trade_id is None))
+        assert(isinstance(timestamp, int))
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool) or (is_sell is None))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(createdAt, int))
+
+        self.trade_id = trade_id
+        self.timestamp = timestamp
+        self.pair = pair
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+        self.createdAt = createdAt
+
+    def __eq__(self, other):
+        assert(isinstance(other, Trade))
+        return self.trade_id == other.trade_id and \
+               self.timestamp == other.timestamp and \
+               self.pair == other.pair and \
+               self.is_sell == other.is_sell and \
+               self.price == other.price and \
+               self.amount == other.amount and \
+               self.createdAt == other.createdAt
+
+    def __hash__(self):
+        return hash((self.trade_id,
+                     self.timestamp,
+                     self.pair,
+                     self.is_sell,
+                     self.price,
+                     self.amount,
+                     self.createdAt))
 
     def __repr__(self):
         return pformat(vars(self))
@@ -163,6 +207,56 @@ class DdexApi:
             self.logger.info(f"Failed to cancel order #{order_id}")
 
         return success == 0
+
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+        assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+
+        per_page = 100
+        page_filter = f"page={page_number}&per_page={per_page}"
+        result = self._http_get_signed(f"/v2/markets/{pair}/trades/mine?{page_filter}", {})['data']
+        totalPages = result['totalPages']
+        currentPage = result['currentPage']
+        self.logger.debug(f'totalPages={totalPages};currentPage={currentPage}')
+
+        # Oldest trades are on first page
+
+        trades  = result['trades']
+        trades = list(filter(lambda item: item['status'] == 'successful', trades))
+
+        trades = list(map(lambda item: Trade(trade_id=item['transactionId'],
+                                             timestamp=int(item['executedAt']/1000),
+                                             pair=pair,
+                                             is_sell=False if item['taker'] == item['buyer'] else True,
+                                             price=Wad.from_number(item['price']),
+                                             amount=Wad.from_number(item['amount']),
+                                             createdAt=int(item['createdAt']/1000)), trades))
+
+        return sort_trades(trades)
+
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+        assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+
+        per_page = 100
+        page_filter = f"page={page_number}&per_page={per_page}"
+        result = self._http_get(f"/v2/markets/{pair}/trades?{page_filter}", {})['data']
+        totalPages = result['totalPages']
+        currentPage = result['currentPage']
+        self.logger.debug(f'totalPages={totalPages};currentPage={currentPage}')
+
+        # Oldest trades are on first page
+
+        trades  = result['trades']
+        trades = list(filter(lambda item: item['status'] == 'successful', trades))
+
+        return list(map(lambda item: Trade(trade_id=None,
+                                           timestamp=int(item['executedAt']/1000),
+                                           pair=pair,
+                                           is_sell=None,
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad.from_number(item['amount']),
+                                           createdAt=int(item['createdAt']/1000)), trades))
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
