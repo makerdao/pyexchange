@@ -112,8 +112,7 @@ class Trade:
                      self.pair,
                      self.is_sell,
                      self.price,
-                     self.amount,
-                     self.money))
+                     self.amount))
 
     def __repr__(self):
         return pformat(vars(self))
