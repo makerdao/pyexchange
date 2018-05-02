@@ -309,15 +309,16 @@ class BiboxApi:
 
         return result == "撤销中"
 
-    def get_trades(self, pair: str, retry: bool = False) -> List[Trade]:
+    def get_trades(self, pair: str, page_number: int = 1, retry: bool = False) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
         assert(isinstance(retry, bool))
 
         result = self._request('/v1/orderpending', {"cmd": "orderpending/orderHistoryList",
                                                     "body": {
                                                         "pair": pair,
                                                         "account_type": 0,
-                                                        "page": 1,
+                                                        "page": page_number,
                                                         "size": 200
                                                     }}, retry)['items']
 
