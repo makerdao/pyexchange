@@ -76,7 +76,6 @@ class Order:
 class Trade:
     def __init__(self,
                  trade_id: Optional[str],
-                 trade_data: dict,
                  timestamp: int,
                  pair: str,
                  is_sell: Optional[bool],
@@ -84,7 +83,6 @@ class Trade:
                  amount: Wad,
                  createdAt: int):
         assert(isinstance(trade_id, str) or (trade_id is None))
-        assert(isinstance(trade_data, dict))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool) or (is_sell is None))
@@ -93,7 +91,6 @@ class Trade:
         assert(isinstance(createdAt, int))
 
         self.trade_id = trade_id
-        self.trade_data = trade_data
         self.timestamp = timestamp
         self.pair = pair
         self.is_sell = is_sell
@@ -226,8 +223,7 @@ class DdexApi:
         trades  = result['trades']
         trades = list(filter(lambda item: item['status'] == 'successful', trades))
 
-        trades = list(map(lambda item: Trade(trade_id=None,
-                                             trade_data=item,
+        trades = list(map(lambda item: Trade(trade_id=item['transactionId'],
                                              timestamp=int(item['executedAt']/1000),
                                              pair=pair,
                                              is_sell=False if item['taker'] == item['buyer'] else True,
@@ -254,7 +250,6 @@ class DdexApi:
         trades = list(filter(lambda item: item['status'] == 'successful', trades))
 
         return list(map(lambda item: Trade(trade_id=None,
-                                           trade_data=item,
                                            timestamp=int(item['executedAt']/1000),
                                            pair=pair,
                                            is_sell=None,
