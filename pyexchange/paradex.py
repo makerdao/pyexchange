@@ -170,13 +170,18 @@ class ParadexApi:
             'state': 'unfunded'
         })
 
+        orders_unknown = self._http_post("/v0/orders", {
+            'market': pair,
+            'state': 'unknown'
+        })
+
         return list(map(lambda item: Order(order_id=int(item['id']),
                                            pair=pair,
                                            is_sell=item['type'] == 'sell',
                                            price=Wad.from_number(item['price']),
                                            amount=Wad.from_number(item['amount']),
                                            amount_remaining=Wad.from_number(item['amountRemaining'])),
-                        list(orders_open) + list(orders_unfunded)))
+                        list(orders_open) + list(orders_unfunded) + list(orders_unknown)))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad, expiry: int) -> int:
         assert(isinstance(pair, str))
