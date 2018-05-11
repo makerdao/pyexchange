@@ -26,6 +26,7 @@ from typing import List
 import requests
 import time
 
+from pyexchange.model import Candle
 from pymaker.numeric import Wad
 from pymaker.util import http_response_summary
 
@@ -127,6 +128,23 @@ class EthfinexApi:
         self.api_key = api_key
         self.api_secret = api_secret
         self.timeout = timeout
+
+    def candles(self, pair: str, timeframe: str, limit: int) -> List[Candle]:
+        assert(isinstance(pair, str))
+        assert(isinstance(timeframe, str))
+        assert(isinstance(limit, int))
+
+        assert(timeframe in ('1m', '5m', '15m', '30m', '1h', '3h', '6h', '12h',
+                             '1D', '7D', '14D', '1M'))
+
+        result = self._http_get(f"/v2/candles/trade:{timeframe}:t{pair}/hist", f"limit={limit}")
+
+        return list(map(lambda item: Candle(timestamp=int(item[0]/1000),
+                                            open=Wad.from_number(item[1]),
+                                            close=Wad.from_number(item[2]),
+                                            high=Wad.from_number(item[3]),
+                                            low=Wad.from_number(item[4]),
+                                            volume=Wad.from_number(item[5])), result))
 
     def get_balances(self):
         return self._http_post("/v1/balances", {})
