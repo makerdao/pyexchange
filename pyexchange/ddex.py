@@ -24,7 +24,7 @@ import dateutil.parser
 import requests
 
 from pyexchange.util import sort_trades
-from pymaker import Wad
+from pymaker import Wad, Address
 from pymaker.sign import eth_sign
 from pymaker.util import hexstring_to_bytes, http_response_summary
 from web3 import Web3
@@ -226,7 +226,7 @@ class DdexApi:
         trades = list(map(lambda item: Trade(trade_id=item['transactionId'],
                                              timestamp=int(item['executedAt']/1000),
                                              pair=pair,
-                                             is_sell=False if item['taker'] == item['buyer'] else True,
+                                             is_sell= Address(item['buyer']) != Address(self.web3.eth.defaultAccount),
                                              price=Wad.from_number(item['price']),
                                              amount=Wad.from_number(item['amount']),
                                              createdAt=int(item['createdAt']/1000)), trades))
