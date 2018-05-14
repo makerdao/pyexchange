@@ -160,20 +160,31 @@ class ParadexApi:
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders_open = self._http_post("/v0/orders", {
+        per_page = 100
+
+        orders_open = self._http_post(f"/v0/orders?per_page={per_page}", {
             'market': pair,
             'state': 'open'
         })
 
-        orders_unfunded = self._http_post("/v0/orders", {
+        orders_unfunded = self._http_post(f"/v0/orders?per_page={per_page}", {
             'market': pair,
             'state': 'unfunded'
         })
 
-        orders_unknown = self._http_post("/v0/orders", {
+        orders_unknown = self._http_post(f"/v0/orders?per_page={per_page}", {
             'market': pair,
             'state': 'unknown'
         })
+
+        if len(orders_open) >= per_page:
+            raise Exception(f"Unable to get all 'open' orders as we are hitting the per_page={per_page} limit")
+
+        if len(orders_unfunded) >= per_page:
+            raise Exception(f"Unable to get all 'unfunded' orders as we are hitting the per_page={per_page} limit")
+
+        if len(orders_unknown) >= per_page:
+            raise Exception(f"Unable to get all 'unknown' orders as we are hitting the per_page={per_page} limit")
 
         return list(map(lambda item: Order(order_id=int(item['id']),
                                            pair=pair,
