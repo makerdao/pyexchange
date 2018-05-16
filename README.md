@@ -12,7 +12,7 @@ Python API wrappers for some cryptocurrency exchanges.
 
 * These API wrappers expose only those endpoints which were necessary to implement
   `market-maker-keeper` (<https://github.com/makerdao/market-maker-keeper>), `market-maker-stats`
-  (<https://github.com/makerdao/market-maker-stats>) and `sync-trades` (<https://github.com/makerdao/sync-trades>).
+  (<https://github.com/makerdao/market-maker-stats>) and `sync-trades`.
   Due to it they cover most only order placement, order cancellation, reading balances and open orders,
   and retrieving past trade history.
 
