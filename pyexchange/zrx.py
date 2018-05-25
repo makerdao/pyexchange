@@ -154,12 +154,12 @@ class ZrxApi:
 
         return result
 
-    def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad, expiry: int) -> pymaker.zrx.Order:
+    def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad, expiration: int) -> pymaker.zrx.Order:
         assert(isinstance(pair, Pair))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        assert(isinstance(expiry, int))
+        assert(isinstance(expiration, int))
 
         pay_token = pair.sell_token_address if is_sell else pair.buy_token_address
         pay_amount = amount if is_sell else amount * price
@@ -169,4 +169,4 @@ class ZrxApi:
 
         return self.zrx_exchange.create_order(pay_token=pay_token, pay_amount=self._wad_to_blockchain(pair, pay_amount, pay_token),
                                               buy_token=buy_token, buy_amount=self._wad_to_blockchain(pair, buy_amount, buy_token),
-                                              expiration=expiry)
+                                              expiration=expiration)
