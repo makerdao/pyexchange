@@ -22,7 +22,7 @@ import pytest
 from web3 import EthereumTesterProvider, Web3
 
 from pyexchange.idex import IDEX
-from pyexchange.zrx import Pair, ZRXApi
+from pyexchange.zrx import Pair, ZrxApi
 from pymaker import Address
 from pymaker.approval import directly
 from pymaker.deployment import deploy_contract
@@ -31,7 +31,7 @@ from pymaker.token import DSToken, ERC20Token
 from pymaker.zrx import ZrxExchange
 
 
-class TestZRXApi:
+class TestZrxApi:
     def setup_method(self):
         self.web3 = Web3(EthereumTesterProvider())
         self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
@@ -42,7 +42,7 @@ class TestZRXApi:
         self.exchange = ZrxExchange.deploy(self.web3, self.zrx_token.address, self.token_transfer_proxy_address)
         self.web3.eth.contract(abi=json.loads(pkg_resources.resource_string('pymaker.deployment', f'abi/TokenTransferProxy.abi')))(address=self.token_transfer_proxy_address.address).transact().addAuthorizedAddress(self.exchange.address.address)
 
-        self.zrx_api = ZRXApi(self.exchange)
+        self.zrx_api = ZrxApi(self.exchange)
 
         self.dgx = DSToken.deploy(self.web3, 'DGX')
         self.dai = DSToken.deploy(self.web3, 'DAI')
