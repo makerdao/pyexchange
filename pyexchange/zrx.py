@@ -21,6 +21,7 @@ from typing import List
 
 import pymaker
 from pymaker import Wad, Address
+from pymaker.token import ERC20Token
 from pymaker.zrx import ZrxExchange
 
 
@@ -120,6 +121,16 @@ class ZrxApi:
 
         elif token_address == pair.sell_token_address:
             return amount * Wad.from_number(10 ** (18 - pair.sell_token_decimals))
+
+    def get_balances(self, pair: Pair):
+        assert(isinstance(pair, Pair))
+
+        token_buy = ERC20Token(web3=self.zrx_exchange.web3, address=Address(pair.buy_token_address))
+        token_sell = ERC20Token(web3=self.zrx_exchange.web3, address=Address(pair.sell_token_address))
+        our_address = Address(self.zrx_exchange.web3.eth.defaultAccount)
+
+        return token_sell.balance_of(our_address) * Wad.from_number(10 ** (18 - pair.sell_token_decimals)), \
+               token_buy.balance_of(our_address) * Wad.from_number(10 ** (18 - pair.buy_token_decimals))
 
     def get_orders(self, pair: Pair, zrx_orders: list) -> List[Order]:
         assert(isinstance(pair, Pair))

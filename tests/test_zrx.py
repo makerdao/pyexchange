@@ -45,6 +45,17 @@ class TestZrxApi:
         self.dai = DSToken.deploy(self.web3, 'DAI')
         self.pair = Pair(self.dgx.address, 9, self.dai.address, 18)
 
+    def test_getting_balances(self):
+        # given
+        self.dgx.mint(Wad(17 * 10**9)).transact()
+        self.dai.mint(Wad.from_number(17)).transact()
+
+        # when
+        balances = self.zrx_api.get_balances(self.pair)
+        # then
+        assert balances[0] == Wad.from_number(17)
+        assert balances[1] == Wad.from_number(17)
+
     def test_sell_order(self):
         # when
         zrx_order = self.zrx_api.place_order(self.pair, True, Wad.from_number(45.0), Wad.from_number(5.0), 999)
