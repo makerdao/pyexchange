@@ -77,7 +77,7 @@ class Pair:
         self.buy_token_decimals = buy_token_decimals
 
 
-class ZRXApi:
+class ZrxApi:
     """0x API interface.
 
     The purpose is to be able to use `Order` class similar to the `Order` classes for traditional
