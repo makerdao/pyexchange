@@ -29,17 +29,20 @@ class Order:
                  order_id: int,
                  is_sell: bool,
                  price: Wad,
-                 amount: Wad):
+                 amount: Wad,
+                 zrx_order: pymaker.zrx.Order):
 
         assert(isinstance(order_id, int))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
+        assert(isinstance(zrx_order, pymaker.zrx.Order))
 
         self.order_id = order_id
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
+        self.zrx_order = zrx_order
 
     @property
     def sell_to_buy_price(self) -> Wad:
@@ -135,7 +138,8 @@ class ZRXApi:
                 result.append(Order(order_id=zrx_order.order_id,
                                     is_sell=is_sell,
                                     price=price / Wad.from_number(10 ** (pair.buy_token_decimals - pair.sell_token_decimals)),
-                                    amount=self._blockchain_to_wad(pair, amount, pair.sell_token_address)))
+                                    amount=self._blockchain_to_wad(pair, amount, pair.sell_token_address),
+                                    zrx_order=zrx_order))
 
         return result
 

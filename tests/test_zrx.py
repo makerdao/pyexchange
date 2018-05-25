@@ -65,6 +65,7 @@ class TestZRXApi:
         assert orders[0].is_sell is True
         assert orders[0].price == Wad.from_number(45.0)
         assert orders[0].amount == Wad.from_number(5.0)
+        assert orders[0].zrx_order == zrx_order
 
     def test_buy_order(self):
         # when
@@ -83,3 +84,4 @@ class TestZRXApi:
         assert orders[0].is_sell is False
         assert orders[0].price == Wad.from_number(45.0)
         assert orders[0].amount == Wad.from_number(5.0)
+        assert orders[0].zrx_order == zrx_order
