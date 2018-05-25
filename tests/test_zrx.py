@@ -18,13 +18,10 @@
 import json
 
 import pkg_resources
-import pytest
 from web3 import EthereumTesterProvider, Web3
 
-from pyexchange.idex import IDEX
 from pyexchange.zrx import Pair, ZrxApi
 from pymaker import Address
-from pymaker.approval import directly
 from pymaker.deployment import deploy_contract
 from pymaker.numeric import Wad
 from pymaker.token import DSToken, ERC20Token
