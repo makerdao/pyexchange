@@ -174,7 +174,7 @@ class HitBTCApi:
                                            amount=Wad.from_number(item['quantity']),
                                            filled_amount=Wad.from_number(item['cumQuantity'])), result))
 
-    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
+    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
