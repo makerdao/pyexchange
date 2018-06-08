@@ -154,6 +154,13 @@ class HitBTCApi:
         assert(isinstance(pair, str))
         return self._http_get(f"/api/2/public/ticker/{pair}")
 
+    def get_markets(self):
+        return self._http_get(f"/api/2/public/symbol")
+
+    def get_pair(self, pair: str):
+        assert(isinstance(pair, str))
+        return self._http_get(f"/api/2/public/symbol/{pair}")
+
     def get_balances(self):
         return list(filter(lambda balance: balance['available'] != '0'
                                         or balance['reserved']  != '0',
