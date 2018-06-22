@@ -338,8 +338,10 @@ class BiboxApi:
 
         return sort_trades(trades)
 
-    def get_all_trades(self, pair: str, retry: bool = False) -> List[Trade]:
+    def get_all_trades(self, pair: str, page_number: int = 1, retry: bool = False) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
         assert(isinstance(retry, bool))
 
         result = self._request('/v1/mdata', {"cmd": "api/deals",

@@ -210,8 +210,10 @@ class GOPAXApi:
 
         return success
 
-    def get_trades(self, pair: str) -> List[Trade]:
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
 
         result = self._http_get("/trades", f"trading-pair-name={pair}")
 
@@ -224,8 +226,10 @@ class GOPAXApi:
 
         return sort_trades(trades)
 
-    def get_all_trades(self, pair: str) -> List[Trade]:
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
 
         result = self._http_unauthenticated_get(f"/trading-pairs/{pair}/trades", "")
 
