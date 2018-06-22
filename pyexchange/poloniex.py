@@ -80,8 +80,10 @@ class PoloniexApi:
         self.api_server = api_server
         self.timeout = timeout
 
-    def get_all_trades(self, pair: str) -> List[Trade]:
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
 
         result = self._http_get("/public", f"command=returnTradeHistory&currencyPair={pair}")
         return list(map(lambda item: Trade(trade_id=int(item['globalTradeID']),
