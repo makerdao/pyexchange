@@ -15,16 +15,25 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import json
 import logging
+import time
 from pprint import pformat
 from typing import List, Optional
 from datetime import datetime, timezone
 
 import requests
 
+from pyexchange.api import PyexAPI, StreamAPI
 from pyexchange.util import sort_trades
 from pymaker.numeric import Wad
 from pymaker.util import http_response_summary
+
+
+def hitbtc_date_to_timestamp(date: str) -> float:
+    # '2018-06-01T14:20:50.497Z'
+    dt = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%fZ')
+    return dt.replace(tzinfo=timezone.utc).timestamp()
 
 
 class Order:
@@ -126,8 +135,18 @@ class Trade:
     def __repr__(self):
         return pformat(vars(self))
 
+    @staticmethod
+    def from_dict(pair, trade):
+        #{'id': 304542084, 'price': '0.077357', 'quantity': '0.013', 'side': 'sell', 'timestamp': '2018-06-01T15:30:04.132Z'}
+        return Trade(trade_id=trade['id'],
+                     order_id=trade.get('clientOrderId'),
+                     timestamp=hitbtc_date_to_timestamp(trade['timestamp']),
+                     pair=trade['symbol'] if 'symbol' in trade else pair,
+                     is_sell=trade['side'] == 'sell',
+                     price=Wad.from_number(trade['price']),
+                     amount=Wad.from_number(trade['quantity']))
 
-class HitBTCApi:
+class HitBTCApi(PyexAPI):
     """HitBTC API interface.
 
     Developed according to the following manual:
@@ -174,7 +193,7 @@ class HitBTCApi:
 
         return list(map(lambda item: Order(order_id=item['clientOrderId'],
                                            status=item['status'],
-                                           timestamp=self._date_to_timestamp(item['createdAt']),
+                                           timestamp=hitbtc_date_to_timestamp(item['createdAt']),
                                            pair=item['symbol'],
                                            is_sell=item['side'] == 'sell',
                                            price=Wad.from_number(item['price']),
@@ -230,13 +249,7 @@ class HitBTCApi:
         page_filter = f"symbol={pair}&limit={per_page}&offset={page_number}"
         result = self._auth_get(f"/api/2/history/trades?{page_filter}")
 
-        trades = list(map(lambda item: Trade(trade_id=item['id'],
-                                             order_id=item['clientOrderId'],
-                                             timestamp=self._date_to_timestamp(item['timestamp']),
-                                             pair=item['symbol'],
-                                             is_sell=item['side'] == 'sell',
-                                             price=Wad.from_number(item['price']),
-                                             amount=Wad.from_number(item['quantity'])), result))
+        trades = list(map(lambda item: Trade.from_dict(pair, item), result))
 
         return sort_trades(trades)
 
@@ -249,14 +262,7 @@ class HitBTCApi:
         page_filter = f"limit={per_page}&offset={page_number}"
         result = self._http_get(f"/api/2/public/trades/{pair}?{page_filter}")
 
-        #{'id': 304542084, 'price': '0.077357', 'quantity': '0.013', 'side': 'sell', 'timestamp': '2018-06-01T15:30:04.132Z'}
-        return list(map(lambda item: Trade(trade_id=item['id'],
-                                           order_id=None,
-                                           timestamp=self._date_to_timestamp(item['timestamp']),
-                                           pair=pair,
-                                           is_sell=item['side'] == 'sell',
-                                           price=Wad.from_number(item['price']),
-                                           amount=Wad.from_number(item['quantity'])), result))
+        return list(map(lambda item: Trade.from_dict(pair, item), result))
 
     @staticmethod
     def _result(result) -> dict:
@@ -302,7 +308,39 @@ class HitBTCApi:
     def _auth_delete(self, resource: str):
         return self._http(requests.delete, resource, auth=True)
 
-    def _date_to_timestamp(self, date: str) -> float:
-        # '2018-06-01T14:20:50.497Z'
-        dt = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%fZ')
-        return dt.replace(tzinfo=timezone.utc).timestamp()
+
+class HitBTCStreamApi(StreamAPI):
+    """HitBTC Stream API interface.
+
+    Developed according to the following manual:
+    <https://github.com/hitbtc-com/hitbtc-api#socket-api-reference>
+    """
+
+    def __init__(self, loop, ws_url, pairs):
+        self.pairs = pairs
+        super().__init__(loop, ws_url)
+
+    async def subscribe(self, websocket):
+        subscribe_req = {
+            'method': 'subscribeTrades',
+            'params': { 'symbol': None },
+            'id': time.time()
+        }
+        for pair in self.pairs:
+            subscribe_req['params']['symbol'] = pair
+            await websocket.send(json.dumps(subscribe_req))
+
+    async def get(self):
+        msg = await super().get()
+
+        if 'params' not in msg:
+            return []
+
+        params = msg['params']
+        if msg.get('method') == 'updateTrades' or msg.get('method') == 'snapshotTrades':
+            if 'symbol' in params and 'data' in params:
+                pair = params['symbol']
+                trades = [Trade.from_dict(pair, trade) for trade in params['data']]
+                return trades
+        else:
+            return []
