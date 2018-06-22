@@ -249,12 +249,15 @@ class OKEXApi:
 
         return success
 
-    def get_trades(self, pair: str):
+    def get_trades(self, pair: str, page_number: int = 1):
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
         raise Exception("get_trades() not available for OKEX")
 
-    def get_all_trades(self, pair: str) -> List[Trade]:
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
 
         result = self._http_get("/api/v1/trades.do", f"symbol={pair}", False)
         return list(map(lambda item: Trade(trade_id=item['tid'],

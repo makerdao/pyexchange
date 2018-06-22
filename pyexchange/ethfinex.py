@@ -205,8 +205,10 @@ class EthfinexApi:
 
         return success
 
-    def get_trades(self, pair: str) -> List[Trade]:
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
 
         result = self._http_post(f"/v1/mytrades", {"symbol": pair, "limit_trades": 250})
 
@@ -218,8 +220,10 @@ class EthfinexApi:
 
         return trades
 
-    def get_all_trades(self, pair: str) -> List[Trade]:
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
 
         result = self._http_get(f"/v2/trades/t{pair}/hist", f"limit=500")
         return list(map(lambda item: Trade(trade_id=int(item[0]),
