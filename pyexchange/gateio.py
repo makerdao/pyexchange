@@ -249,8 +249,10 @@ class GateIOApi:
 
         return success
 
-    def get_trades(self, pair: str) -> List[Trade]:
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
 
         result = self._http_post("/api2/1/private/tradeHistory", {'currencyPair': pair})['trades']
 
@@ -273,8 +275,10 @@ class GateIOApi:
     # TODO: for some reason a call to http://data.gate.io/api2/1/tradeHistory/aaa_bbb does not return
     # TODO: some trades even if they were very recent. At the same time they can be downloaded using
     # TODO: the http://data.gate.io/api2/1/tradeHistory/aaa_bbb/<TID> endpoint
-    def get_all_trades(self, pair: str) -> List[Trade]:
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
 
         result = self._http_get(f"/api2/1/tradeHistory", pair)['data']
         result = list(filter(lambda item: item['timestamp'] is not None, result))
