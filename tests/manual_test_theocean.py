@@ -40,9 +40,13 @@ pair = Pair(Address('0x6ff6c0ff1d68b964901f986d4c9fa3ac68346570'), Address('0xd0
 
 # print(theocean.ticker(pair))
 
+print(theocean.get_balance(pair.buy_token))
 print(theocean.place_order(pair, False, Wad.from_number(0.0015), Wad.from_number(1000)))
+print(theocean.get_balance(pair.buy_token))
 
 print(theocean.get_orders(pair))
 
 for order in theocean.get_orders(pair):
     print(theocean.cancel_order(order.order_id))
+
+print(theocean.get_balance(pair.buy_token))
