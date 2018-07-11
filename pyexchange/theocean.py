@@ -87,52 +87,47 @@ class Order:
         return pformat(vars(self))
 
 
-# class Trade:
-#     def __init__(self,
-#                  trade_id: id,
-#                  timestamp: int,
-#                  pair: str,
-#                  is_sell: bool,
-#                  price: Wad,
-#                  amount: Wad,
-#                  money: Wad):
-#         assert(isinstance(trade_id, int))
-#         assert(isinstance(timestamp, int))
-#         assert(isinstance(pair, str))
-#         assert(isinstance(is_sell, bool))
-#         assert(isinstance(price, Wad))
-#         assert(isinstance(amount, Wad))
-#         assert(isinstance(money, Wad))
-#
-#         self.trade_id = trade_id
-#         self.timestamp = timestamp
-#         self.pair = pair
-#         self.is_sell = is_sell
-#         self.price = price
-#         self.amount = amount
-#         self.money = money
-#
-#     def __eq__(self, other):
-#         assert(isinstance(other, Trade))
-#         return self.trade_id == other.trade_id and \
-#                self.timestamp == other.timestamp and \
-#                self.pair == other.pair and \
-#                self.is_sell == other.is_sell and \
-#                self.price == other.price and \
-#                self.amount == other.amount and \
-#                self.money == other.money
-#
-#     def __hash__(self):
-#         return hash((self.trade_id,
-#                      self.timestamp,
-#                      self.pair,
-#                      self.is_sell,
-#                      self.price,
-#                      self.amount,
-#                      self.money))
-#
-#     def __repr__(self):
-#         return pformat(vars(self))
+class Trade:
+    def __init__(self,
+                 trade_id: str,
+                 timestamp: int,
+                 pair: Pair,
+                 is_sell: Optional[bool],
+                 price: Wad,
+                 amount: Wad):
+        assert(isinstance(trade_id, str))
+        assert(isinstance(timestamp, int))
+        assert(isinstance(pair, Pair))
+        assert(isinstance(is_sell, bool) or (is_sell is None))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+
+        self.trade_id = trade_id
+        self.timestamp = timestamp
+        self.pair = pair
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+
+    def __eq__(self, other):
+        assert(isinstance(other, Trade))
+        return self.trade_id == other.trade_id and \
+               self.timestamp == other.timestamp and \
+               self.pair == other.pair and \
+               self.is_sell == other.is_sell and \
+               self.price == other.price and \
+               self.amount == other.amount
+
+    def __hash__(self):
+        return hash((self.trade_id,
+                     self.timestamp,
+                     self.pair,
+                     self.is_sell,
+                     self.price,
+                     self.amount))
+
+    def __repr__(self):
+        return pformat(vars(self))
 
 
 class TheOceanApi:
@@ -280,22 +275,23 @@ class TheOceanApi:
     #                                          money=Wad.from_number(item['amount'])*Wad.from_number(item['price'])), result))
     #
     #     return sort_trades(trades)
-    #
-    # def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-    #     assert(isinstance(pair, str))
-    #     assert(isinstance(page_number, int))
-    #
-    #     result = self._http_get("/v0/tradeHistory", f"market={pair}&page={page_number}&per_page=50")['trades']
-    #
-    #     result = filter(lambda item: item['state'] == 'confirmed', result)
-    #
-    #     return list(map(lambda item: Trade(trade_id=int(item['id']),
-    #                                        timestamp=int(dateutil.parser.parse(item['created']).timestamp()),
-    #                                        pair=pair,
-    #                                        is_sell=item['type'] == 'sell',
-    #                                        price=Wad.from_number(item['price']),
-    #                                        amount=Wad.from_number(item['amount']),
-    #                                        money=Wad.from_number(item['total'])), result))
+
+    def get_all_trades(self, pair: Pair, page_number: int = 1) -> List[Trade]:
+        assert(isinstance(pair, Pair))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
+
+        result = self._http_get_unauthenticated("/v0/trade_history", f"baseTokenAddress={pair.sell_token}&"
+                                                                     f"quoteTokenAddress={pair.buy_token}")
+
+        result = filter(lambda item: item['status'] == 'settled', result)
+
+        return list(map(lambda item: Trade(trade_id=item['id'],
+                                           timestamp=int(item['lastUpdated']),
+                                           pair=pair,
+                                           is_sell=None,
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad(int(item['amount']))), result))
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
