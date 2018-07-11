@@ -201,61 +201,40 @@ class TheOceanApi:
                            'orderAmount': str(amount.value),
                            'price': str(price),
                            'feeOption': 'feeInZRX' if fee_in_zrx else 'feeInNative'}
-
-        self.logger.debug(f"Limit order reserve request: {json.dumps(reserve_request, indent=False)}")
+        self.logger.debug(f"Limit order reserve request: {json.dumps(reserve_request, indent=None)}")
 
         reserve_response = self._http_authenticated("POST", "/v0/limit_order/reserve", reserve_request)
+        self.logger.debug(f"Limit order reserve response: {json.dumps(reserve_response, indent=None)}")
 
-        print()
-        print(reserve_response)
+        place_request = {}
 
-        # return -1
+        if 'unsignedTargetOrder' in reserve_response:
+            place_request['signedTargetOrder'] = self._sign_order(reserve_response['unsignedTargetOrder'], our_address)
 
-        target_order = reserve_response['unsignedTargetOrder']
-        target_order['maker'] = our_address.address
+        if 'unsignedMarketOrder' in reserve_response and 'marketOrderID' in reserve_response:
+            place_request['signedMarketOrder'] = self._sign_order(reserve_response['unsignedMarketOrder'], our_address)
+            place_request['marketOrderID'] = reserve_response['marketOrderID']
 
-        order = pymaker.zrx.Order.from_json(self.zrx_exchange, target_order)
-        print(order.to_json())
-        order = self.zrx_exchange.sign_order(order)
-        xxx = order.to_json()
-        xxx['orderHash'] = self.zrx_exchange.get_order_hash(order)
-        print(xxx)
+        self.logger.debug(f"Limit order place request: {json.dumps(place_request, indent=None)}")
 
-        place_request = {'signedTargetOrder': xxx}
         place_response = self._http_authenticated("POST", "/v0/limit_order/place", place_request)
+        self.logger.debug(f"Limit order place response: {json.dumps(place_response, indent=None)}")
 
-        print(place_response)
+        order_id = place_response.get('targetOrder', {}).get('orderHash')
 
+        self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
+                         f" price {price}) as #{order_id}")
 
-        # signedTargetOrder
+        return order_id
 
-        # fee = self._calculate_fee(is_sell, price, amount, order)
+    def _sign_order(self, order: dict, our_address) -> dict:
+        assert(isinstance(order, dict))
+        assert(isinstance(our_address, Address))
 
-        #
-        # result = self._http_post_signed("/v0/order", {
-        #     'exchangeContractAddress': str(order.exchange_contract_address.address),
-        #     'expirationUnixTimestampSec': str(order.expiration),
-        #     'feeRecipient': str(order.fee_recipient.address),
-        #     'maker': str(order.maker.address),
-        #     'makerFee': str(order.maker_fee.value),
-        #     'makerTokenAddress': str(order.pay_token.address),
-        #     'makerTokenAmount': str(order.pay_amount.value),
-        #     'salt': str(order.salt),
-        #     'taker': str(order.taker.address),
-        #     'takerFee': str(order.taker_fee.value),
-        #     'takerTokenAddress': str(order.buy_token.address),
-        #     'takerTokenAmount': str(order.buy_amount.value),
-        #     'v': str(order.ec_signature_v),
-        #     'r': str(order.ec_signature_r),
-        #     's': str(order.ec_signature_s),
-        #     'feeId': reserve_response['fee']['id']
-        # })
-        # order_id = result['id']
-        #
-        # self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
-        #                  f" price {price}, fee {float(fee)*100:.4f}%) as #{order_id}")
+        order = pymaker.zrx.Order.from_json(self.zrx_exchange, {**order, 'maker': our_address.address})
+        order = self.zrx_exchange.sign_order(order)
 
-        # return order_id
+        return {**order.to_json(), 'orderHash': self.zrx_exchange.get_order_hash(order)}
 
     def cancel_order(self, order_id: str) -> bool:
         assert(isinstance(order_id, str))

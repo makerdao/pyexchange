@@ -25,7 +25,9 @@ from pymaker import Address, Wad
 from pymaker.zrx import ZrxExchange
 
 
-logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=logging.DEBUG)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.INFO)
+logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(logging.INFO)
 
 web3 = Web3(HTTPProvider("http://localhost:8545", request_kwargs={"timeout": 600}))
 web3.eth.defaultAccount = '0x00531a10c4fBD906313768d277585292AA7C923A'
