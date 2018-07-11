@@ -21,7 +21,8 @@ import hmac
 import json
 import logging
 import time
-from typing import Optional
+from pprint import pformat
+from typing import Optional, List
 
 import requests
 
@@ -31,49 +32,61 @@ from pymaker.util import http_response_summary
 from pymaker.zrx import ZrxExchange
 
 
-# class Order:
-#     def __init__(self,
-#                  order_id: int,
-#                  pair: str,
-#                  is_sell: bool,
-#                  price: Wad,
-#                  amount: Wad,
-#                  amount_remaining: Wad):
-#
-#         assert(isinstance(order_id, int))
-#         assert(isinstance(pair, str))
-#         assert(isinstance(is_sell, bool))
-#         assert(isinstance(price, Wad))
-#         assert(isinstance(amount, Wad))
-#         assert(isinstance(amount_remaining, Wad))
-#
-#         self.order_id = order_id
-#         self.pair = pair
-#         self.is_sell = is_sell
-#         self.price = price
-#         self.amount = amount
-#         self.amount_remaining = amount_remaining
-#
-#     @property
-#     def sell_to_buy_price(self) -> Wad:
-#         return self.price
-#
-#     @property
-#     def buy_to_sell_price(self) -> Wad:
-#         return self.price
-#
-#     @property
-#     def remaining_buy_amount(self) -> Wad:
-#         return self.amount_remaining*self.price if self.is_sell else self.amount_remaining
-#
-#     @property
-#     def remaining_sell_amount(self) -> Wad:
-#         return self.amount_remaining if self.is_sell else self.amount_remaining*self.price
-#
-#     def __repr__(self):
-#         return pformat(vars(self))
-#
-#
+class Pair:
+    def __init__(self, sell_token: Address, buy_token: Address):
+        assert(isinstance(sell_token, Address))
+        assert(isinstance(buy_token, Address))
+
+        self.sell_token = sell_token
+        self.buy_token = buy_token
+
+    def __str__(self):
+        return f"<{self.sell_token},{self.buy_token}>"
+
+    def __repr__(self):
+        return pformat(vars(self))
+
+
+class Order:
+    def __init__(self,
+                 order_id: str,
+                 pair: Pair,
+                 is_sell: bool,
+                 price: Wad,
+                 amount: Wad):
+
+        assert(isinstance(order_id, str))
+        assert(isinstance(pair, Pair))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+
+        self.order_id = order_id
+        self.pair = pair
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+
+    @property
+    def sell_to_buy_price(self) -> Wad:
+        return self.price
+
+    @property
+    def buy_to_sell_price(self) -> Wad:
+        return self.price
+
+    @property
+    def remaining_buy_amount(self) -> Wad:
+        return self.amount*self.price if self.is_sell else self.amount
+
+    @property
+    def remaining_sell_amount(self) -> Wad:
+        return self.amount if self.is_sell else self.amount*self.price
+
+    def __repr__(self):
+        return pformat(vars(self))
+
+
 # class Trade:
 #     def __init__(self,
 #                  trade_id: id,
@@ -122,18 +135,6 @@ from pymaker.zrx import ZrxExchange
 #         return pformat(vars(self))
 
 
-class Pair:
-    def __init__(self, sell_token: Address, buy_token: Address):
-        assert(isinstance(sell_token, Address))
-        assert(isinstance(buy_token, Address))
-
-        self.sell_token = sell_token
-        self.buy_token = buy_token
-
-    def __str__(self):
-        return f"<{self.sell_token},{self.buy_token}>"
-
-
 class TheOceanApi:
     """The Ocean API interface.
 
@@ -161,44 +162,24 @@ class TheOceanApi:
         return self._http_get_unauthenticated("/v0/ticker", f"baseTokenAddress={pair.sell_token}&"
                                                             f"quoteTokenAddress={pair.buy_token}")
 
-    # def get_orders(self, pair: str) -> List[Order]:
-    #     assert(isinstance(pair, str))
-    #
-    #     per_page = 100
-    #
-    #     orders_open = self._http_post(f"/v0/orders?per_page={per_page}", {
-    #         'market': pair,
-    #         'state': 'open'
-    #     })
-    #
-    #     orders_unfunded = self._http_post(f"/v0/orders?per_page={per_page}", {
-    #         'market': pair,
-    #         'state': 'unfunded'
-    #     })
-    #
-    #     orders_unknown = self._http_post(f"/v0/orders?per_page={per_page}", {
-    #         'market': pair,
-    #         'state': 'unknown'
-    #     })
-    #
-    #     if len(orders_open) >= per_page:
-    #         raise Exception(f"Unable to get all 'open' orders as we are hitting the per_page={per_page} limit")
-    #
-    #     if len(orders_unfunded) >= per_page:
-    #         raise Exception(f"Unable to get all 'unfunded' orders as we are hitting the per_page={per_page} limit")
-    #
-    #     if len(orders_unknown) >= per_page:
-    #         raise Exception(f"Unable to get all 'unknown' orders as we are hitting the per_page={per_page} limit")
-    #
-    #     return list(map(lambda item: Order(order_id=int(item['id']),
-    #                                        pair=pair,
-    #                                        is_sell=item['type'] == 'sell',
-    #                                        price=Wad.from_number(item['price']),
-    #                                        amount=Wad.from_number(item['amount']),
-    #                                        amount_remaining=Wad.from_number(item['amountRemaining'])),
-    #                     list(orders_open) + list(orders_unfunded) + list(orders_unknown)))
+    def get_orders(self, pair: Pair) -> List[Order]:
+        assert(isinstance(pair, Pair))
 
-    def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad, fee_in_zrx: bool = False) -> int:
+        orders = self._http_authenticated("GET", "/v0/user_history?openAmount=1", {})
+
+        print(orders)
+
+        # filter orders by our pair
+        orders = list(filter(lambda item: Address(item['baseTokenAddress']) == pair.sell_token and
+                                          Address(item['quoteTokenAddress']) == pair.buy_token, orders))
+
+        return list(map(lambda item: Order(order_id=item['orderHash'],
+                                           pair=pair,
+                                           is_sell=item['side'] == 'sell',
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad(int(item['openAmount'])) + Wad(int(item['reservedAmount']))), orders))
+
+    def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad, fee_in_zrx: bool = False) -> Optional[str]:
         assert(isinstance(pair, Pair))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -211,7 +192,9 @@ class TheOceanApi:
         self.logger.info(f"Placing order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
                          f" price {price})...")
 
-        reserve_request = {'walletAddress': Address(self.zrx_exchange.web3.eth.defaultAccount).address,
+        our_address = Address(self.zrx_exchange.web3.eth.defaultAccount)
+
+        reserve_request = {'walletAddress': our_address.address,
                            'baseTokenAddress': pair.sell_token.address,
                            'quoteTokenAddress': pair.buy_token.address,
                            'side': 'sell' if is_sell else 'buy',
@@ -219,15 +202,17 @@ class TheOceanApi:
                            'price': str(price),
                            'feeOption': 'feeInZRX' if fee_in_zrx else 'feeInNative'}
 
+        self.logger.debug(f"Limit order reserve request: {json.dumps(reserve_request, indent=False)}")
+
         reserve_response = self._http_authenticated("POST", "/v0/limit_order/reserve", reserve_request)
 
-        print(json.dumps(reserve_request))
+        print()
         print(reserve_response)
 
         # return -1
 
         target_order = reserve_response['unsignedTargetOrder']
-        target_order['maker'] = Address(self.zrx_exchange.web3.eth.defaultAccount).address
+        target_order['maker'] = our_address.address
 
         order = pymaker.zrx.Order.from_json(self.zrx_exchange, target_order)
         print(order.to_json())
