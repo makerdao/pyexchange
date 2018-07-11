@@ -162,6 +162,16 @@ class TheOceanApi:
         return self._http_get_unauthenticated("/v0/ticker", f"baseTokenAddress={pair.sell_token}&"
                                                             f"quoteTokenAddress={pair.buy_token}")
 
+    def get_balance(self, token: Address) -> Wad:
+        assert(isinstance(token, Address))
+
+        our_address = Address(self.zrx_exchange.web3.eth.defaultAccount)
+
+        response = self._http_authenticated("GET", "/v0/available_balance?" + f"walletAddress={our_address.address}&"
+                                                                              f"tokenAddress={token.address}", {})
+
+        return Wad(int(response['availableBalance']))
+
     def get_orders(self, pair: Pair) -> List[Order]:
         assert(isinstance(pair, Pair))
 
