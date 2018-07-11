@@ -310,7 +310,7 @@ class TheOceanApi:
         assert(isinstance(data, str))
 
         key = bytes(self.api_secret, "utf-8")
-        msg = bytes(self.api_key + str(timestamp) + method + data, "utf-8")
+        msg = bytes(self.api_key + str(timestamp) + method.upper() + data, "utf-8")
         signature = hmac.new(key, msg, hashlib.sha256).digest()
 
         return base64.b64encode(signature)
@@ -328,7 +328,7 @@ class TheOceanApi:
         assert(isinstance(params, dict) or (params is None))
 
         data = json.dumps(params, separators=(',', ':'))
-        timestamp = int(round(time.time()*1000))
+        timestamp = int(time.time()*1000)
 
         return self._result(requests.request(method=method,
                                              url=f"{self.api_server}{resource}",
@@ -336,7 +336,7 @@ class TheOceanApi:
                                              headers={
                                                  "Content-Type": "application/json",
                                                  "TOX-ACCESS-KEY": self.api_key,
-                                                 "TOX-ACCESS-SIGN": self._create_signature(timestamp, method.upper(), data),
+                                                 "TOX-ACCESS-SIGN": self._create_signature(timestamp, method, data),
                                                  "TOX-ACCESS-TIMESTAMP": str(timestamp)
                                              },
                                              timeout=self.timeout))
