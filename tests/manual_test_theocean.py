@@ -35,7 +35,12 @@ theocean = TheOceanApi(zrx_exchange, 'https://api.staging.theocean.trade/api', s
 
 pair = Pair(Address('0x6ff6c0ff1d68b964901f986d4c9fa3ac68346570'), Address('0xd0a1e359811322d97991e03f863a0c30c2cf029c'))
 
+
 # print(theocean.ticker(pair))
 
-# print(theocean.place_order(pair, False, Wad.from_number(0.0015), Wad.from_number(1000)))
-print(theocean.cancel_order(''))
+print(theocean.place_order(pair, False, Wad.from_number(0.0015), Wad.from_number(1000)))
+
+print(theocean.get_orders(pair))
+
+for order in theocean.get_orders(pair):
+    print(theocean.cancel_order(order.order_id))
