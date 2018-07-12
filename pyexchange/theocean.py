@@ -157,6 +157,16 @@ class TheOceanApi:
         return self._http_get_unauthenticated("/v0/ticker", f"baseTokenAddress={pair.sell_token}&"
                                                             f"quoteTokenAddress={pair.buy_token}")
 
+    def get_markets(self):
+        return self._http_get_unauthenticated("/v0/token_pairs", f"")
+
+    def get_market(self, pair: Pair) -> dict:
+        assert(isinstance(pair, Pair))
+
+        return next(filter(lambda market: Address(market['baseToken']['address']) == pair.sell_token and
+                                          Address(market['quoteToken']['address']) == pair.buy_token,
+                           self.get_markets()))
+
     def get_balance(self, token: Address) -> Wad:
         assert(isinstance(token, Address))
 
