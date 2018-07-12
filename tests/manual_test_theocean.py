@@ -42,6 +42,7 @@ print(theocean.get_market(pair))
 
 # print(theocean.ticker(pair))
 
+print(theocean.get_trades(pair, 1))
 print(theocean.get_all_trades(pair, 1))
 
 

@@ -27,6 +27,7 @@ from typing import Optional, List
 import requests
 
 import pymaker.zrx
+from pyexchange.util import sort_trades
 from pymaker import Wad, Address
 from pymaker.util import http_response_summary
 from pymaker.zrx import ZrxExchange
@@ -264,27 +265,35 @@ class TheOceanApi:
 
         return success
 
-    # def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-    #     assert(isinstance(pair, str))
-    #     assert(isinstance(page_number, int))
-    #
-    #     result = self._http_post("/v0/trades", {
-    #         'market': pair,
-    #         'page': page_number,
-    #         'per_page': 100
-    #     })['trades']
-    #
-    #     result = filter(lambda item: item['state'] == 'confirmed', result)
-    #
-    #     trades = list(map(lambda item: Trade(trade_id=int(item['id']),
-    #                                          timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
-    #                                          pair=pair,
-    #                                          is_sell=item['type'] == 'sell',
-    #                                          price=Wad.from_number(item['price']),
-    #                                          amount=Wad.from_number(item['amount']),
-    #                                          money=Wad.from_number(item['amount'])*Wad.from_number(item['price'])), result))
-    #
-    #     return sort_trades(trades)
+    def get_trades(self, pair: Pair, page_number: int = 1) -> List[Trade]:
+        assert(isinstance(pair, Pair))
+        assert(isinstance(page_number, int))
+        assert(page_number == 1)
+
+        orders = self._http_authenticated("GET", "/v0/user_history", {})
+        trades = []
+
+        for order in orders:
+            is_sell = order['side'] == 'sell'
+            price = Wad.from_number(order['price'])
+            events = order['timeline']
+
+            for fill in filter(lambda event: event['action'] == 'filled', events):
+                amount = Wad(int(fill['amount']))
+                timestamp = int(fill['timestamp'])
+                intent_id = fill['intentID']
+
+                is_settled = any(event['action'] == 'settled' and event['intentID'] == intent_id for event in events)
+
+                if is_settled:
+                    trades.append(Trade(trade_id=order['orderHash'] + "_" + intent_id,
+                                        timestamp=timestamp,
+                                        pair=pair,
+                                        is_sell=is_sell,
+                                        price=price,
+                                        amount=amount))
+
+        return sort_trades(trades)
 
     def get_all_trades(self, pair: Pair, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, Pair))
