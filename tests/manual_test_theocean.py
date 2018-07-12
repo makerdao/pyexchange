@@ -38,6 +38,8 @@ theocean = TheOceanApi(zrx_exchange, 'https://api.staging.theocean.trade/api', s
 pair = Pair(Address('0x6ff6c0ff1d68b964901f986d4c9fa3ac68346570'), Address('0xd0a1e359811322d97991e03f863a0c30c2cf029c'))
 
 
+print(theocean.get_market(pair))
+
 # print(theocean.ticker(pair))
 
 print(theocean.get_all_trades(pair, 1))
