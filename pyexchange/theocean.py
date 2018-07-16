@@ -225,9 +225,9 @@ class TheOceanApi:
         if 'unsignedTargetOrder' in reserve_response:
             place_request['signedTargetOrder'] = self._sign_order(reserve_response['unsignedTargetOrder'], our_address)
 
-        if 'unsignedMarketOrder' in reserve_response and 'marketOrderID' in reserve_response:
-            place_request['signedMarketOrder'] = self._sign_order(reserve_response['unsignedMarketOrder'], our_address)
-            place_request['marketOrderID'] = reserve_response['marketOrderID']
+        if 'unsignedMatchingOrder' in reserve_response and 'matchingOrderID' in reserve_response:
+            place_request['signedMatchingOrder'] = self._sign_order(reserve_response['unsignedMatchingOrder'], our_address)
+            place_request['matchingOrderID'] = reserve_response['matchingOrderID']
 
         self.logger.debug(f"Limit order place request: {json.dumps(place_request, indent=None)}")
 
