@@ -255,7 +255,7 @@ class TheOceanApi:
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        result = self._http_authenticated("DELETE", f"/v0/order/#{order_id}", {})
+        result = self._http_authenticated("DELETE", f"/v0/order/{order_id}", {})
         success = len(result) > 0
 
         if success:
