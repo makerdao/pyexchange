@@ -271,6 +271,11 @@ class TheOceanApi:
         assert(page_number == 1)
 
         orders = self._http_authenticated("GET", "/v0/user_history", {})
+
+        # filter orders by our pair
+        orders = list(filter(lambda item: Address(item['baseTokenAddress']) == pair.sell_token and
+                                          Address(item['quoteTokenAddress']) == pair.buy_token, orders))
+
         trades = []
 
         for order in orders:
