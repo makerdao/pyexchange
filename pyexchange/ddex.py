@@ -274,13 +274,7 @@ class DdexApi:
     def _create_signature(self, msg: str) -> str:
         assert(isinstance(msg, str))
 
-        try:
-            from sha3 import keccak_256
-        except ImportError:
-            from sha3 import sha3_256 as keccak_256
-
-        message = bytes(msg, 'utf-8')
-        return eth_sign(message, self.web3)
+        return eth_sign(bytes(msg, 'utf-8'), self.web3)
 
     def _create_sig_header(self):
 
