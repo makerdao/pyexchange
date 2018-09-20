@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017-2018 bargst
+# Copyright (C) 2018 bargst
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -49,6 +49,7 @@ order = ercdex.place_order(pair,
                            amount=Wad.from_number(0.1),
                            expiration=int(time.time())+60*35)
 
-my_orders = ercdex.get_orders(pair)
+time.sleep(10)
+my_orders = ercdex.get_orders(pair, api.get_orders_by_maker(Address(web3.eth.defaultAccount)))
 for order in my_orders:
     ercdex.cancel_order(order)
