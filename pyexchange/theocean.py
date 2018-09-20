@@ -155,8 +155,8 @@ class TheOceanApi:
 
     def ticker(self, pair: Pair):
         assert(isinstance(pair, Pair))
-        return self._http_get_unauthenticated("/v0/ticker", f"baseTokenAddress={pair.sell_token}&"
-                                                            f"quoteTokenAddress={pair.buy_token}")
+        return self._http_get_unauthenticated("/v0/ticker", f"baseTokenAddress={pair.sell_token.address.lower()}&"
+                                                            f"quoteTokenAddress={pair.buy_token.address.lower()}")
 
     def get_markets(self):
         return self._http_get_unauthenticated("/v0/token_pairs", f"")
@@ -173,8 +173,8 @@ class TheOceanApi:
 
         our_address = Address(self.zrx_exchange.web3.eth.defaultAccount)
 
-        response = self._http_authenticated("GET", "/v0/available_balance?" + f"walletAddress={our_address.address}&"
-                                                                              f"tokenAddress={token.address}", {})
+        response = self._http_authenticated("GET", "/v0/available_balance?" + f"walletAddress={our_address.address.lower()}&"
+                                                                              f"tokenAddress={token.address.lower()}", {})
 
         return Wad(int(response['availableBalance']))
 
@@ -208,9 +208,9 @@ class TheOceanApi:
 
         our_address = Address(self.zrx_exchange.web3.eth.defaultAccount)
 
-        reserve_request = {'walletAddress': our_address.address,
-                           'baseTokenAddress': pair.sell_token.address,
-                           'quoteTokenAddress': pair.buy_token.address,
+        reserve_request = {'walletAddress': our_address.address.lower(),
+                           'baseTokenAddress': pair.sell_token.address.lower(),
+                           'quoteTokenAddress': pair.buy_token.address.lower(),
                            'side': 'sell' if is_sell else 'buy',
                            'orderAmount': str(amount.value),
                            'price': str(price),
@@ -305,8 +305,8 @@ class TheOceanApi:
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        result = self._http_get_unauthenticated("/v0/trade_history", f"baseTokenAddress={pair.sell_token}&"
-                                                                     f"quoteTokenAddress={pair.buy_token}")
+        result = self._http_get_unauthenticated("/v0/trade_history", f"baseTokenAddress={pair.sell_token.address.lower()}&"
+                                                                     f"quoteTokenAddress={pair.buy_token.address.lower()}")
 
         result = filter(lambda item: item['status'] == 'settled', result)
 
