@@ -25,6 +25,7 @@ import pymaker
 from pymaker import Wad, Address
 from pymaker.util import bytes_to_hexstring, http_response_summary
 from pymaker.sign import eth_sign, to_vrs
+from pymaker.token import ERC20Token
 from pymaker.zrxv2 import ZrxExchangeV2, ZrxRelayerApiV2, ERC20Asset
 
 class Order:
@@ -84,12 +85,14 @@ class Pair:
 
 
 class ErcdexApi:
-    """0x API interface.
+    """Ercdex API interface based on Standard Relayer APIv2 of 0x.
 
     The purpose is to be able to use `Order` class similar to the `Order` classes for traditional
     (centralized) exchanges i.e. having `amount` and `price` fields instead of `pay_token`, `pay_amount`,
     `buy_token` and `buy_amount`. It becomes very important if the tokens we are handling do not have
     `18` decimal places as in this case using `pay_amount` and `buy_amount` directly simply wouldn't work.
+
+    The only difference with base SRAv2 is cancelation which is not done on-chain but via ErcDEX endpoint.
     """
 
     logger = logging.getLogger()
@@ -100,20 +103,6 @@ class ErcdexApi:
 
         self.zrx_exchange = zrx_exchange
         self.zrx_api = zrx_api
-
-    @staticmethod
-    def _wad_to_blockchain(pair: Pair, amount: Wad, token_address: Address):
-        assert(isinstance(pair, Pair))
-        assert(isinstance(amount, Wad))
-        assert(isinstance(token_address, Address))
-
-        assert(token_address in [pair.buy_token_address, pair.sell_token_address])
-
-        if token_address == pair.buy_token_address:
-            return amount / Wad.from_number(10 ** (18 - pair.buy_token_decimals))
-
-        elif token_address == pair.sell_token_address:
-            return amount / Wad.from_number(10 ** (18 - pair.sell_token_decimals))
 
     @staticmethod
     def _blockchain_to_wad(pair: Pair, amount: Wad, token_address: Address):
@@ -129,7 +118,6 @@ class ErcdexApi:
         elif token_address == pair.sell_token_address:
             return amount * Wad.from_number(10 ** (18 - pair.sell_token_decimals))
 
-    #TODO
     def get_balances(self, pair: Pair):
         assert(isinstance(pair, Pair))
 

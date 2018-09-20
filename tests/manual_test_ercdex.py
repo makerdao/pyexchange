@@ -41,6 +41,8 @@ api = ZrxRelayerApiV2(exchange=exchange, api_server=SRAV2_URL)
 ercdex = ErcdexApi(zrx_exchange=exchange, zrx_api=api)
 
 pair = Pair(WETH_ADDR, 18, DAI_ADDR, 18)
+print(ercdex.get_balances(pair))
+
 order = ercdex.place_order(pair, 
                            is_sell=True,
                            price=Wad.from_number(250),
