@@ -137,11 +137,8 @@ class ZrxApiV2:
         return token_sell.balance_of(our_address) * Wad.from_number(10 ** (18 - pair.sell_token_decimals)), \
                token_buy.balance_of(our_address) * Wad.from_number(10 ** (18 - pair.buy_token_decimals))
 
-    def get_orders(self, pair: Pair) -> List[Order]:
+    def get_orders(self, pair: Pair, zrx_orders: list) -> List[Order]:
         assert(isinstance(pair, Pair))
-
-        our_address = Address(self.zrx_exchange.web3.eth.defaultAccount)
-        zrx_orders = self.zrx_api.get_orders_by_maker(our_address)
 
         result = []
 

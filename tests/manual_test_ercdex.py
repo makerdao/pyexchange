@@ -50,6 +50,6 @@ order = ercdex.place_order(pair,
                            expiration=int(time.time())+60*35)
 
 time.sleep(10)
-my_orders = ercdex.get_orders(pair)
+my_orders = ercdex.get_orders(pair, api.get_orders_by_maker(Address(web3.eth.defaultAccount)))
 for order in my_orders:
     ercdex.cancel_order(order)
