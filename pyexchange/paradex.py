@@ -353,11 +353,6 @@ class ParadexApi:
     def _create_signature(self, params: dict) -> str:
         assert(isinstance(params, dict))
 
-        try:
-            from sha3 import keccak_256
-        except ImportError:
-            from sha3 import sha3_256 as keccak_256
-
         keys = ''
         values = ''
         for key in sorted(params.keys()):
