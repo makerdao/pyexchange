@@ -172,9 +172,9 @@ class ZrxApiV2:
         buy_amount = amount * price if is_sell else amount
 
         order = self.zrx_exchange.create_order(pay_asset=ERC20Asset(pay_token),
-                                               pay_amount=pay_amount,
+                                               pay_amount=self._wad_to_blockchain(pair, pay_amount, pay_token),
                                                buy_asset=ERC20Asset(buy_token),
-                                               buy_amount=buy_amount,
+                                               buy_amount=self._wad_to_blockchain(pair, buy_amount, buy_token),
                                                expiration=expiration)
         order = self.zrx_api.configure_order(order)
         order = self.zrx_exchange.sign_order(order)
