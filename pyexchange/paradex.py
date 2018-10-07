@@ -26,12 +26,12 @@ import dateutil.parser
 import pytz
 import requests
 
-import pymaker.zrx
+import pymaker.zrxv2
 from pyexchange.util import sort_trades
 from pymaker import Wad
 from pymaker.sign import eth_sign
 from pymaker.util import http_response_summary
-from pymaker.zrx import ZrxExchange
+from pymaker.zrxv2 import ZrxExchangeV2
 
 
 class Order:
@@ -134,8 +134,8 @@ class ParadexApi:
 
     logger = logging.getLogger()
 
-    def __init__(self, zrx_exchange: ZrxExchange, api_server: str, api_key: str, timeout: float):
-        assert(isinstance(zrx_exchange, ZrxExchange) or (zrx_exchange is None))
+    def __init__(self, zrx_exchange: ZrxExchangeV2, api_server: str, api_key: str, timeout: float):
+        assert(isinstance(zrx_exchange, ZrxExchangeV2) or (zrx_exchange is None))
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
         assert(isinstance(timeout, float))
@@ -218,28 +218,11 @@ class ParadexApi:
             'expirationDate': datetime.datetime.fromtimestamp(time.time() + expiry, pytz.UTC).strftime("%Y-%m-%d %H:%M:%S.000000%z")
         })
 
-        order = pymaker.zrx.Order.from_json(self.zrx_exchange, order_params['zrxOrder'])
+        order = pymaker.zrxv2.Order.from_json(self.zrx_exchange, order_params['zrxOrder'])
         order = self.zrx_exchange.sign_order(order)
         fee = self._calculate_fee(is_sell, price, amount, order)
 
-        result = self._http_post_signed("/v0/order", {
-            'exchangeContractAddress': str(order.exchange_contract_address.address),
-            'expirationUnixTimestampSec': str(order.expiration),
-            'feeRecipient': str(order.fee_recipient.address),
-            'maker': str(order.maker.address),
-            'makerFee': str(order.maker_fee.value),
-            'makerTokenAddress': str(order.pay_token.address),
-            'makerTokenAmount': str(order.pay_amount.value),
-            'salt': str(order.salt),
-            'taker': str(order.taker.address),
-            'takerFee': str(order.taker_fee.value),
-            'takerTokenAddress': str(order.buy_token.address),
-            'takerTokenAmount': str(order.buy_amount.value),
-            'v': str(order.ec_signature_v),
-            'r': str(order.ec_signature_r),
-            's': str(order.ec_signature_s),
-            'feeId': order_params['fee']['id']
-        })
+        result = self._http_post_signed("/v0/order", {**order.to_json(), **{'feeId': order_params['fee']['id']}})
         order_id = result['id']
 
         self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
@@ -326,11 +309,11 @@ class ParadexApi:
         return data
 
     @staticmethod
-    def _calculate_fee(is_sell: bool, price: Wad, amount: Wad, zrx_order: pymaker.zrx.Order) -> Wad:
+    def _calculate_fee(is_sell: bool, price: Wad, amount: Wad, zrx_order: pymaker.zrxv2.Order) -> Wad:
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        assert(isinstance(zrx_order, pymaker.zrx.Order))
+        assert(isinstance(zrx_order, pymaker.zrxv2.Order))
 
         if is_sell:
             expected_buy_amount = amount*price
