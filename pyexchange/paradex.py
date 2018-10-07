@@ -147,6 +147,9 @@ class ParadexApi:
         self.last_nonce = 0
         self.last_nonce_lock = threading.Lock()
 
+    def verify_address(self):
+        return self._http_post_signed("/v0/verifyAddress", {})
+
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
         return self._http_get("/v0/ticker", f"market={pair}")
