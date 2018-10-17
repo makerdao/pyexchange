@@ -15,6 +15,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import socket
+
 
 def sort_trades(trades: list) -> list:
     return sorted(trades, key=lambda trade: trade.timestamp)
+
+
+def force_ipv4():
+    import requests.packages.urllib3.util.connection as urllib3_cn
+
+    urllib3_cn.allowed_gai_family = socket.AF_INET
