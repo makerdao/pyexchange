@@ -28,11 +28,6 @@ from pymaker.tightly_packed import encode_address, encode_uint256, encode_bytes
 from pymaker.token import ERC20Token
 from pymaker.util import bytes_to_hexstring, hexstring_to_bytes, http_response_summary
 
-try:
-    from sha3 import keccak_256
-except ImportError:
-    from sha3 import sha3_256 as keccak_256
-
 
 class Order:
     def __init__(self,
