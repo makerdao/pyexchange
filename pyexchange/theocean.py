@@ -222,10 +222,11 @@ class TheOceanApi:
 
         place_request = {}
 
-        if 'unsignedTargetOrder' in reserve_response and 'error' not in reserve_response['unsignedTargetOrder']:
+        if reserve_response.get('unsignedTargetOrder') is not None and 'error' not in reserve_response['unsignedTargetOrder']:
             place_request['signedTargetOrder'] = self._sign_order(reserve_response['unsignedTargetOrder'], our_address)
 
-        if 'unsignedMatchingOrder' in reserve_response and 'matchingOrderID' in reserve_response:
+        if reserve_response.get('unsignedMatchingOrder') is not None and \
+                reserve_response.get('matchingOrderID') is not None:
             place_request['signedMatchingOrder'] = self._sign_order(reserve_response['unsignedMatchingOrder'], our_address)
             place_request['matchingOrderID'] = reserve_response['matchingOrderID']
 
