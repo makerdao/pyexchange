@@ -3,3 +3,4 @@ web3 == 4.5.0
 requests == 2.18.4
 python-dateutil == 2.6.1
 websockets == 6.0.0
+python-kucoin == 0.1.12
