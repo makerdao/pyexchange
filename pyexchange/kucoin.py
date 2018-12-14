@@ -76,13 +76,13 @@ class Trade:
     def __init__(self,
                  trade_id: Optional[id],
                  order_id: Optional[str],
-                 timestamp: float,
+                 timestamp: int,
                  pair: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
         assert(isinstance(trade_id, int) or (trade_id is None))
-        assert(isinstance(timestamp, float))
+        assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -123,7 +123,7 @@ class Trade:
     def from_dict(pair, trade):
         return Trade(trade_id=trade['id'],
                      order_id=trade['orderOid'],
-                     timestamp=float(trade['createdAt']),
+                     timestamp=int(float(trade['createdAt'])),
                      pair=pair,
                      is_sell=trade['direction'] == 'SELL',
                      price=Wad.from_number(trade['dealPrice']),
@@ -134,7 +134,7 @@ class Trade:
         # [1544564526000, 'SELL', 25.0005, 0.0614088, 1.5352507, '5c102f2d335e7e08134edd77']
         return Trade(trade_id=None,
                      order_id=trade[5],
-                     timestamp=float(trade[0]),
+                     timestamp=int(float(trade[0])),
                      pair=pair,
                      is_sell=trade[1] == 'SELL',
                      price=Wad.from_number(trade[2]),
