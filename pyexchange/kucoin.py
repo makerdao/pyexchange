@@ -250,7 +250,6 @@ class KucoinApi(PyexAPI):
         assert(page_number == 1)
 
         result = self.client.get_recent_orders(pair)
-        print(result)
 
         return list(map(lambda item: Trade.from_list(pair, item), result))
 
