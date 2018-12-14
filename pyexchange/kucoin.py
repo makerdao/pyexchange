@@ -245,8 +245,9 @@ class KucoinApi(PyexAPI):
 
         return list(map(lambda item: Trade.from_dict(pair, item), result['datas']))
 
-    def get_all_trades(self, pair: str) -> List[Trade]:
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(page_number == 1)
 
         result = self.client.get_recent_orders(pair)
         print(result)
