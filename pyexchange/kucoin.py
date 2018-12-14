@@ -204,7 +204,7 @@ class KucoinApi(PyexAPI):
         coins = pair.split("-")
 
         price = self._get_precision(coins[1]) % float(price)
-        amount = self._get_precision(coins[0]) % float(price)
+        amount = self._get_precision(coins[0]) % float(amount)
 
         self.logger.info(f"Placing order ({side}, amount {amount} of {pair},"
                          f" price {price})...")
