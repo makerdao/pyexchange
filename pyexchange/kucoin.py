@@ -123,7 +123,7 @@ class Trade:
     def from_dict(pair, trade):
         return Trade(trade_id=trade['id'],
                      order_id=trade['orderOid'],
-                     timestamp=int(float(trade['createdAt'])),
+                     timestamp=int(float(trade['createdAt'])) // 1000,
                      pair=pair,
                      is_sell=trade['direction'] == 'SELL',
                      price=Wad.from_number(trade['dealPrice']),
@@ -134,7 +134,7 @@ class Trade:
         # [1544564526000, 'SELL', 25.0005, 0.0614088, 1.5352507, '5c102f2d335e7e08134edd77']
         return Trade(trade_id=None,
                      order_id=trade[5],
-                     timestamp=int(float(trade[0])),
+                     timestamp=int(float(trade[0])) // 1000,
                      pair=pair,
                      is_sell=trade[1] == 'SELL',
                      price=Wad.from_number(trade[2]),
@@ -249,7 +249,7 @@ class KucoinApi(PyexAPI):
         assert(isinstance(pair, str))
         assert(page_number == 1)
 
-        result = self.client.get_recent_orders(pair)
+        result = self.client.get_recent_orders(pair, 50)
 
         return list(map(lambda item: Trade.from_list(pair, item), result))
 
