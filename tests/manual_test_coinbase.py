@@ -48,6 +48,6 @@ coinbase = CoinbaseApi("https://api.pro.coinbase.com", sys.argv[1], sys.argv[2],
 # print("cancel orders")
 # print(coinbase.cancel_all_orders())
 print("get trades")
-print(coinbase.get_trades("ETH-USDC"))
+print(coinbase.get_all_trades("ETH-USDC"))
 
 

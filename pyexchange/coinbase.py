@@ -26,6 +26,7 @@ import requests
 import json
 import dateutil.parser
 from pymaker import Wad
+from pymaker.util import http_response_summary
 from typing import Optional, List
 
 
@@ -219,7 +220,6 @@ class CoinbaseApi(PyexAPI):
         assert(isinstance(pair, str))
 
         result = self._http_authenticated("GET", f"/fills?product_id={pair}", {})
-        print(result)
 
         return list(map(lambda item: Trade.from_our_list(pair, item), result))
 
@@ -289,7 +289,3 @@ class CoinbaseApi(PyexAPI):
             'USDC': "%.2f"
         }[coin]
 
-
-def http_response_summary(response) -> str:
-    text = response.text.replace('\r', '').replace('\n', '')[:2048]
-    return f"{response.status_code} {response.reason} ({text})"
