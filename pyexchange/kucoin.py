@@ -16,7 +16,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-import uuid
 from pprint import pformat
 
 from kucoin.client import Client
@@ -140,6 +139,7 @@ class Trade:
                      price=Wad.from_number(trade[2]),
                      amount=Wad.from_number(trade[3]))
 
+
 class KucoinApi(PyexAPI):
     """kucoin API interface.
     """
@@ -176,6 +176,10 @@ class KucoinApi(PyexAPI):
         assert(isinstance(coin, str))
         return self.client.get_coin_balance(coin)
 
+    def get_coin_info(self, coin : str):
+        assert(isinstance(coin, str))
+        return self.client.get_coin_info(coin)
+
     def get_user_info(self):
         return self.client.get_user()
 
@@ -201,20 +205,13 @@ class KucoinApi(PyexAPI):
 
         side = self.client.SIDE_SELL if is_sell else self.client.SIDE_BUY
 
-        coins = pair.split("-")
-
-        price = self._get_precision(coins[1]) % float(price)
-        amount = self._get_precision(coins[0]) % float(amount)
-
         self.logger.info(f"Placing order ({side}, amount {amount} of {pair},"
                          f" price {price})...")
 
         result = self.client.create_order(pair, side, price, amount)
-
         order_id = result['orderOid']
 
         self.logger.info(f"Placed order as #{order_id}")
-
         return order_id
 
     def cancel_order(self, order_id: str, is_sell: bool, pair: str):
@@ -252,18 +249,3 @@ class KucoinApi(PyexAPI):
         result = self.client.get_recent_orders(pair, 50)
 
         return list(map(lambda item: Trade.from_list(pair, item), result))
-
-    @staticmethod
-    def _get_precision(coin):
-        return {
-            'ETH': "%.7f",
-            'USDT': "%.6f",
-            'MKR': "%.4f",
-            'BTC': "%.7f",
-            'DAI': "%.4f",
-        }[coin]
-
-
-
-
-
