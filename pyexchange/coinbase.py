@@ -164,6 +164,9 @@ class CoinbaseApi(PyexAPI):
             if balance['currency'] == coin:
                 return balance
 
+    def get_product(self, pair: str):
+        return self._http_unauthenticated("GET", f"/products/{pair}", {})
+
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
@@ -177,11 +180,9 @@ class CoinbaseApi(PyexAPI):
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
-        coins = pair.split("-")
-
         data = {
-            "size": "%.8f" % float(amount),
-            "price": self._get_precision(coins[1]) % float(price),
+            "size": str(amount),
+            "price": str(price),
             "side": "sell" if is_sell else "buy",
             "product_id": pair
         }
@@ -283,11 +284,3 @@ class CoinbaseApi(PyexAPI):
             raise Exception(f"Coinbase API invalid JSON response: {http_response_summary(result)}")
 
         return data
-
-    @staticmethod
-    def _get_precision(coin):
-        return {
-            'ETH': "%.7f",
-            'USDC': "%.2f"
-        }[coin]
-
