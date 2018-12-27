@@ -20,7 +20,6 @@ import time
 from pprint import pformat
 from typing import Optional, List
 
-import dateutil.parser
 import requests
 
 from pyexchange.util import sort_trades
@@ -138,21 +137,22 @@ class DdexApi:
         self.web3 = web3
         self.api_server = api_server
         self.timeout = timeout
+        self.version = "v3"
 
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
-        return self._http_get(f"/v2/markets/{pair}/ticker", {})
+        return self._http_get(f"/{self.version}/markets/{pair}/ticker", {})
 
     def get_markets(self):
-        return self._http_get("/v2/markets", {})
+        return self._http_get(f"/{self.version}/markets", {})
 
     def get_balances(self):
-        return self._http_get_signed("/v2/account/lockedBalances", {})
+        return self._http_get_signed(f"/{self.version}/account/lockedBalances", {})
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders = self._http_get_signed(f"/v2/orders?marketId={pair}", {})
+        orders = self._http_get_signed(f"/{self.version}/orders?marketId={pair}", {})
 
         return list(map(lambda item: Order(order_id=item['id'],
                                            pair=pair,
@@ -172,20 +172,16 @@ class DdexApi:
                          f" price {price})...")
 
         # build order
-        order = {
-            "amount": str(amount),
-            "price": str(price),
-            "side": 'sell' if is_sell else 'buy',
-            "marketId": pair,
-        }
-        result = self._http_post_signed("/v2/orders/build", order)
+        order = self._build_order(amount, price, is_sell, pair)
+
+        result = self._http_post_signed(f"/{self.version}/orders/build", order)
         order_id = result['data']['order']['id']
         unsignedOrder = result['data']['order']['json']
-        fee = result['data']['order']['feeAmount']
+        fee = self._get_fee_rate(result)
 
         # sign order
         signature = eth_sign(hexstring_to_bytes(order_id), self.web3)
-        result = self._http_post_signed("/v2/orders", {"orderId": order_id, "signature": signature})
+        result = self._http_post_signed(f"/{self.version}/orders", {"orderId": order_id, "signature": signature})
 
         self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
                          f" price {price}, fee {float(fee)*100:.4f}%) as #{order_id}")
@@ -197,7 +193,7 @@ class DdexApi:
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        result = self._http_delete_signed(f"/v2/orders/{order_id}", {})
+        result = self._http_delete_signed(f"/{self.version}/orders/{order_id}", {})
         success = result['status']
 
         if success == 0:
@@ -213,7 +209,7 @@ class DdexApi:
 
         per_page = 100
         page_filter = f"page={page_number}&per_page={per_page}"
-        result = self._http_get_signed(f"/v2/markets/{pair}/trades/mine?{page_filter}", {})['data']
+        result = self._http_get_signed(f"/{self.version}/markets/{pair}/trades/mine?{page_filter}", {})['data']
         totalPages = result['totalPages']
         currentPage = result['currentPage']
         self.logger.debug(f'totalPages={totalPages};currentPage={currentPage}')
@@ -239,7 +235,7 @@ class DdexApi:
 
         per_page = 100
         page_filter = f"page={page_number}&per_page={per_page}"
-        result = self._http_get(f"/v2/markets/{pair}/trades?{page_filter}", {})['data']
+        result = self._http_get(f"/{self.version}/markets/{pair}/trades?{page_filter}", {})['data']
         totalPages = result['totalPages']
         currentPage = result['currentPage']
         self.logger.debug(f'totalPages={totalPages};currentPage={currentPage}')
@@ -325,3 +321,39 @@ class DdexApi:
                                             "Hydro-Authentication": self._create_sig_header(),
                                          },
                                          timeout=self.timeout))
+
+    def _get_fee_rate(self, result):
+        return result['data']['order']['makerFeeRate']
+
+    def _build_order(self, amount, price, is_sell, pair):
+        return {
+            "amount": str(amount),
+            "price": str(price),
+            "side": 'sell' if is_sell else 'buy',
+            "orderType": "limit",
+            "marketId": pair,
+        }
+
+
+class DdexApiV2(DdexApi):
+
+    def __init__(self, web3: Web3, api_server: str, timeout: float):
+        assert(isinstance(web3, Web3) or (web3 is None))
+        assert(isinstance(api_server, str))
+        assert(isinstance(timeout, float))
+
+        self.web3 = web3
+        self.api_server = api_server
+        self.timeout = timeout
+        self.version = "v2"
+
+    def _get_fee_rate(self, result):
+        return result['data']['order']['feeAmount']
+
+    def _build_order(self, amount, price, is_sell, pair):
+        return {
+            "amount": str(amount),
+            "price": str(price),
+            "side": 'sell' if is_sell else 'buy',
+            "marketId": pair,
+        }
