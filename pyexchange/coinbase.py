@@ -197,12 +197,17 @@ class CoinbaseApi(PyexAPI):
 
         return order_id
 
-    def cancel_order(self, order_id: str):
+    def cancel_order(self, order_id: str) -> bool:
         assert(isinstance(order_id, str))
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        return self._http_authenticated("DELETE", f"/orders/{order_id}", {})
+        result = self._http_authenticated("DELETE", f"/orders/{order_id}", {})
+
+        if order_id not in result:
+            return False
+
+        return True
 
     def cancel_all_orders(self) -> List:
         self.logger.info(f"Cancelling all orders ...")
