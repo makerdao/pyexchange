@@ -25,9 +25,11 @@ bitinka = BitinkaApi('https://www.bitinka.com/api/apinka', sys.argv[1], sys.argv
 print(bitinka.get_balances())
 print(bitinka.get_trade_balances())
 # print(bitinka.get_trades("DAI-USD"))
-print(bitinka.cancel_order("18718069"))
+# print(bitinka.cancel_orders("ETH_DAI"))
+# print(bitinka.cancel_order("18718035"))
+print(bitinka.cancel_order(18948425))
 print(bitinka.get_orders("ETH-DAI"))
-# print(bitinka.place_order("ETH-DAI", True, Wad.from_number(117), Wad.from_number(0.08)))
-#print(bitinka.get_orders("ETH-DAI"))
+
+
 
 
