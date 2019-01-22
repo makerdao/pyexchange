@@ -38,7 +38,6 @@ class Order:
                  price: Wad,
                  amount: Wad):
 
-        assert(isinstance(order_id, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -198,8 +197,8 @@ class CoinbaseApi(PyexAPI):
 
         return order_id
 
-    def cancel_order(self, order_id: int) -> bool:
-        assert(isinstance(order_id, int))
+    def cancel_order(self, order_id: str) -> bool:
+        assert(isinstance(order_id, str))
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
