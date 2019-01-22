@@ -27,7 +27,7 @@ print(bitinka.get_trade_balances())
 # print(bitinka.get_trades("DAI-USD"))
 # print(bitinka.cancel_orders("ETH_DAI"))
 # print(bitinka.cancel_order("18718035"))
-print(bitinka.cancel_order(18948425))
+# print(bitinka.cancel_order(18948425))
 print(bitinka.get_orders("ETH-DAI"))
 
 

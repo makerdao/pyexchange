@@ -71,7 +71,7 @@ class Order:
                      pair=pair,
                      is_sell=False if item['Type'] == 'BUY' else True,
                      price=Wad.from_number(item['Price']),
-                     amount=Wad.from_number(item['Amount']))
+                     amount=Wad.from_number(item['Total']) if item['Type'] == 'BUY' else Wad.from_number(item['Amount']))
 
 
 class Trade:
