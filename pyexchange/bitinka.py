@@ -182,7 +182,7 @@ class BitinkaApi(PyexAPI):
         data = {
             "new": {
                 "firstCurrency": currencies[0],
-                "investement": str(amount),
+                "investement": str(amount) if is_sell else str(amount * price),
                 "price": str(price),
                 "secondCurrency": currencies[1],
                 "trade": 1,
