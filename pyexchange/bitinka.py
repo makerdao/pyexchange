@@ -56,11 +56,11 @@ class Order:
 
     @property
     def remaining_buy_amount(self) -> Wad:
-        return self.amount*self.price if self.is_sell else self.amount
+        return self.amount
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        return self.amount if self.is_sell else self.amount*self.price
+        return self.amount
 
     def __repr__(self):
         return pformat(vars(self))
