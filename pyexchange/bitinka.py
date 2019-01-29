@@ -51,16 +51,12 @@ class Order:
         return self.price
 
     @property
-    def buy_to_sell_price(self) -> Wad:
-        return self.price
-
-    @property
     def remaining_buy_amount(self) -> Wad:
-        return self.amount
+        return self.amount*self.price if self.is_sell else self.amount
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        return self.amount
+        return self.amount if self.is_sell else self.amount*self.price
 
     def __repr__(self):
         return pformat(vars(self))
@@ -71,7 +67,7 @@ class Order:
                      pair=pair,
                      is_sell=False if item['Type'] == 'BUY' else True,
                      price=Wad.from_number(item['Price']),
-                     amount=Wad.from_number(item['Total']) if item['Type'] == 'BUY' else Wad.from_number(item['Amount']))
+                     amount=Wad.from_number(item['Amount']))
 
 
 class Trade:
