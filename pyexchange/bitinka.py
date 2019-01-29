@@ -47,6 +47,10 @@ class Order:
         self.amount = amount
 
     @property
+    def buy_to_sell_price(self) -> Wad:
+        return self.price
+
+    @property
     def sell_to_buy_price(self) -> Wad:
         return self.price
 
