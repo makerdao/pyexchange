@@ -63,11 +63,11 @@ class Order:
 
     @property
     def remaining_buy_amount(self) -> Wad:
-        return self.amount
+        return self.amount*self.price if self.is_sell else self.amount
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        return self.amount
+        return self.amount if self.is_sell else self.amount*self.price
 
     def __repr__(self):
         return pformat(vars(self))
@@ -79,7 +79,7 @@ class Order:
         return Order(order_id=order['id'],
                      is_sell=is_sell,
                      pair=pair,
-                     price=amount,
+                     price=amount/(amount * Wad.from_number(order['price'])),
                      amount=amount * Wad.from_number(order['price']))
 
 
@@ -171,7 +171,7 @@ class TEthfinexToken(ERC20Token):
 
         if self.token == "ETH":
             return Transact(self, self.web3, self.abi, self.address, self._contract, 'deposit',
-                        [amount.value, duration], {'value': amount.value})
+                            [amount.value, duration], {'value': amount.value})
         else:
             return Transact(self, self.web3, self.abi, self.address, self._contract, 'deposit',
                             [amount.value, duration], {})
@@ -207,7 +207,7 @@ class TEthfinexApi():
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        result = self._get_orders(f"/trustless/v1/r/orders/{pair}")
+        result = self._get_orders(f"/trustless/v1/r/orders/t{pair}")
 
         return list(map(lambda order : Order.to_order(pair, order), result))
 
@@ -256,7 +256,13 @@ class TEthfinexApi():
             "protocol": '0x'
         }
 
+        side = "SELL" if is_sell else "BUY"
+        self.logger.info(f"Placing order ({side}, amount {data['amount']} of {pair},"
+                         f" price {data['price']})...")
+
         result = self._http_post("/trustless/v1/w/on", data)
+
+        self.logger.info(f"Placed order  #{result[0]}")
 
         return result[0]
 
