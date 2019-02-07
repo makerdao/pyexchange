@@ -25,12 +25,12 @@ from pprint import pformat
 from typing import Optional, List
 
 import requests
+from urllib.parse import urlencode
 
-import pymaker.zrx
 from pyexchange.util import sort_trades
 from pymaker import Wad, Address
 from pymaker.util import http_response_summary
-from pymaker.zrx import ZrxExchange
+from pymaker.zrxv2 import ZrxExchangeV2, Order as ZrxV2Order
 
 
 class Pair:
@@ -140,8 +140,8 @@ class TheOceanApi:
 
     logger = logging.getLogger()
 
-    def __init__(self, zrx_exchange: ZrxExchange, api_server: str, api_key: str, api_secret: str, timeout: float):
-        assert(isinstance(zrx_exchange, ZrxExchange) or (zrx_exchange is None))
+    def __init__(self, zrx_exchange: ZrxExchangeV2, api_server: str, api_key: str, api_secret: str, timeout: float):
+        assert(isinstance(zrx_exchange, ZrxExchangeV2) or (zrx_exchange is None))
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
         assert(isinstance(api_secret, str))
@@ -155,11 +155,11 @@ class TheOceanApi:
 
     def ticker(self, pair: Pair):
         assert(isinstance(pair, Pair))
-        return self._http_get_unauthenticated("/v0/ticker", f"baseTokenAddress={pair.sell_token.address.lower()}&"
-                                                            f"quoteTokenAddress={pair.buy_token.address.lower()}")
+        return self._http_get_unauthenticated("/v1/tickers", f"baseTokenAddress={pair.sell_token.address.lower()}&"
+                                                             f"quoteTokenAddress={pair.buy_token.address.lower()}")
 
     def get_markets(self):
-        return self._http_get_unauthenticated("/v0/token_pairs", f"")
+        return self._http_get_unauthenticated("/v1/token_pairs", f"")
 
     def get_market(self, pair: Pair) -> dict:
         assert(isinstance(pair, Pair))
@@ -169,19 +169,24 @@ class TheOceanApi:
                            self.get_markets()))
 
     def get_balance(self, token: Address) -> Wad:
+        return Wad(int(self._get_balance(token)['available']))
+
+    def get_total_balance(self, token: Address) -> Wad:
+        return Wad(int(self._get_balance(token)['total']))
+
+    def _get_balance(self, token: Address):
         assert(isinstance(token, Address))
 
         our_address = Address(self.zrx_exchange.web3.eth.defaultAccount)
 
-        response = self._http_authenticated("GET", "/v0/available_balance?" + f"walletAddress={our_address.address.lower()}&"
-                                                                              f"tokenAddress={token.address.lower()}", {})
-
-        return Wad(int(response['availableBalance']))
+        response = self._http_authenticated("GET", "/v1/balance?" + f"walletAddress={our_address.address.lower()}&"
+                                                                    f"tokenAddress={token.address.lower()}", {})
+        return response
 
     def get_orders(self, pair: Pair) -> List[Order]:
         assert(isinstance(pair, Pair))
 
-        orders = self._http_authenticated("GET", "/v0/user_history?openAmount=1", {})
+        orders = self._http_authenticated("GET", "/v1/order_history?openAmount=1", {})
 
         # filter orders by our pair
         orders = list(filter(lambda item: Address(item['baseTokenAddress']) == pair.sell_token and
@@ -191,7 +196,7 @@ class TheOceanApi:
                                            pair=pair,
                                            is_sell=item['side'] == 'sell',
                                            price=Wad.from_number(item['price']),
-                                           amount=Wad(int(item['openAmount'])) + Wad(int(item['reservedAmount']))), orders))
+                                           amount=Wad(int(item['openAmount']))), orders))
 
     def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad, fee_in_zrx: bool = False) -> Optional[str]:
         assert(isinstance(pair, Pair))
@@ -208,45 +213,24 @@ class TheOceanApi:
 
         our_address = Address(self.zrx_exchange.web3.eth.defaultAccount)
 
-        reserve_request = {'walletAddress': our_address.address.lower(),
-                           'baseTokenAddress': pair.sell_token.address.lower(),
-                           'quoteTokenAddress': pair.buy_token.address.lower(),
-                           'side': 'sell' if is_sell else 'buy',
-                           'orderAmount': str(amount.value),
-                           'price': str(price),
-                           'feeOption': 'feeInZRX' if fee_in_zrx else 'feeInNative'}
-        self.logger.debug(f"Limit order reserve request: {json.dumps(reserve_request, indent=None)}")
+        unsigned_order_params = {'walletAddress': our_address.address.lower(),
+                                 'baseTokenAddress': pair.sell_token.address.lower(),
+                                 'quoteTokenAddress': pair.buy_token.address.lower(),
+                                 'side': 'sell' if is_sell else 'buy',
+                                 'amount': str(amount.value),
+                                 'price': str(price),
+                                 'feeOption': 'feeInZRX' if fee_in_zrx else 'feeInNative'}
 
-        reserve_response = self._http_authenticated("POST", "/v0/limit_order/reserve", reserve_request)
-        self.logger.debug(f"Limit order reserve response: {json.dumps(reserve_response, indent=None)}")
+        order = self._http_authenticated("GET", f"/v1/order/unsigned?{urlencode(unsigned_order_params)}", {})
+        order['signedZeroExOrder'] = self._sign_order(order['unsignedZeroExOrder'])
 
-        place_request = {}
+        self._http_authenticated("POST", "/v1/order", order)
+        return order['signedZeroExOrder']['orderHash']
 
-        if reserve_response.get('unsignedTargetOrder') is not None and 'error' not in reserve_response['unsignedTargetOrder']:
-            place_request['signedTargetOrder'] = self._sign_order(reserve_response['unsignedTargetOrder'], our_address)
-
-        if reserve_response.get('unsignedMatchingOrder') is not None and \
-                reserve_response.get('matchingOrderID') is not None:
-            place_request['signedMatchingOrder'] = self._sign_order(reserve_response['unsignedMatchingOrder'], our_address)
-            place_request['matchingOrderID'] = reserve_response['matchingOrderID']
-
-        self.logger.debug(f"Limit order place request: {json.dumps(place_request, indent=None)}")
-
-        place_response = self._http_authenticated("POST", "/v0/limit_order/place", place_request)
-        self.logger.debug(f"Limit order place response: {json.dumps(place_response, indent=None)}")
-
-        order_id = place_response.get('targetOrder', {}).get('orderHash')
-
-        self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
-                         f" price {price}) as #{order_id}")
-
-        return order_id
-
-    def _sign_order(self, order: dict, our_address) -> dict:
+    def _sign_order(self, order: dict) -> dict:
         assert(isinstance(order, dict))
-        assert(isinstance(our_address, Address))
 
-        order = pymaker.zrx.Order.from_json(self.zrx_exchange, {**order, 'maker': our_address.address})
+        order = ZrxV2Order.from_json(self.zrx_exchange, order)
         order = self.zrx_exchange.sign_order(order)
 
         return {**order.to_json(), 'orderHash': self.zrx_exchange.get_order_hash(order)}
@@ -256,8 +240,8 @@ class TheOceanApi:
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        result = self._http_authenticated("DELETE", f"/v0/order/{order_id}", {})
-        success = len(result) > 0
+        result = self._http_authenticated("DELETE", f"/v1/order/{order_id}", {})
+        success = result["canceledOrder"]["orderHash"] == order_id
 
         if success:
             self.logger.info(f"Cancelled order #{order_id}")
@@ -271,7 +255,7 @@ class TheOceanApi:
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        orders = self._http_authenticated("GET", "/v0/user_history", {})
+        orders = self._http_authenticated("GET", "/v1/order_history?confirmedAmount=1", {})
 
         # filter orders by our pair
         orders = list(filter(lambda item: Address(item['baseTokenAddress']) == pair.sell_token and
@@ -284,20 +268,18 @@ class TheOceanApi:
             price = Wad.from_number(order['price'])
             events = order['timeline']
 
-            for fill in filter(lambda event: event['action'] == 'filled', events):
+            event_id = 0
+            for fill in filter(lambda event: event['action'] == 'confirmed', events):
+                event_id += 1
                 amount = Wad(int(fill['amount']))
-                timestamp = int(fill['timestamp'])
-                intent_id = fill['intentID']
+                timestamp = int(float(fill['timestamp'])) // 1000000
 
-                is_settled = any(event['action'] == 'settled' and event['intentID'] == intent_id for event in events)
-
-                if is_settled:
-                    trades.append(Trade(trade_id=order['orderHash'] + "_" + intent_id,
-                                        timestamp=timestamp,
-                                        pair=pair,
-                                        is_sell=is_sell,
-                                        price=price,
-                                        amount=amount))
+                trades.append(Trade(trade_id=order['orderHash'] + "_" + str(event_id),
+                                    timestamp=timestamp,
+                                    pair=pair,
+                                    is_sell=is_sell,
+                                    price=price,
+                                    amount=amount))
 
         return sort_trades(trades)
 
@@ -306,13 +288,13 @@ class TheOceanApi:
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        result = self._http_get_unauthenticated("/v0/trade_history", f"baseTokenAddress={pair.sell_token.address.lower()}&"
+        result = self._http_get_unauthenticated("/v1/trade_history", f"baseTokenAddress={pair.sell_token.address.lower()}&"
                                                                      f"quoteTokenAddress={pair.buy_token.address.lower()}")
 
-        result = filter(lambda item: item['status'] == 'settled', result)
+        result = filter(lambda item: item['status'] == 'confirmed', result)
 
         return list(map(lambda item: Trade(trade_id=item['id'],
-                                           timestamp=int(item['lastUpdated']),
+                                           timestamp=int(float(item['lastUpdated'])) // 1000000,
                                            pair=pair,
                                            is_sell=None,
                                            price=Wad.from_number(item['price']),
@@ -353,6 +335,7 @@ class TheOceanApi:
         assert(isinstance(params, dict) or (params is None))
 
         data = json.dumps(params, separators=(',', ':'))
+
         timestamp = int(time.time()*1000)
 
         return self._result(requests.request(method=method,
