@@ -158,6 +158,9 @@ class KucoinApi(PyexAPI):
         self.timeout = timeout
         self.client = Client(api_key, secret_key, api_passphrase)
 
+    def get_symbols(self):
+        return self.client.get_symbols()
+
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
         return self.client.get_ticker(pair);
