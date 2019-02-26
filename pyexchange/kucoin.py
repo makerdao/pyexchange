@@ -63,12 +63,12 @@ class Order:
         return pformat(vars(self))
 
     @staticmethod
-    def from_list(item: list, pair: str, sell: bool):
-        return Order(order_id=item[5],
+    def to_order(item: list, pair: str):
+        return Order(order_id=item['id'],
                      pair=pair,
-                     is_sell=sell,
-                     price=Wad.from_number(item[2]),
-                     amount=Wad.from_number(item[3]))
+                     is_sell=True if item['side'] == 'sell' else False,
+                     price=Wad.from_number(item['price']),
+                     amount=Wad.from_number(item['size']))
 
 
 class Trade:
@@ -80,7 +80,7 @@ class Trade:
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
-        assert(isinstance(trade_id, int) or (trade_id is None))
+        assert(isinstance(trade_id, str) or (trade_id is None))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
@@ -120,24 +120,23 @@ class Trade:
 
     @staticmethod
     def from_dict(pair, trade):
-        return Trade(trade_id=trade['id'],
-                     order_id=trade['orderOid'],
+        return Trade(trade_id=trade['tradeId'],
+                     order_id=trade['orderId'],
                      timestamp=int(float(trade['createdAt'])) // 1000,
                      pair=pair,
-                     is_sell=trade['direction'] == 'SELL',
-                     price=Wad.from_number(trade['dealPrice']),
-                     amount=Wad.from_number(trade['amount']))
+                     is_sell=trade['side'] == 'sell',
+                     price=Wad.from_number(trade['price']),
+                     amount=Wad.from_number(trade['size']))
 
     @staticmethod
     def from_list(pair, trade):
-        # [1544564526000, 'SELL', 25.0005, 0.0614088, 1.5352507, '5c102f2d335e7e08134edd77']
         return Trade(trade_id=None,
-                     order_id=trade[5],
-                     timestamp=int(float(trade[0])) // 1000,
+                     order_id=trade['sequence'],
+                     timestamp=int(float(trade['time'])) // 1000000000,
                      pair=pair,
-                     is_sell=trade[1] == 'SELL',
-                     price=Wad.from_number(trade[2]),
-                     amount=Wad.from_number(trade[3]))
+                     is_sell=trade['side'] == 'sell',
+                     price=Wad.from_number(trade['price']),
+                     amount=Wad.from_number(trade['size']))
 
 
 class KucoinApi(PyexAPI):
@@ -146,56 +145,40 @@ class KucoinApi(PyexAPI):
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, api_key: str, secret_key: str, timeout: float, requests_params=None):
+    def __init__(self, api_server: str, api_key: str, secret_key: str, api_passphrase: str, timeout: float, requests_params=None):
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
         assert(isinstance(secret_key, str))
+        assert(isinstance(api_passphrase, str))
         assert(isinstance(timeout, float))
 
         self.api_server = api_server
         self.api_key = api_key
         self.secret_key = secret_key
         self.timeout = timeout
-        self.client = Client(api_key, secret_key)
-
-    def get_markets(self):
-        return self.client.get_trading_markets()
+        self.client = Client(api_key, secret_key, api_passphrase)
 
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
-        return self.client.get_tick(pair);
+        return self.client.get_ticker(pair);
 
     def get_balances(self):
-        return self.client.get_all_balances()
-
-    def get_fiat_balance(self, fiat : str):
-        assert(isinstance(fiat, str))
-        return self.client.get_total_balance(fiat)
-
-    def get_balance(self, coin : str):
-        assert(isinstance(coin, str))
-        return self.client.get_coin_balance(coin)
+        return self.client.get_accounts()
 
     def get_coin_info(self, coin : str):
         assert(isinstance(coin, str))
-        return self.client.get_coin_info(coin)
-
-    def get_user_info(self):
-        return self.client.get_user()
+        return self.client.get_currency(coin)
 
     def order_book(self, pair: str, limit=None):
         assert(isinstance(pair, str))
-        return self.client.get_order_book(pair, limit)
+        return self.client.get_order_book(pair)
 
-    def get_orders(self, pair: str)  -> List[Order]:
+    def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders = self.client.get_active_orders(pair)
+        orders = self.client.get_orders(pair, 'active')
 
-        sell_orders = list(map(lambda item: Order.from_list(item, pair, True), orders[self.client.SIDE_SELL]))
-        buy_orders = list(map(lambda item: Order.from_list(item, pair, False), orders[self.client.SIDE_BUY]))
-
-        return sell_orders + buy_orders
+        return list(map(lambda item: Order.to_order(item, pair), orders['items']))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert(isinstance(pair, str))
@@ -208,8 +191,8 @@ class KucoinApi(PyexAPI):
         self.logger.info(f"Placing order ({side}, amount {amount} of {pair},"
                          f" price {price})...")
 
-        result = self.client.create_order(pair, side, price, amount)
-        order_id = result['orderOid']
+        result = self.client.create_limit_order(pair, side, str(price), str(amount))
+        order_id = result['orderId']
 
         self.logger.info(f"Placed order as #{order_id}")
         return order_id
@@ -224,7 +207,7 @@ class KucoinApi(PyexAPI):
         self.logger.info(f"Cancelling order #{order_id} of type {side}...")
 
         try:
-            self.client.cancel_order(order_id, side, pair)
+            self.client.cancel_order(order_id)
             self.logger.info(f"Canceled order #{order_id}...")
             return True
         except Exception as e:
@@ -238,14 +221,14 @@ class KucoinApi(PyexAPI):
         page_number = page_number - 1
         limit = 100
 
-        result = self.client.get_symbol_dealt_orders(pair, page_number, limit)
+        result = self.client.get_fills(symbol=pair, page=page_number, page_size=limit)
 
-        return list(map(lambda item: Trade.from_dict(pair, item), result['datas']))
+        return list(map(lambda item: Trade.from_dict(pair, item), result['items']))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(page_number == 1)
 
-        result = self.client.get_recent_orders(pair, 50)
+        result = self.client.get_trade_histories(pair)
 
         return list(map(lambda item: Trade.from_list(pair, item), result))

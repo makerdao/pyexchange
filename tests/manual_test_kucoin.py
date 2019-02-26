@@ -20,7 +20,7 @@ import sys
 from pyexchange.kucoin import KucoinApi
 from pymaker import Wad
 
-kucoin = KucoinApi('https://api.kucoin.com', sys.argv[1], sys.argv[2], 9.5)
+kucoin = KucoinApi('https://openapi-v2.kucoin.com', sys.argv[1], sys.argv[2], sys.argv[3], 9.5)
 
 # print("USER INFO")
 # print(kucoinNew.get_user_info())
@@ -41,22 +41,35 @@ kucoin = KucoinApi('https://api.kucoin.com', sys.argv[1], sys.argv[2], 9.5)
 # print("place order")
 # print(kucoin.place_order("USDT-DAI", True, Wad.from_number(80.222222222), Wad.from_number(0.12222223545)))
 # print("place order")
-# print(kucoin.place_order("ETH-DAI", False, Wad.from_number(20.11111111111), Wad.from_number(0.0156547676576)))
+# print(kucoin.place_order("ETH-DAI", False, Wad.from_number(20.1), Wad.from_number(0.1)))
+# print(kucoin.place_order("ETH-DAI", True, Wad.from_number(220.1), Wad.from_number(0.1)))
 # print("get coin balance")
 # print(kucoin.get_fiat_balance("USD"))
 # print("get all trades")
 # print(kucoin.get_all_trades("ETH-DAI"))
 # print("cancel order")
 # print(kucoin.cancel_all_orders(False, "ETH-DAI"))
-print("get coin info")
-print(kucoin.get_coin_info("ETH"))
-print(kucoin.get_coin_info("DAI"))
-print(kucoin.get_coin_info("USDT"))
-print(kucoin.get_coin_info("MKR"))
+# print("get coin info")
+# print(kucoin.get_coin_info("MKR"))
+# print(kucoin.get_balance("MKR"))
+# print(kucoin.get_trades("BTC-USDT"))
 # print("get orders")
 # print(kucoin.get_orders("ETH-DAI"))
+# order = kucoin.place_order("ETH-DAI", True, Wad.from_number(135.1), Wad.from_number(0.1))
+
+# def get_balance(token: str, type: str, balances):
+#     try:
+#         token_balance = next(filter(lambda balance: balance['currency'] == "DAI" and balance['type'] == type, balances))
+#         return Wad.from_number(token_balance['balance'])
+#     except:
+#         return Wad.from_number(0)
+#
+# print(kucoin.get_balances())
+# balances = kucoin.get_balances()
+# print(get_balance("DAI", "trade", balances))
 # print("cancel order")
-# print(kucoin.cancel_order("5c1366ab335e7e74f25baf5d", False, "ETH-DAI"))
+# print(kucoin.cancel_order("5c74ebe907bab5738a1cb98d", False, "ETH-DAI"))
+# print(kucoin.get_trades("ETH-DAI"))
 # print("cancel order")
 # print(kucoin.cancel_order("5c136626335e7e7346c12f82", False, "ETH-DAI"))
 # print("get orders")
