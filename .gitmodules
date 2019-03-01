@@ -1,3 +1,4 @@
 [submodule "lib/pymaker"]
 	path = lib/pymaker
-	url = https://github.com/makerdao/pymaker.git
+	url = https://github.com/EdNoepel/pymaker.git
+	branch = web3-update
