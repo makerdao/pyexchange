@@ -119,7 +119,7 @@ class Trade:
         return pformat(vars(self))
 
 
-class OKEXApi:
+class OKEXApiV1:
     """OKCoin and OKEX API interface.
 
     Developed according to the following manual:
@@ -142,47 +142,23 @@ class OKEXApi:
         self.secret_key = secret_key
         self.timeout = timeout
 
-    # Is this supposed to get account details for a particular pair?
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
         return self._http_get("/api/v1/ticker.do", f"symbol={pair}")
 
-    # Retrieves entire depth of order book.
     def depth(self, pair: str):
         assert(isinstance(pair, str))
-        return self._http_get(f"/api/spot/v3/instruments/{pair}/book", {})
+        return self._http_get("/api/v1/depth.do", f"symbol={pair}")
 
-    # Retrieves market data.
-    # What is "size" supposed to do?
     def candles(self, pair: str, type: str, size: int) -> List[Candle]:
         assert(isinstance(pair, str))
         assert(isinstance(type, str))
         assert(isinstance(size, int))
 
-        # TODO: This is for backwards compatability.  Look into whether this
-        # should simply be exposed as integer for seconds.
         assert(type in ("1min", "3min", "5min", "15min", "30min", "1day", "3day", "1week",
                         "1hour", "2hour", "4hour","6hour", "12hour"))
-        granularity_in_seconds = {
-            "1min": 60,
-            "3min": 180,
-            "5min": 300,
-            "15min": 900,
-            "30min": 1800,
-            "1day": 3600*24,
-            "3day": 3600*24*3,
-            "1week": 3600*24*7,
-            "1hour": 3600,
-            "2hour": 3600*2,
-            "4hour": 3600*4,
-            "6hour": 3600*6,
-            "12hour": 3600*12
-        }
-        assert(type in granularity_in_seconds)
 
-        result = self._http_get(f"/api/spot/v3/instruments/{pair}/candles",
-                                f"instrument_id={pair}&granularity={granularity_in_seconds[granularity]}")
-        # v1 implementation passed f"symbol={pair}&type={type}&size={size}", False)
+        result = self._http_get("/api/v1/kline.do", f"symbol={pair}&type={type}&size={size}", False)
 
         return list(map(lambda item: Candle(timestamp=int(item[0]/1000),
                                             open=Wad.from_number(item[1]),
@@ -191,26 +167,20 @@ class OKEXApi:
                                             low=Wad.from_number(item[3]),
                                             volume=Wad.from_number(item[5])), result))
 
-    # New API provides balance for each token.  How to map to the V1 object?
     def get_balances(self) -> dict:
-        return self._http_post("/api/account/v3/wallet", {})["info"]["funds"]
+        return self._http_post("/api/v1/userinfo.do", {})["info"]["funds"]
 
-    # TODO: Figure out what this method used to do.
-    # Retrieves first 100 current open orders for a pair.
-    # Pass pair="" to retrieve open orders for all pairs.
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        result = self._http_post("/api/spot/v3/orders_pending", {
-            'instrument_id': pair,
+        result = self._http_post("/api/v1/order_info.do", {
+            'symbol': pair,
             'order_id': '-1'
         })
 
         orders = filter(self._filter_order, result['orders'])
         return list(map(self._parse_order, orders))
 
-    # TODO: Figure out what this method used to do.
-    # Retrieves order details for a particular pair.
     def get_orders_history(self, pair: str, number_of_orders: int) -> List[Order]:
         assert(isinstance(pair, str))
         assert(isinstance(number_of_orders, int))
@@ -218,8 +188,8 @@ class OKEXApi:
         orders = []
         page_length = 200
         for page in range(1, 100):
-            result = self._http_post("/api/spot/v3/orders.do", {
-                'instrument_id': pair,
+            result = self._http_post("/api/v1/order_history.do", {
+                'symbol': pair,
                 'status': 100,
                 'current_page': page,
                 'page_length': page_length
@@ -238,7 +208,6 @@ class OKEXApi:
 
         return list(map(self._parse_order, orders[:number_of_orders]))
 
-    # Submits and awaits acknowledgement of a limit order, returning the order id.
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
@@ -248,12 +217,11 @@ class OKEXApi:
         self.logger.info(f"Placing order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
                          f" price {price})...")
 
-        result = self._http_post("/api/spot/v3/orders", {
-            'instrument_id': pair,
-            'type': 'limit',
-            'side': 'sell' if is_sell else 'buy',
+        result = self._http_post("/api/v1/trade.do", {
+            'symbol': pair,
+            'type': 'sell' if is_sell else 'buy',
             'price': float(price),
-            'size': float(amount)
+            'amount': float(amount)
         })
         order_id = int(result['order_id'])
 
@@ -262,13 +230,14 @@ class OKEXApi:
 
         return order_id
 
-    # Synchronously cancels an order.
-    def cancel_order(self, order_id: int) -> bool:
+    def cancel_order(self, pair: str, order_id: int) -> bool:
+        assert(isinstance(pair, str))
         assert(isinstance(order_id, int))
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        result = self._http_post("/api/spot/v3/cancel_orders", {
+        result = self._http_post("/api/v1/cancel_order.do", {
+            'symbol': pair,
             'order_id': order_id
         })
         success = int(result['order_id']) == order_id
@@ -280,14 +249,11 @@ class OKEXApi:
 
         return success
 
-    # TODO: Seems this is now supported through /api/spot/v3/instruments/<instrument_id>/trades;
-    # add support for pagination and wire it up.
     def get_trades(self, pair: str, page_number: int = 1):
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
         raise Exception("get_trades() not available for OKEX")
 
-    # TODO: Map this to /api/spot/v3/instruments/<instrument_id>/trades
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
@@ -304,9 +270,8 @@ class OKEXApi:
     @staticmethod
     def _filter_order(item: dict) -> bool:
         assert(isinstance(item, dict))
-        return item['side'] in ['buy', 'sell']
+        return item['type'] in ['buy', 'sell']
 
-    # TODO: Update this to match the v3 JSON
     @staticmethod
     def _parse_order(item: dict) -> Order:
         assert(isinstance(item, dict))
@@ -327,7 +292,6 @@ class OKEXApi:
         data = sign + 'secret_key=' + self.secret_key
         return hashlib.md5(data.encode("utf8")).hexdigest().upper()
 
-    # TODO: Adjust the error messages
     @staticmethod
     def _result(result, check_result: bool) -> dict:
         assert(isinstance(check_result, bool))
