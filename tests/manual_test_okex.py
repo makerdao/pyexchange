@@ -20,8 +20,12 @@ import sys
 from pyexchange.okex import OKEXApi
 
 
-okex = OKEXApi('https://www.okex.com', sys.argv[1], sys.argv[2], 15.5)
+okex = OKEXApi(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], 15.5)
+print("OKEXApi created")
 
-print(okex.candles('eth_usdt', '1min', 75))
-# print(okex.get_balances())
-# print(len(okex.get_orders_history('mkr_eth', 1000)))
+#print(okex.ticker('eth_usdt'))
+#print(okex.depth('eth_usdt'))
+#print(okex.candles('eth_usdt', '1min'))
+print(okex.get_balances())
+#print(okex.get_orders('eth_usdt'))
+#print(len(okex.get_orders_history('mkr_eth', 1000)))

@@ -16,11 +16,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-import urllib
-import hashlib
 from pprint import pformat
 from typing import List
 
+import base64
+import datetime
+import dateutil.parser
+import hmac
+import json
 import requests
 
 from pyexchange.model import Candle
@@ -127,42 +130,42 @@ class OKEXApi:
 
     Inspired by the following example:
     <https://github.com/OKCoin/rest>, <https://github.com/OKCoin/rest/tree/master/python>.
+
+    Updated to OKEX v3 API using the following specs: <https://www.okex.com/docs/en/>.
     """
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, api_key: str, secret_key: str, timeout: float):
+    def __init__(self, api_server: str, api_key: str, secret_key: str,
+                 password: str, timeout: float):
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
         assert(isinstance(secret_key, str))
+        assert(isinstance(password, str))
         assert(isinstance(timeout, float))
 
         self.api_server = api_server
         self.api_key = api_key
         self.secret_key = secret_key
+        self.password = password
         self.timeout = timeout
 
-    # Is this supposed to get account details for a particular pair?
+    # Market data: Retrieves level-one data for the pair
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
-        return self._http_get("/api/v1/ticker.do", f"symbol={pair}")
+        return self._http_get(f"/api/spot/v3/instruments/{pair}/ticker", "")
 
-    # Retrieves entire depth of order book.
+    # Market data: Retrieves entire depth of order book
     def depth(self, pair: str):
         assert(isinstance(pair, str))
-        return self._http_get(f"/api/spot/v3/instruments/{pair}/book", {})
+        return self._http_get(f"/api/spot/v3/instruments/{pair}/book", "")
 
-    # Retrieves market data.
-    # What is "size" supposed to do?
-    def candles(self, pair: str, type: str, size: int) -> List[Candle]:
+    # Market data: Retrieves most recent 200 time-series data points
+    def candles(self, pair: str, granularity: str) -> List[Candle]:
         assert(isinstance(pair, str))
-        assert(isinstance(type, str))
-        assert(isinstance(size, int))
+        assert(isinstance(granularity, str))
 
-        # TODO: This is for backwards compatability.  Look into whether this
-        # should simply be exposed as integer for seconds.
-        assert(type in ("1min", "3min", "5min", "15min", "30min", "1day", "3day", "1week",
-                        "1hour", "2hour", "4hour","6hour", "12hour"))
+        # Note only these granularities are supported by OKEX API
         granularity_in_seconds = {
             "1min": 60,
             "3min": 180,
@@ -178,47 +181,47 @@ class OKEXApi:
             "6hour": 3600*6,
             "12hour": 3600*12
         }
-        assert(type in granularity_in_seconds)
+        assert(granularity in granularity_in_seconds)
 
         result = self._http_get(f"/api/spot/v3/instruments/{pair}/candles",
-                                f"instrument_id={pair}&granularity={granularity_in_seconds[granularity]}")
-        # v1 implementation passed f"symbol={pair}&type={type}&size={size}", False)
+                                f"granularity={granularity_in_seconds[granularity]}")
 
-        return list(map(lambda item: Candle(timestamp=int(item[0]/1000),
+        return list(map(lambda item: Candle(timestamp=int(dateutil.parser.parse(item[0]).timestamp()),
                                             open=Wad.from_number(item[1]),
-                                            close=Wad.from_number(item[4]),
                                             high=Wad.from_number(item[2]),
                                             low=Wad.from_number(item[3]),
+                                            close=Wad.from_number(item[4]),
                                             volume=Wad.from_number(item[5])), result))
 
-    # New API provides balance for each token.  How to map to the V1 object?
+    # Account: Get available and frozen balances for each token
     def get_balances(self) -> dict:
-        return self._http_post("/api/account/v3/wallet", {})["info"]["funds"]
+        result = self._http_get("/api/account/v3/wallet", "")
+        return result
 
-    # TODO: Figure out what this method used to do.
-    # Retrieves first 100 current open orders for a pair.
+    # Trading: Retrieves first 100 current open orders for a pair.
     # Pass pair="" to retrieve open orders for all pairs.
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        result = self._http_post("/api/spot/v3/orders_pending", {
-            'instrument_id': pair,
-            'order_id': '-1'
-        })
+        # TODO: Implement cursor
+        result = self._http_get("/api/spot/v3/orders_pending",
+                                f"instrument_id={pair}")
 
+        print(result)
+        # TODO: Parse into an order list
         orders = filter(self._filter_order, result['orders'])
         return list(map(self._parse_order, orders))
 
-    # TODO: Figure out what this method used to do.
-    # Retrieves order details for a particular pair.
-    def get_orders_history(self, pair: str, number_of_orders: int) -> List[Order]:
+    # Trading: Retrieves order list for a particular pair (up to 20,000 orders)
+    def get_orders_history(self, pair: str, status: str) -> List[Order]:
         assert(isinstance(pair, str))
-        assert(isinstance(number_of_orders, int))
+        assert(status in ("all", "open", "part_filled", "canceling", "filled",
+                          "cancelled", "ordering", "failure"))
 
         orders = []
         page_length = 200
         for page in range(1, 100):
-            result = self._http_post("/api/spot/v3/orders.do", {
+            result = self._http_post("/api/spot/v3/orders", {
                 'instrument_id': pair,
                 'status': 100,
                 'current_page': page,
@@ -229,10 +232,8 @@ class OKEXApi:
 
             if len(result) == 0:
                 break
-
             if len(result) < page_length:
                 break
-
             if len(orders) >= number_of_orders:
                 break
 
@@ -318,15 +319,6 @@ class OKEXApi:
                      amount=Wad.from_number(item['amount']),
                      deal_amount=Wad.from_number(item['deal_amount']))
 
-    def _create_signature(self, params: dict):
-        assert(isinstance(params, dict))
-
-        sign = ''
-        for key in sorted(params.keys()):
-            sign += key + '=' + str(params[key]) + '&'
-        data = sign + 'secret_key=' + self.secret_key
-        return hashlib.md5(data.encode("utf8")).hexdigest().upper()
-
     # TODO: Adjust the error messages
     @staticmethod
     def _result(result, check_result: bool) -> dict:
@@ -341,30 +333,67 @@ class OKEXApi:
             raise Exception(f"OKCoin API invalid JSON response: {http_response_summary(result)}")
 
         if check_result:
+            if result.status_code is not 200:
+                raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
+
+            # TODO: See if any calls returns these fields in the JSON
             if 'error_code' in data:
                 raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
-
-            if 'result' not in data or data['result'] is not True:
-                raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
+            # if 'result' not in data or data['result'] is not True:
+            #     raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
 
         return data
+
+    def _create_signature(self, timestamp, method, request_path, body):
+        assert(isinstance(timestamp, str))
+        assert(method in ["GET", "POST"])
+        assert(isinstance(request_path, str))
+        assert(isinstance(body, str))
+
+        message = str(timestamp) + method + request_path + body
+
+        digest = hmac.new(bytes(self.secret_key, encoding="utf-8"),
+                          bytes(message, encoding="utf-8"),
+                          digestmod="sha256").digest()
+
+        print(f"prehash is {message}, digest is {base64.b64encode(digest)}")
+        return base64.b64encode(digest)
+
+    def _create_http_headers(self, method, request_path, body):
+        assert(method in ["GET", "POST"])
+        assert(isinstance(request_path, str))
+        assert(isinstance(body, str))
+
+        # OKEX expects this variation of ISO 8601
+        timestamp = datetime.datetime.utcnow().isoformat()[:-3] + "Z"
+
+        headers = {
+            "Content-Type": "application/json",
+            "OK-ACCESS-KEY": self.api_key,
+            "OK-ACCESS-SIGN": self._create_signature(timestamp, method, request_path, body),
+            "OK-ACCESS-TIMESTAMP": timestamp,
+            "OK-ACCESS-PASSPHRASE": self.password
+        }
+        return headers
 
     def _http_get(self, resource: str, params: str, check_result: bool = True):
         assert(isinstance(resource, str))
         assert(isinstance(params, str))
         assert(isinstance(check_result, bool))
 
-        return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
+        if params is None or params is "":
+            request = resource
+        else:
+            request = f"{resource}?{params}"
+
+        return self._result(requests.get(url=f"{self.api_server}{request}",
+                                         headers=self._create_http_headers("GET", request, ""),
                                          timeout=self.timeout), check_result)
 
     def _http_post(self, resource: str, params: dict):
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
 
-        params['api_key'] = self.api_key
-        params['sign'] = self._create_signature(params)
-
-        return self._result(requests.post(url=f"{self.api_server}{resource}",
-                                          data=urllib.parse.urlencode(params),
-                                          headers={"Content-Type": "application/x-www-form-urlencoded"},
+        return self._result(requests.post(url=f"{self.api_server}{resource}", data=params,
+                                          headers=self._create_http_headers("POST", resource, {json.dumps(params)}),
                                           timeout=self.timeout), True)
