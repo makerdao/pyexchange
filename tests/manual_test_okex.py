@@ -21,11 +21,28 @@ from pyexchange.okex import OKEXApi
 
 
 okex = OKEXApi(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], 15.5)
-print("OKEXApi created")
+print("OKEXApi created\n")
 
-#print(okex.ticker('eth_usdt'))
-#print(okex.depth('eth_usdt'))
-#print(okex.candles('eth_usdt', '1min'))
-print(okex.get_balances())
-#print(okex.get_orders('eth_usdt'))
-#print(len(okex.get_orders_history('mkr_eth', 1000)))
+#pair = "eth_usdt"
+pair = "mkr_btc"
+l1 = okex.ticker(pair)
+print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
+# book = okex.depth(pair)
+# print(f"bids: {book['bids'][0:3]}")
+# print(f"asks: {book['asks'][0:3]}")
+# print(okex.candles(pair, '1min')[0:3])
+print()
+
+balances = okex.get_balances()
+#print(balances)
+print(f"ETH: {balances['ETH']}")
+print(f"MKR: {balances['MKR']}")
+print(f"USDC: {balances['USDC']}")
+print(f"USDT: {balances['USDT']}")
+print()
+
+#print(okex.get_orders('eth_usdt', 1000))
+#print(okex.get_orders(number_of_orders=1022))
+#print(okex.get_orders_history('mkr_eth', 369))
+
+#print(okex.cancel_order("BTC-USDT", "2229535858593792"))

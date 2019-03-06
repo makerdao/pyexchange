@@ -24,6 +24,8 @@ import datetime
 import dateutil.parser
 import hmac
 import json
+import math
+import urllib
 import requests
 
 from pyexchange.model import Candle
@@ -33,14 +35,14 @@ from pymaker.util import http_response_summary
 
 class Order:
     def __init__(self, order_id: int, timestamp: int, pair: str,
-                 is_sell: bool, price: Wad, amount: Wad, deal_amount: Wad):
+                 is_sell: bool, price: Wad, amount: Wad, filled_amount: Wad):
         assert(isinstance(order_id, int))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        assert(isinstance(deal_amount, Wad))
+        assert(isinstance(filled_amount, Wad))
 
         self.order_id = order_id
         self.timestamp = timestamp
@@ -48,7 +50,7 @@ class Order:
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
-        self.deal_amount = deal_amount
+        self.filled_amount = filled_amount
 
     @property
     def sell_to_buy_price(self) -> Wad:
@@ -124,7 +126,6 @@ class Trade:
 
 class OKEXApi:
     """OKCoin and OKEX API interface.
-
     Developed according to the following manual:
     <https://www.okex.com/intro_apiOverview.html>.
 
@@ -196,48 +197,50 @@ class OKEXApi:
     # Account: Get available and frozen balances for each token
     def get_balances(self) -> dict:
         result = self._http_get("/api/account/v3/wallet", "")
-        return result
 
-    # Trading: Retrieves first 100 current open orders for a pair.
-    # Pass pair="" to retrieve open orders for all pairs.
-    def get_orders(self, pair: str) -> List[Order]:
+        balances = {}
+        for balance in result:
+            balances[balance["currency"]] = balance
+
+        return balances
+
+    # Trading: Retrieves currently open orders, sorted newest first.
+    # Optionally filter by pair and limit number of results returned.
+    def get_orders(self, pair='', number_of_orders=100) -> List[Order]:
         assert(isinstance(pair, str))
-
-        # TODO: Implement cursor
-        result = self._http_get("/api/spot/v3/orders_pending",
-                                f"instrument_id={pair}")
-
-        print(result)
-        # TODO: Parse into an order list
-        orders = filter(self._filter_order, result['orders'])
-        return list(map(self._parse_order, orders))
-
-    # Trading: Retrieves order list for a particular pair (up to 20,000 orders)
-    def get_orders_history(self, pair: str, status: str) -> List[Order]:
-        assert(isinstance(pair, str))
-        assert(status in ("all", "open", "part_filled", "canceling", "filled",
-                          "cancelled", "ordering", "failure"))
+        assert(isinstance(number_of_orders, int))
 
         orders = []
-        page_length = 200
-        for page in range(1, 100):
-            result = self._http_post("/api/spot/v3/orders", {
-                'instrument_id': pair,
-                'status': 100,
-                'current_page': page,
-                'page_length': page_length
-            })['orders']
+        pages = math.ceil(number_of_orders/100)
+        for page in range(1, pages):
+            result = self._http_get("/api/spot/v3/orders_pending",
+                                    f"from={page}&to={page+1}"
+                                    f"&instrument_id={pair}")
+            if len(result) > 0:
+                orders += list(filter(self._parse_order(), result))
 
-            orders = orders + list(filter(self._filter_order, result))
+        return orders[:number_of_orders]
 
-            if len(result) == 0:
-                break
-            if len(result) < page_length:
-                break
-            if len(orders) >= number_of_orders:
-                break
+    # Trading: Retrieves order list for a particular pair, newest first.
+    def get_orders_history(self, pair: str, number_of_orders: int) -> List[Order]:
+        assert(isinstance(pair, str))
+        assert(isinstance(number_of_orders, int))
 
-        return list(map(self._parse_order, orders[:number_of_orders]))
+        # TODO: Implement optional status filter
+        #assert(status in ("all", "open", "part_filled", "canceling", "filled",
+        #                  "cancelled", "ordering", "failure"))
+
+        orders = []
+        pages = math.ceil(number_of_orders/100)
+        for page in range(1, pages):
+            result = self._http_get("/api/spot/v3/orders",
+                                    f"status=all"
+                                    f"&instrument_id={pair}"
+                                    f"&from={page}&to={page+1}")
+            if len(result) > 0:
+                orders += list(filter(self._parse_order(), result))
+
+        return orders[:number_of_orders]
 
     # Submits and awaits acknowledgement of a limit order, returning the order id.
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
@@ -264,20 +267,21 @@ class OKEXApi:
         return order_id
 
     # Synchronously cancels an order.
-    def cancel_order(self, order_id: int) -> bool:
-        assert(isinstance(order_id, int))
+    def cancel_order(self, pair: str, order_id: str) -> bool:
+        assert(isinstance(pair, str))
+        assert(isinstance(order_id, str))
 
-        self.logger.info(f"Cancelling order #{order_id}...")
+        self.logger.info(f"Cancelling order {order_id}...")
 
-        result = self._http_post("/api/spot/v3/cancel_orders", {
-            'order_id': order_id
+        result = self._http_post(f"/api/spot/v3/cancel_orders/{order_id}", {
+            'instrument_id': pair
         })
         success = int(result['order_id']) == order_id
 
         if success:
-            self.logger.info(f"Cancelled order #{order_id}")
+            self.logger.info(f"Cancelled order {order_id}")
         else:
-            self.logger.info(f"Failed to cancel order #{order_id}")
+            self.logger.info(f"Failed to cancel order {order_id}")
 
         return success
 
@@ -303,23 +307,18 @@ class OKEXApi:
                                            amount_symbol=pair.split('_')[0].lower()), result))
 
     @staticmethod
-    def _filter_order(item: dict) -> bool:
-        assert(isinstance(item, dict))
-        return item['side'] in ['buy', 'sell']
-
-    # TODO: Update this to match the v3 JSON
-    @staticmethod
     def _parse_order(item: dict) -> Order:
         assert(isinstance(item, dict))
         return Order(order_id=item['order_id'],
                      timestamp=int(item['create_date']/1000),
                      pair=item['symbol'],
-                     is_sell=item['type'] == 'sell',
+                     is_sell=item['side'] == 'sell',
                      price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['amount']),
-                     deal_amount=Wad.from_number(item['deal_amount']))
+                     amount=Wad.from_number(item['size']),
+                     filled_amount=Wad.from_number(item['filled_size']))
 
     # TODO: Adjust the error messages
+    # Handles the response of an HTTP GET or POST request
     @staticmethod
     def _result(result, check_result: bool) -> dict:
         assert(isinstance(check_result, bool))
@@ -356,7 +355,7 @@ class OKEXApi:
                           bytes(message, encoding="utf-8"),
                           digestmod="sha256").digest()
 
-        print(f"prehash is {message}, digest is {base64.b64encode(digest)}")
+        #print(f"message is {message}")
         return base64.b64encode(digest)
 
     def _create_http_headers(self, method, request_path, body):
@@ -374,6 +373,8 @@ class OKEXApi:
             "OK-ACCESS-TIMESTAMP": timestamp,
             "OK-ACCESS-PASSPHRASE": self.password
         }
+        #print(f"url: {request_path}")
+        #print(f"headers: {headers}")
         return headers
 
     def _http_get(self, resource: str, params: str, check_result: bool = True):
@@ -381,19 +382,24 @@ class OKEXApi:
         assert(isinstance(params, str))
         assert(isinstance(check_result, bool))
 
-        if params is None or params is "":
-            request = resource
-        else:
+        if params:
             request = f"{resource}?{params}"
+        else:
+            request = resource
 
-        return self._result(requests.get(url=f"{self.api_server}{request}",
-                                         headers=self._create_http_headers("GET", request, ""),
-                                         timeout=self.timeout), check_result)
+        #print(f"HTTP GET {request}")
+        return self._result(
+            requests.get(url=f"{self.api_server}{request}",
+                         headers=self._create_http_headers("GET", request, ""),
+                         timeout=self.timeout), check_result)
 
     def _http_post(self, resource: str, params: dict):
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
 
-        return self._result(requests.post(url=f"{self.api_server}{resource}", data=params,
-                                          headers=self._create_http_headers("POST", resource, {json.dumps(params)}),
-                                          timeout=self.timeout), True)
+        #print(f"HTTP POST {resource} {json.dumps(params)}")
+        return self._result(
+            requests.post(url=f"{self.api_server}{resource}",
+                          data=json.dumps(params),
+                          headers=self._create_http_headers("POST", resource, json.dumps(params)),
+                          timeout=self.timeout), True)

@@ -170,6 +170,7 @@ class OKEXApiV1:
     def get_balances(self) -> dict:
         return self._http_post("/api/v1/userinfo.do", {})["info"]["funds"]
 
+    # Returns all unfilled orders for the specified pair
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
@@ -181,6 +182,7 @@ class OKEXApiV1:
         orders = filter(self._filter_order, result['orders'])
         return list(map(self._parse_order, orders))
 
+    # Returns two days of order history for the specified pair
     def get_orders_history(self, pair: str, number_of_orders: int) -> List[Order]:
         assert(isinstance(pair, str))
         assert(isinstance(number_of_orders, int))
