@@ -15,8 +15,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import datetime
 import sys
 
+from pymaker import Wad
 from pyexchange.okex import OKEXApi
 
 
@@ -35,14 +37,41 @@ print()
 
 balances = okex.get_balances()
 #print(balances)
+print(f"BTC: {balances['BTC']}")
 print(f"ETH: {balances['ETH']}")
 print(f"MKR: {balances['MKR']}")
-print(f"USDC: {balances['USDC']}")
-print(f"USDT: {balances['USDT']}")
+#print(f"USDC: {balances['USDC']}")
+#print(f"USDT: {balances['USDT']}")
 print()
 
-#print(okex.get_orders('eth_usdt', 1000))
-#print(okex.get_orders(number_of_orders=1022))
-#print(okex.get_orders_history('mkr_eth', 369))
 
-#print(okex.cancel_order("BTC-USDT", "2229535858593792"))
+# response = okex.place_order(pair, False,
+#                             Wad.from_number(0.00222),
+#                             Wad.from_number(0.0153))
+# print(response)
+#2435596605531136 was never found
+#print(okex.cancel_order(pair, "2437343317788672"))
+#2437343317788672 buy  0.0153000 at 0.0022200000 on 2019-03-07 07:48:28
+
+def print_orders(orders):
+    for order in orders:
+        side = "sell" if order.is_sell else "buy "
+        print(f"{order.order_id} {side} {str(order.amount)[:9]} "
+              f"at {str(order.price)[:12]} "
+              f"on {datetime.datetime.utcfromtimestamp(order.timestamp)}")
+
+
+# Gets open orders
+#_orders = okex.get_orders(pair, 222)
+# Gets all orders
+_orders = okex.get_orders_history(pair, 9)
+print_orders(_orders)
+
+#trades = okex.get_all_trades(pair)[:-22]
+#for order in trades:
+#    side = "sell" if order.is_sell else "buy "
+#    print(f"{side} {str(order.amount)[:9]} {order.amount_symbol} "
+#          f"at {str(order.price)[:12]} "
+#          f"on {datetime.datetime.utcfromtimestamp(order.timestamp)}")
+
+

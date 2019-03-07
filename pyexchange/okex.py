@@ -25,7 +25,6 @@ import dateutil.parser
 import hmac
 import json
 import math
-import urllib
 import requests
 
 from pyexchange.model import Candle
@@ -34,9 +33,9 @@ from pymaker.util import http_response_summary
 
 
 class Order:
-    def __init__(self, order_id: int, timestamp: int, pair: str,
+    def __init__(self, order_id: str, timestamp: int, pair: str,
                  is_sell: bool, price: Wad, amount: Wad, filled_amount: Wad):
-        assert(isinstance(order_id, int))
+        assert(isinstance(order_id, str))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
@@ -83,13 +82,13 @@ class Order:
 
 class Trade:
     def __init__(self,
-                 trade_id: id,
+                 trade_id: str,
                  timestamp: int,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad,
                  amount_symbol: str):
-        assert(isinstance(trade_id, int))
+        assert(isinstance(trade_id, str))
         assert(isinstance(timestamp, int))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -205,19 +204,22 @@ class OKEXApi:
         return balances
 
     # Trading: Retrieves currently open orders, sorted newest first.
-    # Optionally filter by pair and limit number of results returned.
-    def get_orders(self, pair='', number_of_orders=100) -> List[Order]:
+    def get_orders(self, pair: str, number_of_orders=100) -> List[Order]:
         assert(isinstance(pair, str))
         assert(isinstance(number_of_orders, int))
 
         orders = []
         pages = math.ceil(number_of_orders/100)
-        for page in range(1, pages):
+        for page in range(pages):
+            print(f"requesting page {page}")
+            # FIXME: Cursor not working properly
             result = self._http_get("/api/spot/v3/orders_pending",
-                                    f"from={page}&to={page+1}"
+                                    #f"limit=2&from=1&to=4"
                                     f"&instrument_id={pair}")
             if len(result) > 0:
-                orders += list(filter(self._parse_order(), result))
+                orders += list(map(self._parse_order, result))
+            else:
+                break
 
         return orders[:number_of_orders]
 
@@ -232,17 +234,23 @@ class OKEXApi:
 
         orders = []
         pages = math.ceil(number_of_orders/100)
-        for page in range(1, pages):
+        print(f"querying {pages} pages of order history")
+        for page in range(pages):
+            print(f"querying page {page}")
+            # FIXME: Cursor not working properly
             result = self._http_get("/api/spot/v3/orders",
                                     f"status=all"
-                                    f"&instrument_id={pair}"
-                                    f"&from={page}&to={page+1}")
+                                    f"&instrument_id={pair}")
+                                    #f"&limit=100&from={page}")
             if len(result) > 0:
-                orders += list(filter(self._parse_order(), result))
+                orders += list(map(self._parse_order, result))
+            else:
+                break
 
         return orders[:number_of_orders]
 
-    # Submits and awaits acknowledgement of a limit order, returning the order id.
+    # Trading: Submits and awaits acknowledgement of a limit order,
+    # returning the order id.
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
@@ -259,6 +267,7 @@ class OKEXApi:
             'price': float(price),
             'size': float(amount)
         })
+        print(result)
         order_id = int(result['order_id'])
 
         self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
@@ -266,7 +275,7 @@ class OKEXApi:
 
         return order_id
 
-    # Synchronously cancels an order.
+    # Trading: Synchronously cancels an order.
     def cancel_order(self, pair: str, order_id: str) -> bool:
         assert(isinstance(pair, str))
         assert(isinstance(order_id, str))
@@ -285,33 +294,36 @@ class OKEXApi:
 
         return success
 
-    # TODO: Seems this is now supported through /api/spot/v3/instruments/<instrument_id>/trades;
-    # add support for pagination and wire it up.
+    # TODO: Trading: Retrieves executions for our own orders.
     def get_trades(self, pair: str, page_number: int = 1):
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
         raise Exception("get_trades() not available for OKEX")
 
-    # TODO: Map this to /api/spot/v3/instruments/<instrument_id>/trades
+    # Market data: Retrieves prints for a pair across all market participants.
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        result = self._http_get("/api/v1/trades.do", f"symbol={pair}", False)
-        return list(map(lambda item: Trade(trade_id=item['tid'],
-                                           timestamp=item['date'],
-                                           is_sell=item['type'] == 'sell',
+        # TODO: Implement pagination to retrieve first 600 trades,
+        # equivalent with the v1 behavior, or actually do something
+        # meaningful with the page_number.
+        result = self._http_get(f"/api/spot/v3/instruments/{pair}/trades",
+                                f"symbol={pair}", False)
+        return list(map(lambda item: Trade(trade_id=item['trade_id'],
+                                           timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
+                                           is_sell=item['side'] == 'sell',
                                            price=Wad.from_number(item['price']),
-                                           amount=Wad.from_number(item['amount']),
+                                           amount=Wad.from_number(item['size']),
                                            amount_symbol=pair.split('_')[0].lower()), result))
 
     @staticmethod
     def _parse_order(item: dict) -> Order:
         assert(isinstance(item, dict))
         return Order(order_id=item['order_id'],
-                     timestamp=int(item['create_date']/1000),
-                     pair=item['symbol'],
+                     timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
+                     pair=item['instrument_id'],
                      is_sell=item['side'] == 'sell',
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['size']),
@@ -320,28 +332,35 @@ class OKEXApi:
     # TODO: Adjust the error messages
     # Handles the response of an HTTP GET or POST request
     @staticmethod
-    def _result(result, check_result: bool) -> dict:
+    def _result(response, check_result: bool, has_cursor=False) -> dict:
         assert(isinstance(check_result, bool))
 
-        if not result.ok:
-            raise Exception(f"OKCoin API invalid HTTP response: {http_response_summary(result)}")
+        if not response.ok:
+            raise Exception(f"OKCoin API invalid HTTP response: {http_response_summary(response)}")
 
         try:
-            data = result.json()
+            data = response.json()
         except Exception:
-            raise Exception(f"OKCoin API invalid JSON response: {http_response_summary(result)}")
+            raise Exception(f"OKCoin API invalid JSON response: {http_response_summary(response)}")
 
         if check_result:
-            if result.status_code is not 200:
-                raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
+            if response.status_code is not 200:
+                raise Exception(f"OKCoin API negative response: {http_response_summary(response)}")
 
-            # TODO: See if any calls returns these fields in the JSON
             if 'error_code' in data:
-                raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
+                raise Exception(f"OKCoin API negative response: {http_response_summary(response)}")
+            # 'result' only shows up in response when placing or cancelling an order
             # if 'result' not in data or data['result'] is not True:
             #     raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
 
-        return data
+        if has_cursor:
+            cursor_info = {
+                'before': response.headers['OK-BEFORE'],
+                'after': response.headers['OK-AFTER']}
+            print(f"found cursor_info {cursor_info}")
+            return data, cursor_info
+        else:
+            return data
 
     def _create_signature(self, timestamp, method, request_path, body):
         assert(isinstance(timestamp, str))
@@ -373,11 +392,12 @@ class OKEXApi:
             "OK-ACCESS-TIMESTAMP": timestamp,
             "OK-ACCESS-PASSPHRASE": self.password
         }
-        #print(f"url: {request_path}")
+        print(f"url: {request_path}")
         #print(f"headers: {headers}")
         return headers
 
-    def _http_get(self, resource: str, params: str, check_result: bool = True):
+    def _http_get(self, resource: str, params: str,
+                  check_result=True, has_cursor=False):
         assert(isinstance(resource, str))
         assert(isinstance(params, str))
         assert(isinstance(check_result, bool))
@@ -391,9 +411,9 @@ class OKEXApi:
         return self._result(
             requests.get(url=f"{self.api_server}{request}",
                          headers=self._create_http_headers("GET", request, ""),
-                         timeout=self.timeout), check_result)
+                         timeout=self.timeout), check_result, has_cursor)
 
-    def _http_post(self, resource: str, params: dict):
+    def _http_post(self, resource: str, params: dict, has_cursor=False):
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
 
@@ -402,4 +422,4 @@ class OKEXApi:
             requests.post(url=f"{self.api_server}{resource}",
                           data=json.dumps(params),
                           headers=self._create_http_headers("POST", resource, json.dumps(params)),
-                          timeout=self.timeout), True)
+                          timeout=self.timeout), True, has_cursor)

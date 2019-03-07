@@ -256,6 +256,7 @@ class OKEXApiV1:
         assert(isinstance(page_number, int))
         raise Exception("get_trades() not available for OKEX")
 
+    # Retrieves 600 most recent trades
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
