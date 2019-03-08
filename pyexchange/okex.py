@@ -204,49 +204,74 @@ class OKEXApi:
         return balances
 
     # Trading: Retrieves currently open orders, sorted newest first.
-    def get_orders(self, pair: str, number_of_orders=100) -> List[Order]:
+    def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
-        assert(isinstance(number_of_orders, int))
 
-        orders = []
-        pages = math.ceil(number_of_orders/100)
-        for page in range(pages):
-            print(f"requesting page {page}")
-            # FIXME: Cursor not working properly
-            result = self._http_get("/api/spot/v3/orders_pending",
-                                    #f"limit=2&from=1&to=4"
-                                    f"&instrument_id={pair}")
-            if len(result) > 0:
-                orders += list(map(self._parse_order, result))
-            else:
-                break
+        result = self._http_get("/api/spot/v3/orders_pending",
+                                f"&instrument_id={pair}",
+                                has_cursor=False)
 
-        return orders[:number_of_orders]
+        return list(map(self._parse_order, result))
 
     # Trading: Retrieves order list for a particular pair, newest first.
-    def get_orders_history(self, pair: str, number_of_orders: int) -> List[Order]:
+    # FIXME: Cursor data in response headers is broken.
+    # Ed sent email to OKEX on 2019.03.08 seeking guidance.
+    # def get_orders_history_with_cursor(self, pair: str, number_of_orders: int) -> List[Order]:
+    #     assert(isinstance(pair, str))
+    #     assert(isinstance(number_of_orders, int))
+    #
+    #     page_size = 100  # Useful for debugging
+    #     orders = []
+    #     cursor = None
+    #     pages = math.ceil(number_of_orders/page_size)
+    #     print(f"querying {pages} pages of order history")
+    #     for page in range(pages):
+    #         if not cursor:  # initial request, to get cursor
+    #             print(f"querying page {page} (initial request)")
+    #             response = self._http_get("/api/spot/v3/orders",
+    #                                       f"status=all"
+    #                                       f"&instrument_id={pair}"
+    #                                       f"&limit={page_size}&from=0",
+    #                                       has_cursor=True)
+    #         else:           # subsequent requests
+    #             print(f"querying page {page}")  # (from {cursor['before']})")
+    #             response = self._http_get("/api/spot/v3/orders",
+    #                                       f"status=all"
+    #                                       f"&instrument_id={pair}"
+    #                                       f"&limit={page_size+1}&from={cursor['to']}",
+    #                                       has_cursor=True)
+    #         result = response[0][:page_size]
+    #         cursor = response[1]
+    #         print(f"{len(result)} orders received, cursor_info {cursor}")
+    #         if cursor and cursor['before'] == cursor['after']:
+    #             print("breaking loop; cursor before==after")
+    #             break
+    #         if len(result) > 0:
+    #             new_orders = list(map(self._parse_order, result))
+    #             for order in new_orders:
+    #                 order.page = page
+    #             orders += new_orders
+    #         else:
+    #             break
+    #
+    #     return orders[:number_of_orders]
+
+    # Trading: Retrieves 100 most recent orders for a particular pair, newest first.
+    def get_orders_history(self, pair: str, number_of_orders: int, status="all") -> List[Order]:
         assert(isinstance(pair, str))
         assert(isinstance(number_of_orders, int))
+        assert(number_of_orders <= 100)
+        assert(status in ("all", "open", "part_filled", "canceling", "filled",
+                          "cancelled", "ordering", "failure"))
 
-        # TODO: Implement optional status filter
-        #assert(status in ("all", "open", "part_filled", "canceling", "filled",
-        #                  "cancelled", "ordering", "failure"))
+        result = self._http_get("/api/spot/v3/orders",
+                                f"status={status}&instrument_id={pair}&limit={number_of_orders}",
+                                has_cursor=False)
+        if len(result) > 0:
+            orders = list(map(self._parse_order, result))
 
-        orders = []
-        pages = math.ceil(number_of_orders/100)
-        print(f"querying {pages} pages of order history")
-        for page in range(pages):
-            print(f"querying page {page}")
-            # FIXME: Cursor not working properly
-            result = self._http_get("/api/spot/v3/orders",
-                                    f"status=all"
-                                    f"&instrument_id={pair}")
-                                    #f"&limit=100&from={page}")
-            if len(result) > 0:
-                orders += list(map(self._parse_order, result))
-            else:
-                break
-
+        # HACK: Server is not sorting properly.
+        orders.sort(key=lambda order: -order.timestamp)
         return orders[:number_of_orders]
 
     # Trading: Submits and awaits acknowledgement of a limit order,
@@ -265,7 +290,8 @@ class OKEXApi:
             'type': 'limit',
             'side': 'sell' if is_sell else 'buy',
             'price': float(price),
-            'size': float(amount)
+            'size': float(amount),
+            'margin': 0
         })
         print(result)
         order_id = int(result['order_id'])
@@ -294,13 +320,30 @@ class OKEXApi:
 
         return success
 
-    # TODO: Trading: Retrieves executions for our own orders.
-    def get_trades(self, pair: str, page_number: int = 1):
+    # Trading: Retrieves most recent 100 filled or partially filled orders for a pair.
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
-        raise Exception("get_trades() not available for OKEX")
+        assert(page_number==1)
 
-    # Market data: Retrieves prints for a pair across all market participants.
+        result = self._http_get("/api/spot/v3/orders",
+                                f"status=filled&instrument_id={pair}",
+                                has_cursor=False)
+        result += self._http_get("/api/spot/v3/orders",
+                                f"status=part_filled&instrument_id={pair}",
+                                has_cursor=False)
+
+        trades = list(map(lambda item: Trade(trade_id=item['order_id'],
+                                             timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
+                                             is_sell=item['side'] == 'sell',
+                                             price=Wad.from_number(item['price']),
+                                             amount=Wad.from_number(item['size']),
+                                             amount_symbol=item['instrument_id'].split('-')[0].lower()), result))
+
+        trades.sort(key=lambda trade: -trade.timestamp)
+        return trades
+
+    # Market data: Retrieves most recent 100 prints for a pair across all market participants.
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
@@ -344,7 +387,8 @@ class OKEXApi:
             raise Exception(f"OKCoin API invalid JSON response: {http_response_summary(response)}")
 
         if check_result:
-            if response.status_code is not 200:
+            # OKEX sample code suggests other HTTP success statuses may occur.
+            if not str(response.status_code).startswith('2'):
                 raise Exception(f"OKCoin API negative response: {http_response_summary(response)}")
 
             if 'error_code' in data:
@@ -354,10 +398,12 @@ class OKEXApi:
             #     raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
 
         if has_cursor:
+            # FIXME: These don't return useful values
             cursor_info = {
-                'before': response.headers['OK-BEFORE'],
-                'after': response.headers['OK-AFTER']}
-            print(f"found cursor_info {cursor_info}")
+                'before': response.headers.get('OK-BEFORE', 0),
+                'after': response.headers.get('OK-AFTER', 0),
+                'from': response.headers.get('OK-FROM', 0),
+                'to': response.headers.get('OK-TO', 0)}
             return data, cursor_info
         else:
             return data
@@ -392,7 +438,7 @@ class OKEXApi:
             "OK-ACCESS-TIMESTAMP": timestamp,
             "OK-ACCESS-PASSPHRASE": self.password
         }
-        print(f"url: {request_path}")
+        #print(f"url: {request_path}")
         #print(f"headers: {headers}")
         return headers
 
@@ -407,7 +453,7 @@ class OKEXApi:
         else:
             request = resource
 
-        #print(f"HTTP GET {request}")
+        print(f"HTTP GET {request}")
         return self._result(
             requests.get(url=f"{self.api_server}{request}",
                          headers=self._create_http_headers("GET", request, ""),

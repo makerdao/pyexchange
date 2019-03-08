@@ -23,9 +23,10 @@ from pyexchange.okex import OKEXApi
 
 
 okex = OKEXApi(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], 15.5)
+print(sys.argv)
 print("OKEXApi created\n")
 
-#pair = "eth_usdt"
+
 pair = "mkr_btc"
 l1 = okex.ticker(pair)
 print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
@@ -44,34 +45,76 @@ print(f"MKR: {balances['MKR']}")
 #print(f"USDT: {balances['USDT']}")
 print()
 
+# {
+#     "base_currency": "MKR",
+#     "base_increment": "0.000001",
+#     "base_min_size": "0.001",
+#     "instrument_id": "MKR-BTC",
+#     "min_size": "0.001",
+#     "product_id": "MKR-BTC",
+#     "quote_currency": "BTC",
+#     "quote_increment": "0.00000001",
+#     "size_increment": "0.000001",
+#     "tick_size": "0.00000001"
+# },
 
-# response = okex.place_order(pair, False,
-#                             Wad.from_number(0.00222),
-#                             Wad.from_number(0.0153))
+# price in terms of quote currency (BTC), size in terms of base currency (MKR)
+# response = okex.place_order(pair, True, Wad.from_number(0.180), Wad.from_number(0.1))
 # print(response)
 #2435596605531136 was never found
 #print(okex.cancel_order(pair, "2437343317788672"))
 #2437343317788672 buy  0.0153000 at 0.0022200000 on 2019-03-07 07:48:28
+#2446198020705280
 
 def print_orders(orders):
-    for order in orders:
+    print(f"received {len(orders)} orders")
+    for index, order in enumerate(orders):
         side = "sell" if order.is_sell else "buy "
-        print(f"{order.order_id} {side} {str(order.amount)[:9]} "
+        print(f"[{index}] {order.order_id} {side} {str(order.amount)[:9]} "
               f"at {str(order.price)[:12]} "
+              f"on {datetime.datetime.utcfromtimestamp(order.timestamp)} ")
+              #f"page {order.page}")
+
+def check_orders(orders):
+    by_oid = {}
+    duplicate_count = 0
+    duplicate_first_found = -1
+    missorted_found = False
+    last_order_timestamp = 0
+    for index, order in enumerate(orders):
+        if order.order_id in by_oid:
+            duplicate_count += 1
+            if duplicate_first_found < 0:
+                duplicate_first_found = index
+        else:
+            by_oid[order.order_id] = order
+            if not missorted_found and last_order_timestamp > 0:
+                if order.timestamp > last_order_timestamp:
+                    print(f"missorted order found at index {index}")
+                    missorted_found = True
+            last_order_timestamp = order.timestamp
+    if duplicate_count > 0:
+        print(f"{duplicate_count} duplicate orders were found, "
+              f"starting at index {duplicate_first_found}")
+    else:
+        print("no duplicates were found")
+
+def print_trades(trades):
+    for order in trades:
+        side = "sell" if order.is_sell else "buy "
+        print(f"{side} {str(order.amount)[:9]} {order.amount_symbol} "
+              f"at {str(order.price)[:12]} "
+              f"{pair.split('_')[1]} "
               f"on {datetime.datetime.utcfromtimestamp(order.timestamp)}")
 
-
 # Gets open orders
-#_orders = okex.get_orders(pair, 222)
+# orders = okex.get_orders(pair)
 # Gets all orders
-_orders = okex.get_orders_history(pair, 9)
-print_orders(_orders)
+# orders = okex.get_orders_history(pair, 22, 'filled')
+# print_orders(orders)
+# check_orders(orders)
 
-#trades = okex.get_all_trades(pair)[:-22]
-#for order in trades:
-#    side = "sell" if order.is_sell else "buy "
-#    print(f"{side} {str(order.amount)[:9]} {order.amount_symbol} "
-#          f"at {str(order.price)[:12]} "
-#          f"on {datetime.datetime.utcfromtimestamp(order.timestamp)}")
-
+#trades = okex.get_trades(pair)
+trades = okex.get_all_trades(pair)
+print_trades(trades)
 
