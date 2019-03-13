@@ -165,7 +165,7 @@ class OKEXApi:
         assert(isinstance(pair, str))
         assert(isinstance(granularity, str))
 
-        # Note only these granularities are supported by OKEX API
+        # Only these granularities are supported by OKEX API
         granularity_in_seconds = {
             "1min": 60,
             "3min": 180,
@@ -195,7 +195,7 @@ class OKEXApi:
 
     # Account: Get available and frozen balances for each token
     def get_balances(self) -> dict:
-        result = self._http_get("/api/account/v3/wallet", "")
+        result = self._http_get("/api/account/v3/wallet", "", requires_auth=True)
 
         balances = {}
         for balance in result:
@@ -209,7 +209,7 @@ class OKEXApi:
 
         result = self._http_get("/api/spot/v3/orders_pending",
                                 f"&instrument_id={pair}",
-                                has_cursor=False)
+                                requires_auth=True, has_cursor=False)
 
         return list(map(self._parse_order, result))
 
@@ -266,7 +266,7 @@ class OKEXApi:
 
         result = self._http_get("/api/spot/v3/orders",
                                 f"status={status}&instrument_id={pair}&limit={number_of_orders}",
-                                has_cursor=False)
+                                requires_auth=True, has_cursor=False)
         if len(result) > 0:
             orders = list(map(self._parse_order, result))
 
@@ -328,10 +328,10 @@ class OKEXApi:
 
         result = self._http_get("/api/spot/v3/orders",
                                 f"status=filled&instrument_id={pair}",
-                                has_cursor=False)
+                                requires_auth=True, has_cursor=False)
         result += self._http_get("/api/spot/v3/orders",
                                 f"status=part_filled&instrument_id={pair}",
-                                has_cursor=False)
+                                requires_auth=True, has_cursor=False)
 
         trades = list(map(lambda item: Trade(trade_id=item['order_id'],
                                              timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
@@ -353,7 +353,7 @@ class OKEXApi:
         # equivalent with the v1 behavior, or actually do something
         # meaningful with the page_number.
         result = self._http_get(f"/api/spot/v3/instruments/{pair}/trades",
-                                f"symbol={pair}", False)
+                                f"symbol={pair}", requires_auth=True, has_cursor=False)
         return list(map(lambda item: Trade(trade_id=item['trade_id'],
                                            timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
                                            is_sell=item['side'] == 'sell',
@@ -443,9 +443,10 @@ class OKEXApi:
         return headers
 
     def _http_get(self, resource: str, params: str,
-                  check_result=True, has_cursor=False):
+                  check_result=True, requires_auth=False, has_cursor=False):
         assert(isinstance(resource, str))
         assert(isinstance(params, str))
+        assert(isinstance(requires_auth, bool))
         assert(isinstance(check_result, bool))
 
         if params:
@@ -453,15 +454,16 @@ class OKEXApi:
         else:
             request = resource
 
-        print(f"HTTP GET {request}")
+        #print(f"HTTP GET {request}")
         return self._result(
             requests.get(url=f"{self.api_server}{request}",
-                         headers=self._create_http_headers("GET", request, ""),
+                         headers=self._create_http_headers("GET", request, "") if requires_auth else None,
                          timeout=self.timeout), check_result, has_cursor)
 
     def _http_post(self, resource: str, params: dict, has_cursor=False):
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
+        # Auth headers are required for all POST requests
 
         #print(f"HTTP POST {resource} {json.dumps(params)}")
         return self._result(
