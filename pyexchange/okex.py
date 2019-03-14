@@ -24,7 +24,6 @@ import datetime
 import dateutil.parser
 import hmac
 import json
-import math
 import requests
 
 from pyexchange.model import Candle
@@ -61,11 +60,11 @@ class Order:
 
     @property
     def remaining_buy_amount(self) -> Wad:
-        return (self.amount - self.deal_amount)*self.price if self.is_sell else (self.amount - self.deal_amount)
+        return (self.amount - self.filled_amount)*self.price if self.is_sell else (self.amount - self.filled_amount)
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        return (self.amount - self.deal_amount) if self.is_sell else (self.amount - self.deal_amount)*self.price
+        return (self.amount - self.filled_amount) if self.is_sell else (self.amount - self.filled_amount)*self.price
 
     def __eq__(self, other):
         assert(isinstance(other, Order))

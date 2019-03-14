@@ -27,22 +27,22 @@ print(sys.argv)
 print("OKEXApi created\n")
 
 
-pair = "mkr_btc"
+pair = "mkr_usdt"
 l1 = okex.ticker(pair)
-# print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
-# book = okex.depth(pair)
-# print(f"bids: {book['bids'][0:3]}")
-# print(f"asks: {book['asks'][0:3]}")
-# print(okex.candles(pair, '1min')[0:3])
+print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
+book = okex.depth(pair)
+print(f"bids: {book['bids'][0:3]}")
+print(f"asks: {book['asks'][0:3]}")
+#print(okex.candles(pair, '1min')[0:3])
 print()
 
 balances = okex.get_balances()
 #print(balances)
 print(f"BTC: {balances['BTC']}")
+print(f"USDT: {balances['USDT']}")
 print(f"ETH: {balances['ETH']}")
 print(f"MKR: {balances['MKR']}")
 #print(f"USDC: {balances['USDC']}")
-#print(f"USDT: {balances['USDT']}")
 print()
 
 # {
@@ -58,13 +58,11 @@ print()
 #     "tick_size": "0.00000001"
 # },
 
-# price in terms of quote currency (BTC), size in terms of base currency (MKR)
-# response = okex.place_order(pair, True, Wad.from_number(0.180), Wad.from_number(0.1))
-# print(response)
-#2435596605531136 was never found
-#print(okex.cancel_order(pair, "2437343317788672"))
-#2437343317788672 buy  0.0153000 at 0.0022200000 on 2019-03-07 07:48:28
-#2446198020705280
+# price in terms of quote currency (USDT), size in terms of base currency (MKR)
+#response = okex.place_order(pair, True, Wad.from_number(633.4), Wad.from_number(0.15))
+#print(response)
+#print(okex.cancel_order(pair, "2480792880026624"))
+
 
 def print_orders(orders):
     print(f"received {len(orders)} orders")
@@ -72,8 +70,9 @@ def print_orders(orders):
         side = "sell" if order.is_sell else "buy "
         print(f"[{index}] {order.order_id} {side} {str(order.amount)[:9]} "
               f"at {str(order.price)[:12]} "
-              f"on {datetime.datetime.utcfromtimestamp(order.timestamp)} ")
-              #f"page {order.page}")
+              f"on {datetime.datetime.utcfromtimestamp(order.timestamp)} "
+              + f"with {order.filled_amount} filled" if order.filled_amount else "unfilled")
+        #f"page {order.page}")
 
 def check_orders(orders):
     by_oid = {}
@@ -133,14 +132,14 @@ def check_trades(trades):
 
 
 # Gets open orders
-# orders = okex.get_orders(pair)
+orders = okex.get_orders(pair)
 # Gets all orders
-#orders = okex.get_orders_history(pair, 22, 'filled')
-# print_orders(orders)
-# check_orders(orders)
+#orders = okex.get_orders_history(pair, 9)
+print_orders(orders)
+check_orders(orders)
 
-#trades = okex.get_trades(pair)
-trades = okex.get_all_trades(pair)
-print_trades(trades)
+trades = okex.get_trades(pair)
+#trades = okex.get_all_trades(pair)
+print_trades(trades[:9])
 check_trades(trades)
 
