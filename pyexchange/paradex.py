@@ -36,14 +36,14 @@ from pymaker.zrxv2 import ZrxExchangeV2
 
 class Order:
     def __init__(self,
-                 order_id: int,
+                 order_id: str,
                  pair: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad,
                  amount_remaining: Wad):
 
-        assert(isinstance(order_id, int))
+        assert(isinstance(order_id, str))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -86,7 +86,7 @@ class Trade:
                  price: Wad,
                  amount: Wad,
                  money: Wad):
-        assert(isinstance(trade_id, int))
+        assert(isinstance(trade_id, str))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
@@ -147,38 +147,43 @@ class ParadexApi:
         self.last_nonce = 0
         self.last_nonce_lock = threading.Lock()
 
+        self.secret = None
+
     def verify_address(self):
         return self._http_post_signed("/v0/verifyAddress", {})
 
     def ticker(self, pair: str):
         assert(isinstance(pair, str))
-        return self._http_get("/v0/ticker", f"market={pair}")
+        return self._http_get("/v1/ticker", f"market={pair}")
 
     def get_markets(self):
-        return self._http_get("/v0/markets", f"")
+        return self._http_get("/v1/markets", f"")
+
+    def init_secret(self):
+        self.secret = self._http_post_signed("/v1/generate_secret", {})['secret']
 
     def get_balances(self):
-        return self._http_post("/v0/balances", {})
+        return self._http_post_signed("/v1/get_balances", {})
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
         per_page = 100
 
-        orders_open = self._http_post(f"/v0/orders?per_page={per_page}", {
+        orders_open = self._http_post_signed(f"/v1/get_orders?per_page={per_page}", {
             'market': pair,
             'state': 'open'
-        })
+        })['orders']
 
-        orders_unfunded = self._http_post(f"/v0/orders?per_page={per_page}", {
+        orders_unfunded = self._http_post_signed(f"/v1/get_orders?per_page={per_page}", {
             'market': pair,
             'state': 'unfunded'
-        })
+        })['orders']
 
-        orders_unknown = self._http_post(f"/v0/orders?per_page={per_page}", {
+        orders_unknown = self._http_post_signed(f"/v1/get_orders?per_page={per_page}", {
             'market': pair,
             'state': 'unknown'
-        })
+        })['orders']
 
         if len(orders_open) >= per_page:
             raise Exception(f"Unable to get all 'open' orders as we are hitting the per_page={per_page} limit")
@@ -189,7 +194,7 @@ class ParadexApi:
         if len(orders_unknown) >= per_page:
             raise Exception(f"Unable to get all 'unknown' orders as we are hitting the per_page={per_page} limit")
 
-        return list(map(lambda item: Order(order_id=int(item['id']),
+        return list(map(lambda item: Order(order_id=item['id'],
                                            pair=pair,
                                            is_sell=item['type'] == 'sell',
                                            price=Wad.from_number(item['price']),
@@ -210,7 +215,7 @@ class ParadexApi:
         self.logger.info(f"Placing order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
                          f" price {price})...")
 
-        order_params = self._http_post_signed("/v0/orderParams", {
+        order_params = self._http_post_signed("/v1/order_params", {
             'market': pair,
             'orderType': 'sell' if is_sell else 'buy',
             'price': str(price),
@@ -222,7 +227,7 @@ class ParadexApi:
         order = self.zrx_exchange.sign_order(order)
         fee = self._calculate_fee(is_sell, price, amount, order)
 
-        result = self._http_post_signed("/v0/order", {**order.to_json(), **{'feeId': order_params['fee']['id']}})
+        result = self._http_post_signed("/v1/order", {**order.to_json(), **{'feeId': order_params['fee']['id']}})
         order_id = result['id']
 
         self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
@@ -230,15 +235,28 @@ class ParadexApi:
 
         return order_id
 
-    def cancel_order(self, order_id: int) -> bool:
-        assert(isinstance(order_id, int))
+    def cancel_order(self, order_id: str) -> bool:
+        assert(isinstance(order_id, str))
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        result = self._http_post_signed("/v0/orderCancel", {
-            'id': order_id
-        })
-        success = result['status']
+        our_nonce = self._choose_nonce()
+
+        result = self._result(requests.post(url=f"{self.api_server}/v1/cancel_orders",
+                                            json={
+                                                'nonce': our_nonce,
+                                                'orderIds': [order_id]
+                                            },
+                                            headers={
+                                                "API-KEY": self.api_key,
+                                                "API-SIG": self._create_sig_header({
+                                                    'nonce': our_nonce,
+                                                    'orderIds': order_id
+                                                })
+                                            },
+                                            timeout=self.timeout), our_nonce)
+
+        success = order_id in result['cancelled']
 
         if success:
             self.logger.info(f"Cancelled order #{order_id}")
@@ -251,7 +269,7 @@ class ParadexApi:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
 
-        result = self._http_post("/v0/trades", {
+        result = self._http_post_signed("/v1/get_trades", {
             'market': pair,
             'page': page_number,
             'per_page': 100
@@ -259,7 +277,7 @@ class ParadexApi:
 
         result = filter(lambda item: item['state'] == 'confirmed', result)
 
-        trades = list(map(lambda item: Trade(trade_id=int(item['id']),
+        trades = list(map(lambda item: Trade(trade_id=item['id'],
                                              timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
                                              pair=pair,
                                              is_sell=item['type'] == 'sell',
@@ -273,11 +291,11 @@ class ParadexApi:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
 
-        result = self._http_get("/v0/tradeHistory", f"market={pair}&page={page_number}&per_page=50")['trades']
+        result = self._http_get("/v1/trade_history", f"market={pair}&page={page_number}&per_page=50")['trades']
 
         result = filter(lambda item: item['state'] == 'confirmed', result)
 
-        return list(map(lambda item: Trade(trade_id=int(item['id']),
+        return list(map(lambda item: Trade(trade_id=item['id'],
                                            timestamp=int(dateutil.parser.parse(item['created']).timestamp()),
                                            pair=pair,
                                            is_sell=item['type'] == 'sell',
@@ -346,7 +364,8 @@ class ParadexApi:
             values += str(params[key])
 
         message = bytes(keys + values, 'utf-8')
-        return eth_sign(message, self.zrx_exchange.web3)
+
+        return eth_sign(message, self.zrx_exchange.web3, self.secret)
 
     def _create_sig_header(self, params: dict):
         assert(isinstance(params, dict))
