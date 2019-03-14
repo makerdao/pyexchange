@@ -29,7 +29,7 @@ print("OKEXApi created\n")
 
 pair = "mkr_btc"
 l1 = okex.ticker(pair)
-print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
+# print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
 # book = okex.depth(pair)
 # print(f"bids: {book['bids'][0:3]}")
 # print(f"asks: {book['asks'][0:3]}")
@@ -80,7 +80,7 @@ def check_orders(orders):
     duplicate_count = 0
     duplicate_first_found = -1
     missorted_found = False
-    last_order_timestamp = 0
+    last_timestamp = 0
     for index, order in enumerate(orders):
         if order.order_id in by_oid:
             duplicate_count += 1
@@ -88,11 +88,11 @@ def check_orders(orders):
                 duplicate_first_found = index
         else:
             by_oid[order.order_id] = order
-            if not missorted_found and last_order_timestamp > 0:
-                if order.timestamp > last_order_timestamp:
+            if not missorted_found and last_timestamp > 0:
+                if order.timestamp > last_timestamp:
                     print(f"missorted order found at index {index}")
                     missorted_found = True
-            last_order_timestamp = order.timestamp
+            last_timestamp = order.timestamp
     if duplicate_count > 0:
         print(f"{duplicate_count} duplicate orders were found, "
               f"starting at index {duplicate_first_found}")
@@ -100,21 +100,47 @@ def check_orders(orders):
         print("no duplicates were found")
 
 def print_trades(trades):
-    for order in trades:
-        side = "sell" if order.is_sell else "buy "
-        print(f"{side} {str(order.amount)[:9]} {order.amount_symbol} "
-              f"at {str(order.price)[:12]} "
+    for trade in trades:
+        side = "sell" if trade.is_sell else "buy "
+        print(f"{side} {str(trade.amount)[:9]} {trade.amount_symbol} "
+              f"at {str(trade.price)[:12]} "
               f"{pair.split('_')[1]} "
-              f"on {datetime.datetime.utcfromtimestamp(order.timestamp)}")
+              f"on {datetime.datetime.utcfromtimestamp(trade.timestamp)}")
+        
+def check_trades(trades):
+    by_tradeid = {}
+    duplicate_count = 0
+    duplicate_first_found = -1
+    missorted_found = False
+    last_timestamp = 0
+    for index, trade in enumerate(trades):
+        if trade.trade_id in by_tradeid:
+            duplicate_count += 1
+            if duplicate_first_found < 0:
+                duplicate_first_found = index
+        else:
+            by_tradeid[trade.trade_id] = trade
+            if not missorted_found and last_timestamp > 0:
+                if trade.timestamp > last_timestamp:
+                    print(f"missorted trade found at index {index}")
+                    missorted_found = True
+                last_timestamp = trade.timestamp
+    if duplicate_count > 0:
+        print(f"{duplicate_count} duplicate trades were found, "
+              f"starting at index {duplicate_first_found}")
+    else:
+        print("no duplicates were found")
+
 
 # Gets open orders
 # orders = okex.get_orders(pair)
 # Gets all orders
-# orders = okex.get_orders_history(pair, 22, 'filled')
+#orders = okex.get_orders_history(pair, 22, 'filled')
 # print_orders(orders)
 # check_orders(orders)
 
 #trades = okex.get_trades(pair)
 trades = okex.get_all_trades(pair)
 print_trades(trades)
+check_trades(trades)
 

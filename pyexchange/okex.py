@@ -324,7 +324,7 @@ class OKEXApi:
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
-        assert(page_number==1)
+        assert(page_number == 1)
 
         result = self._http_get("/api/spot/v3/orders",
                                 f"status=filled&instrument_id={pair}",
@@ -353,7 +353,7 @@ class OKEXApi:
         # equivalent with the v1 behavior, or actually do something
         # meaningful with the page_number.
         result = self._http_get(f"/api/spot/v3/instruments/{pair}/trades",
-                                f"symbol={pair}", requires_auth=True, has_cursor=False)
+                                f"symbol={pair}", requires_auth=False, has_cursor=False)
         return list(map(lambda item: Trade(trade_id=item['trade_id'],
                                            timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
                                            is_sell=item['side'] == 'sell',
