@@ -194,7 +194,7 @@ class OKEXApi:
 
     # Account: Get available and frozen balances for each token
     def get_balances(self) -> dict:
-        result = self._http_get("/api/account/v3/wallet", "", requires_auth=True)
+        result = self._http_get("/api/spot/v3/accounts", "", requires_auth=True)
 
         balances = {}
         for balance in result:
@@ -371,8 +371,7 @@ class OKEXApi:
                      amount=Wad.from_number(item['size']),
                      filled_amount=Wad.from_number(item['filled_size']))
 
-    # TODO: Adjust the error messages
-    # Handles the response of an HTTP GET or POST request
+    # Interprets the response to an HTTP GET or POST request
     @staticmethod
     def _result(response, check_result: bool, has_cursor=False) -> dict:
         assert(isinstance(check_result, bool))
@@ -386,15 +385,16 @@ class OKEXApi:
             raise Exception(f"OKCoin API invalid JSON response: {http_response_summary(response)}")
 
         if check_result:
-            # OKEX sample code suggests other HTTP success statuses may occur.
-            if not str(response.status_code).startswith('2'):
-                raise Exception(f"OKCoin API negative response: {http_response_summary(response)}")
-
             if 'error_code' in data:
                 raise Exception(f"OKCoin API negative response: {http_response_summary(response)}")
             # 'result' only shows up in response when placing or cancelling an order
             # if 'result' not in data or data['result'] is not True:
             #     raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
+
+        # This code may be uncommented to prepare JSON samples for unit tests.
+        file = open(f"okex-response-dump-{datetime.datetime.now().strftime('%Y%m%d_%H%M%S%f')}.json", "w")
+        file.write(json.dumps(data))
+        file.close()
 
         if has_cursor:
             # FIXME: These don't return useful values
