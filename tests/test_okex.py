@@ -1,21 +1,32 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2019 Liquidity Providers LLC
+# Copyright (C) 2019 EdNoepel
 #
-# This program is distributed WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import json
-import pytest
+import os
 import re
 import time
 
 from pymaker import Wad
 from pyexchange.model import Candle
 from pyexchange.okex import Order
+from pyexchange.okex import Trade
 from pyexchange.okex import OKEXApi
 
-
+# Models HTTP response, produced by OkexMockServer
 class MockedResponse:
     def __init__(self, text: str, status_code=200):
         assert (isinstance(text, str))
@@ -28,19 +39,62 @@ class MockedResponse:
     def json(self, **kwargs):
         return json.loads(self.text)
 
-
+# Determines response to provide based on the requested URL
 class OkexMockServer:
+    # Read JSON responses from a pipe-delimited file, avoiding JSON-inside-JSON parsing complexities
+    responses = {}
+    cwd = os.path.dirname(os.path.realpath(__file__))
+    response_file_path = os.path.join(cwd, "mock/okex-api-responses")
+    with open(response_file_path, 'r') as file:
+        for line in file:
+            kvp = line.split("|")
+            assert(len(kvp) == 2)
+            responses[kvp[0]] = kvp[1]
+
     @staticmethod
-    def handle_request(*args, **kwargs):
+    def handle_request(**kwargs):
+        assert("url" in kwargs)
         url = kwargs["url"]
+        if "data" not in kwargs:
+            return OkexMockServer.handle_get(url)
+        else:
+            return OkexMockServer.handle_post(url, kwargs["data"])
+
+    @staticmethod
+    def handle_get(url: str):
+        # Parse the URL to determine which piece of canned data to return
         if re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/ticker", url):
-            return MockedResponse(text="""{"best_ask": "685.8", "best_bid": "670.9", "instrument_id": "MKR-USDT", "product_id": "MKR-USDT", "last": "664.3", "ask": "685.8", "bid": "670.9", "open_24h": "634.6", "high_24h": "664.3", "low_24h": "632.4", "base_volume_24h": "18.70414704", "timestamp": "2019-03-15T16:04:14.216Z", "quote_volume_24h": "12107.5"}""")
-        if re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/book", url):
-            return MockedResponse(text="""{"asks": [["681.6", "0.82", "1"], ["682.8", "0.00965038", "1"], ["684.3", "0.25513418", "1"], ["684.4", "3.04329713", "1"], ["770", "0.48074256", "2"], ["800", "1.01589065", "1"], ["850.8", "0.12440843", "1"], ["1100", "0.044", "2"], ["1111", "0.0111", "2"], ["1122.2", "0.0011", "1"], ["1190", "0.019", "3"], ["1194", "0.0139", "1"], ["1200", "0.0171", "3"], ["1212", "0.002", "1"], ["1241.5", "0.04272289", "1"], ["1268.9", "0.03", "1"], ["1300", "0.01", "1"], ["1405.8", "0.0681", "1"], ["1500.9", "0.014", "1"], ["1582.1", "0.08809852", "1"], ["1600", "0.014", "1"], ["1773", "0.02", "1"], ["1800", "0.014", "1"], ["1888", "0.004", "1"], ["1910", "0.0426", "1"], ["2000", "0.012", "1"], ["2069", "0.02", "1"], ["2364", "0.02", "1"], ["2865", "0.01424096", "1"], ["3300", "0.0924", "1"], ["3412", "0.02063018", "1"], ["3677.4", "0.0103", "1"], ["4433", "0.02", "1"], ["4775", "0.01424096", "1"], ["4795.1", "0.002", "1"], ["6480.2", "0.102", "1"], ["7389", "0.02", "1"], ["8600", "0.0106", "1"], ["9550", "0.01424096", "1"], ["10000", "0.0522946", "2"], ["14778", "0.03529871", "1"], ["88888", "0.01", "1"], ["95499.2", "0.01424096", "1"], ["888888", "0.01", "1"]], "bids": [["668.9", "0.17918239", "1"], ["668.8", "0.26806549", "2"], ["668.2", "0.86", "1"], ["667", "0.42750058", "1"], ["666.2", "1.075", "1"], ["665.4", "0.944", "1"], ["665.3", "1.129", "1"], ["665.2", "0.912", "1"], ["665.1", "1.023", "1"], ["665", "0.934", "1"], ["664.9", "1.0203", "1"], ["664.7", "0.948", "1"], ["664.3", "1.023", "1"], ["664", "0.95", "1"], ["663.3", "0.48321201", "1"], ["662.8", "0.36999723", "1"], ["657.6", "0.45620438", "1"], ["657.3", "0.074987", "1"], ["645.9", "0.0774", "1"], ["635.7", "0.43259399", "1"], ["632", "0.00004233", "1"], ["629.7", "0.10479752", "1"], ["620.1", "2.71060658", "1"], ["620", "0.01043241", "1"], ["600", "1.7", "1"], ["580", "0.59428732", "1"], ["551.6", "0.89375623", "1"], ["484", "0.21704215", "1"], ["310.5", "0.015", "1"], ["210", "0.00142857", "1"], ["111.2", "0.01", "1"], ["90.3", "0.01", "1"], ["85.8", "0.01", "1"], ["55", "0.0011", "1"], ["44.5", "0.0324463", "2"], ["26.7", "0.00769897", "1"], ["22.2", "0.0459925", "2"], ["14.4", "0.1479", "1"], ["11.6", "16.86671047", "2"], ["10", "0.1", "1"], ["1.7", "8.66033828", "2"], ["1.3", "0.3716", "4"], ["1.2", "0.1932", "16"], ["1.1", "0.0011", "1"], ["1", "21.67516229", "6"], ["0.7", "14.28571428", "1"], ["0.2", "29.534", "2"], ["0.1", "140", "3"], ["0", "93618.67383177", "18"]], "timestamp": "2019-03-15T18:20:35.148Z"}""")
-        if re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/candles", url):
-            return MockedResponse(text="""[["2019-03-15T18:42:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:41:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:40:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:39:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:38:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:37:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:36:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:35:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:34:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:33:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:32:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:31:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:30:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:29:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:28:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:27:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:26:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:25:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:24:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:23:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:22:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:21:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:20:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:19:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:18:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:17:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:16:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:15:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:14:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:13:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:12:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:11:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:10:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:09:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:08:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:07:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:06:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:05:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:04:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:03:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:02:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:01:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T18:00:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:59:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:58:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:57:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:56:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:55:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:54:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:53:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:52:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:51:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:50:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:49:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:48:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:47:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:46:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:45:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:44:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:43:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:42:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:41:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:40:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:39:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:38:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:37:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:36:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:35:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:34:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:33:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:32:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:31:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:30:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:29:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:28:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:27:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:26:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:25:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:24:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:23:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:22:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:21:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:20:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:19:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:18:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:17:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:16:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:15:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:14:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:13:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:12:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:11:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:10:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:09:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:08:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:07:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:06:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:05:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:04:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:03:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:02:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:01:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T17:00:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:59:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:58:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:57:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:56:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:55:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:54:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:53:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:52:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:51:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:50:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:49:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:48:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:47:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:46:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:45:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:44:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:43:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:42:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:41:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:40:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:39:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:38:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:37:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:36:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:35:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:34:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:33:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:32:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:31:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:30:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:29:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:28:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:27:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:26:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:25:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:24:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:23:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:22:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:21:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:20:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:19:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:18:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:17:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:16:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:15:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:14:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:13:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:12:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:11:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:10:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:09:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:08:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:07:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:06:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:05:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:04:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:03:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:02:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:01:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T16:00:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:59:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:58:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:57:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:56:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:55:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:54:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:53:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:52:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:51:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:50:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:49:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:48:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:47:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:46:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:45:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:44:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:43:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:42:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:41:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:40:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:39:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:38:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:37:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:36:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:35:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:34:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:33:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:32:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:31:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:30:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:29:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:28:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:27:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:26:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:25:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:24:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"], ["2019-03-15T15:23:00.000Z", "664.3", "664.3", "664.3", "664.3", "0"]]""")
-        if "/api/spot/v3/accounts" in url:
-            return MockedResponse(text="""[{"frozen": "3.54872691", "hold": "3.54872691", "id": "7326148", "currency": "BTC", "balance": "4.73089325", "available": "1.18216633", "holds": "3.54872691"}, {"frozen": "25.45538912", "hold": "25.45538912", "id": "7326148", "currency": "ETH", "balance": "108.26766691", "available": "82.81227779", "holds": "25.45538912"}, {"frozen": "0", "hold": "0", "id": "7326148", "currency": "USDT", "balance": "10686.52599062", "available": "10686.52599062", "holds": "0"}, {"frozen": "76.21224", "hold": "76.21224", "id": "7326148", "currency": "MKR", "balance": "76.21423835", "available": "0.00199835", "holds": "76.21224"}]""")
+            return MockedResponse(text=OkexMockServer.responses["ticker1"])
+        elif re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/book", url):
+            return MockedResponse(text=OkexMockServer.responses["book1"])
+        elif re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/candles", url):
+            return MockedResponse(text=OkexMockServer.responses["candles1"])
+        elif "/api/spot/v3/accounts" in url:
+            return MockedResponse(text=OkexMockServer.responses["accounts1"])
+        elif "/api/spot/v3/orders_pending" in url:
+            return MockedResponse(text=OkexMockServer.responses["orders1"])
+        elif re.search(r"\/api\/spot\/v3\/orders\?status=[\w_]+&instrument_id=[\w\-_]+&limit=\d+", url):
+            return MockedResponse(text=OkexMockServer.responses["orders2"])
+        # each get_trades call requires two HTTP responses
+        elif re.search(r"\/api\/spot\/v3\/orders\?status=filled&instrument_id=[\w\-_]+", url):\
+            return MockedResponse(text=OkexMockServer.responses["trades1"])
+        elif re.search(r"\/api\/spot\/v3\/orders\?status=part_filled&instrument_id=[\w\-_]+", url):\
+            return MockedResponse(text="[]")
+        elif re.search(r"\/api\/spot\/v3\/instruments\/[\w\-_]+\/trades", url):
+            return MockedResponse(text=OkexMockServer.responses["trades2"])
+        else:
+            raise Exception("Unable to match HTTP GET request to canned response")
+
+    @staticmethod
+    def handle_post(url: str, data):
+        assert(data is not None)
+        if "/api/spot/v3/orders" in url:
+            return MockedResponse(text=OkexMockServer.responses["place_order1"])
+        elif "/api/spot/v3/cancel_orders" in url:
+            return MockedResponse(text=OkexMockServer.responses["cancel_order1"])
+        else:
+            raise Exception("Unable to match HTTP POST request to canned response")
+
 
 class TestOKEX:
     def setup_method(self):
@@ -51,7 +105,6 @@ class TestOKEX:
             password = "password to nonexistant account",
             timeout = 15.5
         )
-        self.pair = "mkr_usdt"
 
     def test_order(self):
         price = Wad.from_number(4.8765)
@@ -61,6 +114,7 @@ class TestOKEX:
             order_id="153153",
             timestamp=int(time.time()),
             pair="MKR-ETH",
+            status="ordering",
             is_sell=False,
             price=price,
             amount=amount,
@@ -72,23 +126,26 @@ class TestOKEX:
         assert(order.remaining_sell_amount == (amount-filled_amount)*price)
 
     def test_ticker(self, mocker):
+        pair = "mkr_usdt"
         mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.ticker(self.pair)
-        assert(str(response["instrument_id"]).lower().replace('-', '_') == self.pair)
+        response = self.okex.ticker(pair)
+        assert(str(response["instrument_id"]).lower().replace('-', '_') == pair)
         assert(float(response["best_ask"]) > 0)
         assert(response["instrument_id"] == response["product_id"])
 
     def test_depth(self, mocker):
+        pair = "mkr_usdt"
         mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.depth(self.pair)
+        response = self.okex.depth(pair)
         assert("bids" in response)
         assert("asks" in response)
         assert(len(response["bids"]) > 0)
         assert(len(response["asks"]) > 0)
 
     def test_candles(self, mocker):
+        pair = "mkr_usdt"
         mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.candles(self.pair, "1min")
+        response = self.okex.candles(pair, "1min")
         assert(len(response) > 0)
         for item in response:
             assert(isinstance(item, Candle))
@@ -104,3 +161,111 @@ class TestOKEX:
         assert(len(response) > 0)
         assert("MKR" in response)
         assert("ETH" in response)
+
+    @staticmethod
+    def check_orders(orders):
+        by_oid = {}
+        duplicate_count = 0
+        duplicate_first_found = -1
+        missorted_found = False
+        last_timestamp = 0
+        for index, order in enumerate(orders):
+            assert(isinstance(order, Order))
+            assert(order.order_id is not None)
+            assert(order.timestamp > 0)
+            # An order cannot be filled for more than the order amount
+            assert(order.filled_amount <= order.amount)
+
+            # Check for duplicates and missorted orders
+            if order.order_id in by_oid:
+                duplicate_count += 1
+                if duplicate_first_found < 0:
+                    duplicate_first_found = index
+            else:
+                by_oid[order.order_id] = order
+                if not missorted_found and last_timestamp > 0:
+                    if order.timestamp > last_timestamp:
+                        print(f"missorted order found at index {index}")
+                        missorted_found = True
+                last_timestamp = order.timestamp
+
+        if duplicate_count > 0:
+            print(f"{duplicate_count} duplicate orders were found, "
+                  f"starting at index {duplicate_first_found}")
+        else:
+            print("no duplicates were found")
+        assert(duplicate_count == 0)
+        assert(missorted_found is False)
+
+    def test_get_orders(self, mocker):
+        pair = "mkr_eth"
+        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        response = self.okex.get_orders(pair)
+        assert (len(response) > 0)
+        for order in response:
+            # Open orders cannot be completed filled
+            assert(order.filled_amount < order.amount)
+            assert(isinstance(order.is_sell, bool))
+            assert(order.price > Wad(0))
+        TestOKEX.check_orders(response)
+
+    def test_get_all_orders(self, mocker):
+        pair = "mkr_eth"
+        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        response = self.okex.get_orders_history(pair, 99)
+        assert (len(response) > 0)
+        for order in response:
+            assert(isinstance(order.is_sell, bool))
+            assert(order.price > Wad(0))
+        TestOKEX.check_orders(response)
+
+    def test_order_placement_and_cancellation(self, mocker):
+        pair = "mkr_usdt"
+        mocker.patch("requests.post", side_effect=OkexMockServer.handle_request)
+        order_id = self.okex.place_order(pair, True, Wad.from_number(639.3), Wad.from_number(0.15))
+        assert(isinstance(order_id, str))
+        assert(order_id is not None)
+        cancel_result = self.okex.cancel_order(pair, order_id)
+        assert(cancel_result)
+
+    @staticmethod
+    def check_trades(trades):
+        by_tradeid = {}
+        duplicate_count = 0
+        duplicate_first_found = -1
+        missorted_found = False
+        last_timestamp = 0
+        for index, trade in enumerate(trades):
+            assert(isinstance(trade, Trade))
+            if trade.trade_id in by_tradeid:
+                duplicate_count += 1
+                if duplicate_first_found < 0:
+                    duplicate_first_found = index
+            else:
+                by_tradeid[trade.trade_id] = trade
+                if not missorted_found and last_timestamp > 0:
+                    if trade.timestamp > last_timestamp:
+                        print(f"missorted trade found at index {index}")
+                        missorted_found = True
+                    last_timestamp = trade.timestamp
+        if duplicate_count > 0:
+            print(f"{duplicate_count} duplicate trades were found, "
+                  f"starting at index {duplicate_first_found}")
+        else:
+            print("no duplicates were found")
+        assert(duplicate_count == 0)
+        assert(missorted_found is False)
+
+    def test_get_trades(self, mocker):
+        pair = "mkr_eth"
+        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        response = self.okex.get_trades(pair)
+        assert (len(response) > 0)
+        TestOKEX.check_trades(response)
+
+    def test_get_all_trades(self, mocker):
+        pair = "mkr_usdt"
+        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        response = self.okex.get_all_trades(pair)
+        assert (len(response) > 0)
+        TestOKEX.check_trades(response)

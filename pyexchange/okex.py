@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017-2018 reverendus
+# Copyright (C) 2017-2019 reverendus and EdNoepel
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -32,11 +32,12 @@ from pymaker.util import http_response_summary
 
 
 class Order:
-    def __init__(self, order_id: str, timestamp: int, pair: str,
+    def __init__(self, order_id: str, timestamp: int, pair: str, status: str,
                  is_sell: bool, price: Wad, amount: Wad, filled_amount: Wad):
         assert(isinstance(order_id, str))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
+        assert(isinstance(status, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
@@ -45,6 +46,7 @@ class Order:
         self.order_id = order_id
         self.timestamp = timestamp
         self.pair = pair
+        self.status = status
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -268,10 +270,11 @@ class OKEXApi:
                                 requires_auth=True, has_cursor=False)
         if len(result) > 0:
             orders = list(map(self._parse_order, result))
-
-        # HACK: Server is not sorting properly.
-        orders.sort(key=lambda order: -order.timestamp)
-        return orders[:number_of_orders]
+            # HACK: Server is not sorting properly.
+            orders.sort(key=lambda order: -order.timestamp)
+            return orders[:number_of_orders]
+        else:
+            return []
 
     # Trading: Submits and awaits acknowledgement of a limit order,
     # returning the order id.
@@ -293,7 +296,7 @@ class OKEXApi:
             'margin': 0
         })
         print(result)
-        order_id = int(result['order_id'])
+        order_id = result['order_id']
 
         self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
                          f" price {price}) as #{order_id}")
@@ -310,7 +313,10 @@ class OKEXApi:
         result = self._http_post(f"/api/spot/v3/cancel_orders/{order_id}", {
             'instrument_id': pair
         })
-        success = int(result['order_id']) == order_id
+        # OKEX API documentation states response should contain a "result" boolean to indicate
+        # success or failure.  This field was not observed during testing.  Failure is trapped
+        # by a HTTP 400 response, as with other requests.
+        success = result['order_id'] == order_id
 
         if success:
             self.logger.info(f"Cancelled order {order_id}")
@@ -366,6 +372,7 @@ class OKEXApi:
         return Order(order_id=item['order_id'],
                      timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
                      pair=item['instrument_id'],
+                     status=item['status'],
                      is_sell=item['side'] == 'sell',
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['size']),
@@ -384,17 +391,14 @@ class OKEXApi:
         except Exception:
             raise Exception(f"OKCoin API invalid JSON response: {http_response_summary(response)}")
 
-        if check_result:
-            if 'error_code' in data:
-                raise Exception(f"OKCoin API negative response: {http_response_summary(response)}")
-            # 'result' only shows up in response when placing or cancelling an order
-            # if 'result' not in data or data['result'] is not True:
-            #     raise Exception(f"OKCoin API negative response: {http_response_summary(result)}")
-
         # This code may be uncommented to prepare JSON samples for unit tests.
-        file = open(f"okex-response-dump-{datetime.datetime.now().strftime('%Y%m%d_%H%M%S%f')}.json", "w")
-        file.write(json.dumps(data))
-        file.close()
+        # file = open(f"okex-response-dump-{datetime.datetime.now().strftime('%Y%m%d_%H%M%S%f')}.json", "w")
+        # file.write(json.dumps(data))
+        # file.close()
+
+        if check_result:
+            if 'error_code' in data and data["error_code"] != 0:
+                raise Exception(f"OKCoin API negative response: {http_response_summary(response)}")
 
         if has_cursor:
             # FIXME: These don't return useful values
