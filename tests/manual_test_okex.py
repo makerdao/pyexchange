@@ -28,38 +28,22 @@ print("OKEXApi created\n")
 
 
 pair = "mkr_usdt"
-#l1 = okex.ticker(pair)
-#print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
-#book = okex.depth(pair)
-#print(f"bids: {book['bids'][0:3]}")
-#print(f"asks: {book['asks'][0:3]}")
+# l1 = okex.ticker(pair)
+# print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
+book = okex.depth(pair)
+print(f"bids: {book['bids'][0:3]}")
+print(f"asks: {book['asks'][0:3]}")
 # print(okex.candles(pair, '1min')[0:3])
-# print()
+print()
 
 balances = okex.get_balances()
-print(f"BTC: {balances['BTC']}")
-print(f"USDT: {balances['USDT']}")
-print(f"ETH: {balances['ETH']}")
-print(f"MKR: {balances['MKR']}")
-# print()
+print(f"Account balances -- USDT: {balances['USDT']}")
+print(f"                     MKR: {balances['MKR']}")
 
-# {
-#     "base_currency": "MKR",
-#     "base_increment": "0.000001",
-#     "base_min_size": "0.001",
-#     "instrument_id": "MKR-BTC",
-#     "min_size": "0.001",
-#     "product_id": "MKR-BTC",
-#     "quote_currency": "BTC",
-#     "quote_increment": "0.00000001",
-#     "size_increment": "0.000001",
-#     "tick_size": "0.00000001"
-# },
 
 # price in terms of quote currency (USDT), size in terms of base currency (MKR)
-# response = okex.place_order(pair, False, Wad.from_number(691.6), Wad.from_number(0.25))
-# print(response)
-print(okex.cancel_order(pair, "2502374107516928"))
+# print(okex.place_order(pair, False, Wad.from_number(699.33), Wad.from_number(0.25)))
+# print(okex.cancel_order(pair, "2502374107516928"))
 
 
 def print_orders(orders):
@@ -83,13 +67,13 @@ def print_trades(trades):
         
 
 # Gets open orders
-#orders = okex.get_orders(pair)
-#print_orders(orders)
+# orders = okex.get_orders(pair)
+# print_orders(orders)
 # Gets all orders
-#orders = okex.get_orders_history(pair, 9, "all")
-#print_orders(orders)
+orders = okex.get_orders_history(pair, 9, "all")
+print_orders(orders)
 
 # trades = okex.get_trades(pair)
-#trades = okex.get_all_trades(pair)
+# trades = okex.get_all_trades(pair)
 # print_trades(trades[:9])
 
