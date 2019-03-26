@@ -25,6 +25,7 @@ import dateutil.parser
 import hmac
 import json
 import requests
+import urllib
 
 from pyexchange.model import Candle
 from pymaker.numeric import Wad
@@ -32,12 +33,11 @@ from pymaker.util import http_response_summary
 
 
 class Order:
-    def __init__(self, order_id: str, timestamp: int, pair: str, status: str,
+    def __init__(self, order_id: str, timestamp: int, pair: str,
                  is_sell: bool, price: Wad, amount: Wad, filled_amount: Wad):
         assert(isinstance(order_id, str))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
-        assert(isinstance(status, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
@@ -46,7 +46,6 @@ class Order:
         self.order_id = order_id
         self.timestamp = timestamp
         self.pair = pair
-        self.status = status
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -214,59 +213,17 @@ class OKEXApi:
 
         return list(map(self._parse_order, result))
 
-    # Trading: Retrieves order list for a particular pair, newest first.
-    # FIXME: Cursor data in response headers is broken.
-    # Ed sent email to OKEX on 2019.03.08 seeking guidance.
-    # def get_orders_history_with_cursor(self, pair: str, number_of_orders: int) -> List[Order]:
-    #     assert(isinstance(pair, str))
-    #     assert(isinstance(number_of_orders, int))
-    #
-    #     page_size = 100  # Useful for debugging
-    #     orders = []
-    #     cursor = None
-    #     pages = math.ceil(number_of_orders/page_size)
-    #     print(f"querying {pages} pages of order history")
-    #     for page in range(pages):
-    #         if not cursor:  # initial request, to get cursor
-    #             print(f"querying page {page} (initial request)")
-    #             response = self._http_get("/api/spot/v3/orders",
-    #                                       f"status=all"
-    #                                       f"&instrument_id={pair}"
-    #                                       f"&limit={page_size}&from=0",
-    #                                       has_cursor=True)
-    #         else:           # subsequent requests
-    #             print(f"querying page {page}")  # (from {cursor['before']})")
-    #             response = self._http_get("/api/spot/v3/orders",
-    #                                       f"status=all"
-    #                                       f"&instrument_id={pair}"
-    #                                       f"&limit={page_size+1}&from={cursor['to']}",
-    #                                       has_cursor=True)
-    #         result = response[0][:page_size]
-    #         cursor = response[1]
-    #         print(f"{len(result)} orders received, cursor_info {cursor}")
-    #         if cursor and cursor['before'] == cursor['after']:
-    #             print("breaking loop; cursor before==after")
-    #             break
-    #         if len(result) > 0:
-    #             new_orders = list(map(self._parse_order, result))
-    #             for order in new_orders:
-    #                 order.page = page
-    #             orders += new_orders
-    #         else:
-    #             break
-    #
-    #     return orders[:number_of_orders]
-
-    # Trading: Retrieves 100 most recent orders for a particular pair, newest first.
-    def get_orders_history(self, pair: str, number_of_orders: int, status="all") -> List[Order]:
+    # Trading: Retrieves 100 most recent orders for a particular pair, newest first, 
+    # which have not been completely filled.
+    def get_orders_history(self, pair: str, number_of_orders: int) -> List[Order]:
         assert(isinstance(pair, str))
         assert(isinstance(number_of_orders, int))
         assert(number_of_orders <= 100)
-        assert(status in ("all", "open", "part_filled", "canceling", "filled",
-                          "cancelled", "ordering", "failure"))
+        # available statuses are: all, open, part_filled, canceling, filled, cancelled, ordering, failure
 
+        statuses = urllib.parse.quote(f"open|part_filled|canceling|filled|cancelled|ordering|failure")
         result = self._http_get("/api/spot/v3/orders",
-                                f"status={status}&instrument_id={pair}&limit={number_of_orders}",
+                                f"status={statuses}&instrument_id={pair}&limit={number_of_orders}",
                                 requires_auth=True, has_cursor=False)
         if len(result) > 0:
             orders = list(map(self._parse_order, result))
@@ -278,7 +235,7 @@ class OKEXApi:
 
     # Trading: Submits and awaits acknowledgement of a limit order,
     # returning the order id.
-    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> int:
+    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -295,7 +252,6 @@ class OKEXApi:
             'size': float(amount),
             'margin': 0
         })
-        print(result)
         order_id = result['order_id']
 
         self.logger.info(f"Placed order ({'SELL' if is_sell else 'BUY'}, amount {amount} of {pair},"
@@ -331,11 +287,9 @@ class OKEXApi:
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
+        statuses = urllib.parse.quote(f"filled|part_filled")
         result = self._http_get("/api/spot/v3/orders",
-                                f"status=filled&instrument_id={pair}",
-                                requires_auth=True, has_cursor=False)
-        result += self._http_get("/api/spot/v3/orders",
-                                f"status=part_filled&instrument_id={pair}",
+                                f"status={statuses}&instrument_id={pair}",
                                 requires_auth=True, has_cursor=False)
 
         trades = list(map(lambda item: Trade(trade_id=item['order_id'],
@@ -372,7 +326,6 @@ class OKEXApi:
         return Order(order_id=item['order_id'],
                      timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
                      pair=item['instrument_id'],
-                     status=item['status'],
                      is_sell=item['side'] == 'sell',
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['size']),
@@ -407,7 +360,7 @@ class OKEXApi:
                 'after': response.headers.get('OK-AFTER', 0),
                 'from': response.headers.get('OK-FROM', 0),
                 'to': response.headers.get('OK-TO', 0)}
-            return data, cursor_info
+            return data #, cursor_info
         else:
             return data
 
@@ -423,7 +376,6 @@ class OKEXApi:
                           bytes(message, encoding="utf-8"),
                           digestmod="sha256").digest()
 
-        #print(f"message is {message}")
         return base64.b64encode(digest)
 
     def _create_http_headers(self, method, request_path, body):
@@ -441,8 +393,6 @@ class OKEXApi:
             "OK-ACCESS-TIMESTAMP": timestamp,
             "OK-ACCESS-PASSPHRASE": self.password
         }
-        #print(f"url: {request_path}")
-        #print(f"headers: {headers}")
         return headers
 
     def _http_get(self, resource: str, params: str,
@@ -457,7 +407,6 @@ class OKEXApi:
         else:
             request = resource
 
-        #print(f"HTTP GET {request}")
         return self._result(
             requests.get(url=f"{self.api_server}{request}",
                          headers=self._create_http_headers("GET", request, "") if requires_auth else None,
@@ -468,9 +417,8 @@ class OKEXApi:
         assert(isinstance(params, dict))
         # Auth headers are required for all POST requests
 
-        #print(f"HTTP POST {resource} {json.dumps(params)}")
         return self._result(
             requests.post(url=f"{self.api_server}{resource}",
-                          data=json.dumps(params),
+                          data=urllib.parse.urlencode(params),
                           headers=self._create_http_headers("POST", resource, json.dumps(params)),
                           timeout=self.timeout), True, has_cursor)

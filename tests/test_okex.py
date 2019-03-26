@@ -73,13 +73,10 @@ class OkexMockServer:
             return MockedResponse(text=OkexMockServer.responses["accounts1"])
         elif "/api/spot/v3/orders_pending" in url:
             return MockedResponse(text=OkexMockServer.responses["orders1"])
-        elif re.search(r"\/api\/spot\/v3\/orders\?status=[\w_]+&instrument_id=[\w\-_]+&limit=\d+", url):
+        elif re.search(r"\/api\/spot\/v3\/orders\?status=[\w_%]+&instrument_id=[\w\-_]+&limit=\d+", url):
             return MockedResponse(text=OkexMockServer.responses["orders2"])
-        # each get_trades call requires two HTTP responses
-        elif re.search(r"\/api\/spot\/v3\/orders\?status=filled&instrument_id=[\w\-_]+", url):\
+        elif re.search(r"\/api\/spot\/v3\/orders\?status=[\w_%]+&instrument_id=[\w\-_]+", url):\
             return MockedResponse(text=OkexMockServer.responses["trades1"])
-        elif re.search(r"\/api\/spot\/v3\/orders\?status=part_filled&instrument_id=[\w\-_]+", url):\
-            return MockedResponse(text="[]")
         elif re.search(r"\/api\/spot\/v3\/instruments\/[\w\-_]+\/trades", url):
             return MockedResponse(text=OkexMockServer.responses["trades2"])
         else:
@@ -114,7 +111,6 @@ class TestOKEX:
             order_id="153153",
             timestamp=int(time.time()),
             pair="MKR-ETH",
-            status="ordering",
             is_sell=False,
             price=price,
             amount=amount,

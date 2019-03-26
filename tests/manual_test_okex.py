@@ -30,11 +30,11 @@ print("OKEXApi created\n")
 pair = "mkr_usdt"
 # l1 = okex.ticker(pair)
 # print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
-book = okex.depth(pair)
-print(f"bids: {book['bids'][0:3]}")
-print(f"asks: {book['asks'][0:3]}")
+# book = okex.depth(pair)
+# print(f"bids: {book['bids'][0:3]}")
+# print(f"asks: {book['asks'][0:3]}")
 # print(okex.candles(pair, '1min')[0:3])
-print()
+# print()
 
 balances = okex.get_balances()
 print(f"Account balances -- USDT: {balances['USDT']}")
@@ -70,10 +70,11 @@ def print_trades(trades):
 # orders = okex.get_orders(pair)
 # print_orders(orders)
 # Gets all orders
-orders = okex.get_orders_history(pair, 9, "all")
-print_orders(orders)
+# orders = okex.get_orders_history(pair, 9, "all")
+# print_orders(orders)
 
-# trades = okex.get_trades(pair)
+trades = okex.get_trades(pair)
+print(trades[:3])
 # trades = okex.get_all_trades(pair)
 # print_trades(trades[:9])
 
