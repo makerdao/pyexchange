@@ -419,6 +419,6 @@ class OKEXApi:
 
         return self._result(
             requests.post(url=f"{self.api_server}{resource}",
-                          data=urllib.parse.urlencode(params),
+                          data=json.dumps(params),
                           headers=self._create_http_headers("POST", resource, json.dumps(params)),
                           timeout=self.timeout), True, has_cursor)
