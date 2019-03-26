@@ -221,7 +221,7 @@ class OKEXApi:
         assert(number_of_orders <= 100)
         # available statuses are: all, open, part_filled, canceling, filled, cancelled, ordering, failure
 
-        statuses = urllib.parse.quote(f"open|part_filled|canceling|filled|cancelled|ordering|failure")
+        statuses = urllib.parse.quote(f"open|part_filled|cancelling|filled|cancelled|ordering|failure")
         result = self._http_get("/api/spot/v3/orders",
                                 f"status={statuses}&instrument_id={pair}&limit={number_of_orders}",
                                 requires_auth=True, has_cursor=False)

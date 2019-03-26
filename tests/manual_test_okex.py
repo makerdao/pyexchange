@@ -51,7 +51,7 @@ def print_orders(orders):
     for index, order in enumerate(orders):
         side = "sell" if order.is_sell else "buy "
         fill_status = f"with {order.filled_amount} filled" if order.filled_amount > Wad(0) else "unfilled"
-        print(f"[{index}] {order.order_id} {order.status:<12} {side} {str(order.amount)[:9]} "
+        print(f"[{index}] {order.order_id} {side} {str(order.amount)[:9]} "
               f"at {str(order.price)[:12]} "
               f"on {datetime.datetime.utcfromtimestamp(order.timestamp)} "
               + fill_status)
@@ -67,14 +67,14 @@ def print_trades(trades):
         
 
 # Gets open orders
-# orders = okex.get_orders(pair)
-# print_orders(orders)
+orders = okex.get_orders(pair)
+print_orders(orders)
 # Gets all orders
-# orders = okex.get_orders_history(pair, 9, "all")
-# print_orders(orders)
+orders = okex.get_orders_history(pair, 9)
+print_orders(orders)
 
-trades = okex.get_trades(pair)
-print(trades[:3])
+#trades = okex.get_trades(pair)
+#print(trades[:3])
 # trades = okex.get_all_trades(pair)
 # print_trades(trades[:9])
 
