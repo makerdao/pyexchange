@@ -21,62 +21,100 @@ from web3 import Web3, HTTPProvider
 
 from pyexchange.tethfinex import TEthfinexToken, TEthfinexApi
 from pymaker import Address, Wad
-from pymaker.keys import register_key_file
-from pymaker.zrx import ZrxExchange
+from pymaker.keys import register_key_file, register_private_key
+from pymaker.zrxv2 import ZrxExchangeV2, Asset
+from pymaker.token import ERC20Token
 
-
+# Infura and own wallet settings
 logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=logging.INFO)
+WEB3_INFURA_API_KEY = "infura project id here"
+INFURA_URL = "https://mainnet.infura.io/v3/" + WEB3_INFURA_API_KEY
+WALLET_ADDRESS = "eth wallet address here"
+WALLET_PRIVATE_KEY = "pkey of eth wallet address here"
 
-web3 = Web3(HTTPProvider("http://localhost:8545", request_kwargs={"timeout": 600}))
-web3.eth.defaultAccount = sys.argv[1]
+# setting Infura provider and import external pkey
+infura_provider = HTTPProvider(INFURA_URL)
+web3 = Web3(infura_provider)
+register_private_key(web3, WALLET_PRIVATE_KEY)
+web3.eth.defaultAccount = WALLET_ADDRESS
 
-EXCHANGE_ADDRESS = Address("0xdcdb42c9a256690bd153a7b409751adfc8dd5851")
-DAI_ADDRESS = Address("0xd9ebebfdab08c643c5f2837632de920c70a56247")
-ETH_ADDRESS = Address("0xaa7427d8f17d87a28f5e1ba3adbb270badbe1011")
-FEE_ADDRESS = Address("0x61b9898c9b60a159fc91ae8026563cd226b7a0c1")
+EXCHANGE_ADDRESS = Address("0x4f833a24e1f95d70f028921e27040ca56e09ab0b")
 
-dai_wrapper = TEthfinexToken(web3, DAI_ADDRESS, "DAI")
-# print(dai_wrapper.balance_of(Address(web3.eth.defaultAccount)))
-# print(dai_wrapper.deposit(Wad.from_number(15)).transact())
-# print(dai_wrapper.balance_of(Address(web3.eth.defaultAccount)))
+zrx_v2_exchange = ZrxExchangeV2(web3=web3, address=EXCHANGE_ADDRESS)
+ethfinex_trustless_api = TEthfinexApi(zrx_v2_exchange, 'https://api.ethfinex.com', 15.5)
 
+ethfinex_symbol = ethfinex_trustless_api.get_symbols()
+ethfinex_config = ethfinex_trustless_api.get_config()['0x']
 
-# ethfinex_trustless = TEthfinexToken(web3, EXCHANGE_ADDRESS)
-zrx_exchange = ZrxExchange(web3=web3, address=EXCHANGE_ADDRESS)
-ethfinex_trustless_api = TEthfinexApi(zrx_exchange, 'https://api.ethfinex.com', 15.5)
-# print(ethfinex_trustless_api.get_symbols())
-# print(ethfinex_trustless_api.get_config())
+ETHFINEX_ADDRESS = Address(ethfinex_config['ethfinexAddress'])
+#EXCHANGE_ADDRESS = Address(ethfinex_config['exchangeAddress'])
 
-# placed_order = ethfinex_trustless_api.place_order(False,
-#                                        DAI_ADDRESS,
-#                                        Wad.from_number(86.4),
-#                                        ETH_ADDRESS,
-#                                        Wad.from_number(0.8),
-#                                        FEE_ADDRESS,
-#                                        "DAIETH")
-# print(f"Placed order {placed_order}")
-# print(ethfinex_trustless_api.get_orders("tDAIUSD"))
-# print(ethfinex_trustless_api.cancel_order(placed_order))
+DAI_WRAPPER_ADDRESS = Address(ethfinex_config['tokenRegistry']['DAI']['wrapperAddress'])
+DAI_TOKEN_ADDRESS = Address(ethfinex_config['tokenRegistry']['DAI']['tokenAddress'])
 
-# placed_order = ethfinex_trustless_api.place_order(True,
-#                                        ETH_ADDRESS,
-#                                        Wad.from_number(0.8),
-#                                        DAI_ADDRESS,
-#                                        Wad.from_number(84.8),
-#                                        FEE_ADDRESS,
-#                                        "DAIETH")
-# print(f"Placed order {placed_order}")
-# print(ethfinex_trustless_api.get_orders("tDAIUSD"))
-# print(ethfinex_trustless_api.cancel_order(placed_order))
-# ethfinex_trustless_api.get_all_trades("DAIETH")
-print(ethfinex_trustless_api.get_trades("tDAIUSD"))
+ETH_WRAPPER_ADDRESS = Address(ethfinex_config['tokenRegistry']['ETH']['wrapperAddress'])
+
+MKR_WRAPPER_ADDRESS = Address(ethfinex_config['tokenRegistry']['MKR']['wrapperAddress'])
+MKR_TOKEN_ADDRESS = Address(ethfinex_config['tokenRegistry']['MKR']['tokenAddress'])
+
+OMG_WRAPPER_ADDRESS = Address(ethfinex_config['tokenRegistry']['OMG']['wrapperAddress'])
 
 
-eth_wrapper = TEthfinexToken(web3, ETH_ADDRESS, "ETH")
-# print(eth_wrapper.balance_of(Address(web3.eth.defaultAccount)))
-# print(eth_wrapper.deposit(Wad.from_number(1)).transact())
-# print(eth_wrapper.balance_of(Address(web3.eth.defaultAccount)))
+# DAI
+dai_token = ERC20Token(web3, DAI_TOKEN_ADDRESS)
+# you have to approve each token if it is its first time use
+dai_approve = dai_token.approve(DAI_WRAPPER_ADDRESS)
+print(dai_approve.transact())
+dai_wrapper = TEthfinexToken(web3, DAI_WRAPPER_ADDRESS, "DAI")
+# lock token amount on wrapper
+dai_transact = dai_wrapper.deposit(Wad.from_number(0.40), 1)
+print(dai_transact.transact())
+print(dai_wrapper.balance_of(Address(web3.eth.defaultAccount)))
 
-# print(ethfinex_trustless_eth.deposit(Wad.from_number(0.9)).transact())
-# print(ethfinex_trustless_eth.balance_of(Address(web3.eth.defaultAccount)))
-# print(ethfinex_trustless_eth.balance_of(Address(web3.eth.defaultAccount)))
+
+# MKR
+mkr_token = ERC20Token(web3, MKR_TOKEN_ADDRESS)
+mkr_approve = mkr_token.approve(MKR_WRAPPER_ADDRESS)
+print(mkr_approve.transact())
+mkr_wrapper = TEthfinexToken(web3, MKR_WRAPPER_ADDRESS, "MKR")
+# lock token
+mkr_transact = mkr_wrapper.deposit(Wad.from_number(0.001), 1)
+print(mkr_transact.transact())
+print(mkr_wrapper.balance_of(Address(web3.eth.defaultAccount)))
+
+
+# ETH
+# eth does not need to approve
+eth_wrapper = TEthfinexToken(web3, ETH_WRAPPER_ADDRESS, "ETH")
+# lock token
+eth_transact = eth_wrapper.deposit(Wad.from_number(0.11))
+print(eth_transact.transact())
+print(eth_wrapper.balance_of(Address(web3.eth.defaultAccount)))
+
+
+# sell order - sell eth (0.1) for dai (26) (fee from dai)
+placed_order_sell = ethfinex_trustless_api.place_order(True,
+                                        ETH_WRAPPER_ADDRESS,
+                                        Wad.from_number(0.1),
+                                        DAI_WRAPPER_ADDRESS,
+                                        Wad.from_number(26),
+                                        ETHFINEX_ADDRESS,
+                                        EXCHANGE_ADDRESS,
+                                        "ETHDAI")
+print(f"Placed order {placed_order_sell}")
+print(ethfinex_trustless_api.cancel_order(placed_order_sell))
+print(ethfinex_trustless_api.get_trades("ETHDAI"))
+
+
+# buy order - buy omg (10) with eth (0.01) (fee from omg)
+placed_order_buy = ethfinex_trustless_api.place_order(False,
+                                        ETH_WRAPPER_ADDRESS,
+                                        Wad.from_number(0.01),
+                                        OMG_WRAPPER_ADDRESS,
+                                        Wad.from_number(10),
+                                        ETHFINEX_ADDRESS,
+                                        EXCHANGE_ADDRESS,
+                                        "OMGETH")
+print(f"Placed order {placed_order_buy}")
+print(ethfinex_trustless_api.cancel_order(placed_order_buy))
+print(ethfinex_trustless_api.get_trades("OMGETH"))
