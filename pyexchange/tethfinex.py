@@ -149,7 +149,6 @@ class TEthfinexToken(ERC20Token):
 
     abi = Contract._load_abi(__name__, 'abi/TETHFINEX.abi')
     bin = Contract._load_bin(__name__, 'abi/TETHFINEX.bin')
-    abi_token = Contract._load_abi(__name__, 'abi/TOKEN.abi')
     abi_locker = Contract._load_abi(__name__, 'abi/LOCKER.abi')
 
     def __init__(self, web3, address, token: str):
@@ -209,7 +208,7 @@ class TEthfinexApi():
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        result = self._get_orders(f"/trustless/v1/r/orders/:{pair}")
+        result = self._get_orders(f"/trustless/v1/r/orders/t{pair}")
 
         return list(map(lambda order : Order.to_order(pair, order), result))
 
@@ -303,8 +302,8 @@ class TEthfinexApi():
 
         result = self._get_orders("/trustless/v1/r/orders/hist")
 
-        #executed_orders = filter(lambda order: 'EXECUTED' in order['status'], result)
-        executed_orders = result
+        executed_orders = filter(lambda order: 'EXECUTED' in order['status'], result)
+
         return list(map(lambda trade: Trade.to_trade(trade), executed_orders))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
