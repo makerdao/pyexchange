@@ -28,8 +28,8 @@ print("OKEXApi created\n")
 
 
 pair = "mkr_usdt"
-# l1 = okex.ticker(pair)
-# print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
+#l1 = okex.ticker(pair)
+#print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
 # book = okex.depth(pair)
 # print(f"bids: {book['bids'][0:3]}")
 # print(f"asks: {book['asks'][0:3]}")
@@ -42,8 +42,8 @@ print(f"                     MKR: {balances['MKR']}")
 
 
 # price in terms of quote currency (USDT), size in terms of base currency (MKR)
-# print(okex.place_order(pair, False, Wad.from_number(699.33), Wad.from_number(0.25)))
-# print(okex.cancel_order(pair, "2502374107516928"))
+# print(okex.place_order(pair, False, Wad.from_number(513), Wad.from_number(0.1)))
+# print(okex.cancel_order(pair, "2740825307024384"))
 
 
 def print_orders(orders):
@@ -70,8 +70,8 @@ def print_trades(trades):
 orders = okex.get_orders(pair)
 print_orders(orders)
 # Gets all orders
-orders = okex.get_orders_history(pair, 9)
-print_orders(orders)
+#orders = okex.get_orders_history(pair, 9)
+#print_orders(orders)
 
 #trades = okex.get_trades(pair)
 #print(trades[:3])
