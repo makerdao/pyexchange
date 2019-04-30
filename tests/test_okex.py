@@ -73,9 +73,11 @@ class OkexMockServer:
             return MockedResponse(text=OkexMockServer.responses["accounts1"])
         elif "/api/spot/v3/orders_pending" in url:
             return MockedResponse(text=OkexMockServer.responses["orders1"])
-        elif re.search(r"\/api\/spot\/v3\/orders\?status=[\w_%]+&instrument_id=[\w\-_]+&limit=\d+", url):
+        elif re.search(r"\/api\/spot\/v3\/orders\?state=[\w_%]+&instrument_id=[\w\-_]+&limit=\d+", url):
             return MockedResponse(text=OkexMockServer.responses["orders2"])
-        elif re.search(r"\/api\/spot\/v3\/orders\?status=[\w_%]+&instrument_id=[\w\-_]+", url):\
+        elif re.search(r"\/api\/spot\/v3\/orders\?state=1&instrument_id=[\w\-_]+", url):
+            return MockedResponse(text="[]")  # assume no partial fills
+        elif re.search(r"\/api\/spot\/v3\/orders\?state=2&instrument_id=[\w\-_]+", url):
             return MockedResponse(text=OkexMockServer.responses["trades1"])
         elif re.search(r"\/api\/spot\/v3\/instruments\/[\w\-_]+\/trades", url):
             return MockedResponse(text=OkexMockServer.responses["trades2"])
@@ -234,6 +236,7 @@ class TestOKEX:
         for index, trade in enumerate(trades):
             assert(isinstance(trade, Trade))
             if trade.trade_id in by_tradeid:
+                print(f"found duplicate trade {trade.trade_id}")
                 duplicate_count += 1
                 if duplicate_first_found < 0:
                     duplicate_first_found = index

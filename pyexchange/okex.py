@@ -219,11 +219,9 @@ class OKEXApi:
         assert(isinstance(pair, str))
         assert(isinstance(number_of_orders, int))
         assert(number_of_orders <= 100)
-        # available statuses are: all, open, part_filled, canceling, filled, cancelled, ordering, failure
 
-        statuses = urllib.parse.quote(f"open|part_filled|cancelling|filled|cancelled|ordering|failure")
         result = self._http_get("/api/spot/v3/orders",
-                                f"status={statuses}&instrument_id={pair}&limit={number_of_orders}",
+                                f"state=0&instrument_id={pair}&limit={number_of_orders}",
                                 requires_auth=True, has_cursor=False)
         if len(result) > 0:
             orders = list(map(self._parse_order, result))
@@ -287,17 +285,18 @@ class OKEXApi:
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        statuses = urllib.parse.quote(f"filled|part_filled")
-        result = self._http_get("/api/spot/v3/orders",
-                                f"status={statuses}&instrument_id={pair}",
-                                requires_auth=True, has_cursor=False)
+        result_part_filled = self._http_get(f"/api/spot/v3/orders", f"state=1&instrument_id={pair}",
+                                            requires_auth=True, has_cursor=False)
+        result_filled = self._http_get("/api/spot/v3/orders", f"state=2&instrument_id={pair}",
+                                       requires_auth=True, has_cursor=False)
 
         trades = list(map(lambda item: Trade(trade_id=item['order_id'],
                                              timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
                                              is_sell=item['side'] == 'sell',
                                              price=Wad.from_number(item['price']),
                                              amount=Wad.from_number(item['size']),
-                                             amount_symbol=item['instrument_id'].split('-')[0].lower()), result))
+                                             amount_symbol=item['instrument_id'].split('-')[0].lower()),
+                          result_part_filled + result_filled))
 
         trades.sort(key=lambda trade: -trade.timestamp)
         return trades
@@ -350,7 +349,7 @@ class OKEXApi:
         # file.close()
 
         if check_result:
-            if 'error_code' in data and data["error_code"] != 0:
+            if 'error_code' in data and data["error_code"] != 0 and data["error_code"] != "":
                 raise Exception(f"OKCoin API negative response: {http_response_summary(response)}")
 
         if has_cursor:
