@@ -202,6 +202,9 @@ class TEthfinexApi():
     def get_symbols(self):
         return self._http_get("/v1/symbols", {})
 
+    def get_symbols_details(self):
+        return self._http_get("/v1/symbols_details", {})
+
     def get_config(self):
         return self._http_post("/trustless/v1/r/get/conf", {})
 
@@ -212,6 +215,15 @@ class TEthfinexApi():
 
         return list(map(lambda order : Order.to_order(pair, order), result))
 
+    def add_price_precision(self, price: float, precision: int):
+        price_string = str(price)
+        for index, digit in enumerate(price_string):
+            if digit not in ['0','.']:
+                if index == 0:
+                    return float(price_string[:precision + 1])
+                else:
+                    return float(price_string[:index + precision])
+
     def place_order(self,
                     is_sell: bool,
                     pay_token: Address,
@@ -219,7 +231,6 @@ class TEthfinexApi():
                     buy_token: Address,
                     buy_amount: Wad,
                     ethfinex_address: Address,
-                    exchange_address: Address,
                     pair: str) -> Order:
 
         assert(isinstance(is_sell, bool))
@@ -228,41 +239,81 @@ class TEthfinexApi():
         assert(isinstance(buy_token, Address))
         assert(isinstance(buy_amount, Wad))
         assert(isinstance(ethfinex_address, Address))
-        assert(isinstance(exchange_address, Address))
         assert(isinstance(pair, str))
+
+        # check if symbol pair exists in tethefinex exchange
+        symbols_details = self.get_symbols_details()
+        pair_exist = False
+        precision = 0
+        for symbol in symbols_details:
+            if symbol['pair'] == pair.lower():
+                pair_exist = True
+                precision = symbol["price_precision"]
+        assert(pair_exist)
+
+        symbol_one = pair[0:3]
+        symbol_two = pair[3:6]
+
+        sell_symbol = symbol_one if is_sell else symbol_two
+        sell_amount = pay_amount if is_sell else buy_amount
+        sell_token = pay_token if is_sell else buy_token
+
+        buy_symbol = symbol_two if is_sell else symbol_one
+        buy_amount = buy_amount if is_sell else pay_amount
+        buy_token = buy_token if is_sell else pay_token
+
+        # retrieve the minimun order size for each pair symbol
+        ethfinex_config = self.get_config()['0x']
+        sell_currency_min_order = Wad.from_number(ethfinex_config['tokenRegistry'][sell_symbol]['minOrderSize'])
+        buy_currency_min_order =  Wad.from_number(ethfinex_config['tokenRegistry'][buy_symbol]['minOrderSize'])
+
         # fee rate
         # use 0.0025 for 0.25% fee
         # use 0.01   for 1% fee
         # use 0.05   for 5% fee
-        fee_rate = 0.0025
+        fee_rate = Wad.from_number(0.0025)
+        price = float(buy_amount / sell_amount) if is_sell else float(sell_amount / buy_amount)
+        # return price with precision
+        price = self.add_price_precision(price, precision)
+        amount = round(float(sell_amount),6) if is_sell else round(float(buy_amount),6)
+
+        buy_amount_order_no_fees = Wad.from_number(price * amount) if is_sell else buy_amount
+        buy_amount_order = buy_amount_order_no_fees - buy_amount_order_no_fees/Wad.from_number(100) * fee_rate * Wad.from_number(100)
+        buy_asset_order = Asset.deserialize('0xf47261b0E' + str(buy_token)[2:])
+        sell_asset_order = Asset.deserialize('0xf47261b0E' + str(sell_token)[2:])
+        sell_amount_order = Wad.from_number(amount) if is_sell else Wad.from_number(price * amount)
+        assert(buy_amount_order_no_fees >= buy_currency_min_order)
+        assert(sell_amount_order >= sell_currency_min_order)
+
 
         expiration = int((datetime.datetime.today() + datetime.timedelta(hours=6)).strftime("%s"))
         order = ZrxV2Order(exchange=self.tethfinex,
                          sender=ethfinex_address,
                          maker=Address(self.tethfinex.web3.eth.defaultAccount),
-                         taker=Address('0x0000000000000000000000000000000000000000'),
+                         taker=self.tethfinex._ZERO_ADDRESS,
                          maker_fee=Wad(0),
                          taker_fee=Wad(0),
-                         pay_asset=Asset.deserialize('0xf47261b0E' + str(pay_token)[2:]),
-                         pay_amount=pay_amount,
-                         buy_asset=Asset.deserialize('0xf47261b0E' + str(buy_token)[2:]),
-                         buy_amount=Wad.from_number(float(buy_amount) - (float(buy_amount)/100 * fee_rate * 100)),
+                         pay_asset=sell_asset_order,
+                         pay_amount=sell_amount_order,
+                         buy_asset=buy_asset_order,
+                         buy_amount=buy_amount_order,
                          salt=self.tethfinex.generate_salt(),
                          fee_recipient=ethfinex_address,
                          expiration=expiration,
-                         exchange_contract_address=exchange_address,
+                         exchange_contract_address=self.tethfinex.address,
                          signature=None)
 
         signed_order = self.tethfinex.sign_order(order)
         data = {
             "type": 'EXCHANGE LIMIT',
             "symbol": f"t{pair}",
-            "amount": str(f"-{round(float(pay_amount),6)}") if is_sell else str(round(float(buy_amount),6)),
-            "price": str(round(float(buy_amount / pay_amount),5)) if is_sell else str(round(float(pay_amount / buy_amount),5)),
+            "amount": str(f"-{amount}") if is_sell else str(amount),
+            "price": str(price),
             "meta": signed_order.to_json(),
             "protocol": '0x',
-            "fee_rate": fee_rate
+            "fee_rate": float(fee_rate)
         }
+        print(data)
 
         side = "SELL" if is_sell else "BUY"
         self.logger.info(f"Placing order ({side}, amount {data['amount']} of {pair},"

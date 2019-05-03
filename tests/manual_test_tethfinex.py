@@ -37,13 +37,13 @@ infura_provider = HTTPProvider(INFURA_URL)
 web3 = Web3(infura_provider)
 register_private_key(web3, WALLET_PRIVATE_KEY)
 web3.eth.defaultAccount = WALLET_ADDRESS
-
 EXCHANGE_ADDRESS = Address("0x4f833a24e1f95d70f028921e27040ca56e09ab0b")
 
 zrx_v2_exchange = ZrxExchangeV2(web3=web3, address=EXCHANGE_ADDRESS)
 ethfinex_trustless_api = TEthfinexApi(zrx_v2_exchange, 'https://api.ethfinex.com', 15.5)
 
 ethfinex_symbol = ethfinex_trustless_api.get_symbols()
+ethfinex_symbols_details = ethfinex_trustless_api.get_symbols_details()
 ethfinex_config = ethfinex_trustless_api.get_config()['0x']
 
 ETHFINEX_ADDRESS = Address(ethfinex_config['ethfinexAddress'])
@@ -92,29 +92,26 @@ print(eth_transact.transact())
 print(eth_wrapper.balance_of(Address(web3.eth.defaultAccount)))
 
 
-# sell order - sell eth (0.1) for dai (26) (fee from dai)
-placed_order_sell = ethfinex_trustless_api.place_order(True,
-                                        ETH_WRAPPER_ADDRESS,
-                                        Wad.from_number(0.1),
-                                        DAI_WRAPPER_ADDRESS,
-                                        Wad.from_number(26),
-                                        ETHFINEX_ADDRESS,
-                                        EXCHANGE_ADDRESS,
-                                        "ETHDAI")
-print(f"Placed order {placed_order_sell}")
-print(ethfinex_trustless_api.cancel_order(placed_order_sell))
-print(ethfinex_trustless_api.get_trades("ETHDAI"))
-
-
-# buy order - buy omg (10) with eth (0.01) (fee from omg)
+# buy order - buy OMG (16) with ETH (0.12) (fee from OMG)
 placed_order_buy = ethfinex_trustless_api.place_order(False,
-                                        ETH_WRAPPER_ADDRESS,
-                                        Wad.from_number(0.01),
                                         OMG_WRAPPER_ADDRESS,
-                                        Wad.from_number(10),
+                                        Wad.from_number(16),
+                                        ETH_WRAPPER_ADDRESS,
+                                        Wad.from_number(0.12),
                                         ETHFINEX_ADDRESS,
-                                        EXCHANGE_ADDRESS,
                                         "OMGETH")
 print(f"Placed order {placed_order_buy}")
 print(ethfinex_trustless_api.cancel_order(placed_order_buy))
+
+
+# sell order - sell omg (12) for eth (0.11) (fee from ETH)
+placed_order_sell = ethfinex_trustless_api.place_order(True,
+                                        OMG_WRAPPER_ADDRESS,
+                                        Wad.from_number(12),
+                                        ETH_WRAPPER_ADDRESS,
+                                        Wad.from_number(0.11),
+                                        ETHFINEX_ADDRESS,
+                                        "OMGETH")
+print(f"Placed order {placed_order_sell}")
+print(ethfinex_trustless_api.cancel_order(placed_order_sell))
 print(ethfinex_trustless_api.get_trades("OMGETH"))
