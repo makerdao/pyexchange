@@ -22,7 +22,7 @@ from typing import List, Optional
 from pymaker import Contract, Address, Transact, Wad
 from pymaker.sign import eth_sign
 from pymaker.util import http_response_summary
-from pymaker.zrx import ZrxExchange, Order as ZrxOrder
+from pymaker.zrxv2 import ERC20Asset, ZrxExchangeV2, Order as ZrxV2Order
 from pymaker.token import ERC20Token
 
 import logging
@@ -149,6 +149,8 @@ class TEthfinexToken(ERC20Token):
 
     abi = Contract._load_abi(__name__, 'abi/TETHFINEX.abi')
     bin = Contract._load_bin(__name__, 'abi/TETHFINEX.bin')
+    abi_locker = Contract._load_abi(__name__, 'abi/LOCKER.abi')
+    bin_locker = Contract._load_bin(__name__, 'abi/LOCKER.bin')
 
     def __init__(self, web3, address, token: str):
         assert(isinstance(token, str))
@@ -170,10 +172,10 @@ class TEthfinexToken(ERC20Token):
         assert(isinstance(duration, int))
 
         if self.token == "ETH":
-            return Transact(self, self.web3, self.abi, self.address, self._contract, 'deposit',
+            return Transact(self, self.web3, self.abi_locker, self.address, self._contract, 'deposit',
                             [amount.value, duration], {'value': amount.value})
         else:
-            return Transact(self, self.web3, self.abi, self.address, self._contract, 'deposit',
+            return Transact(self, self.web3, self.abi_locker, self.address, self._contract, 'deposit',
                             [amount.value, duration], {})
 
     def __repr__(self):
@@ -189,8 +191,8 @@ class TEthfinexApi():
 
     logger = logging.getLogger()
 
-    def __init__(self, tethfinex: ZrxExchange, api_server: str, timeout: float):
-        assert(isinstance(tethfinex, ZrxExchange))
+    def __init__(self, tethfinex: ZrxExchangeV2, api_server: str, timeout: float):
+        assert(isinstance(tethfinex, ZrxExchangeV2))
         assert(isinstance(api_server, str))
         assert(isinstance(timeout, float))
 
@@ -200,6 +202,9 @@ class TEthfinexApi():
 
     def get_symbols(self):
         return self._http_get("/v1/symbols", {})
+
+    def get_symbols_details(self):
+        return self._http_get("/v1/symbols_details", {})
 
     def get_config(self):
         return self._http_post("/trustless/v1/r/get/conf", {})
@@ -211,13 +216,22 @@ class TEthfinexApi():
 
         return list(map(lambda order : Order.to_order(pair, order), result))
 
+    def add_price_precision(self, price: float, precision: int):
+        price_string = str(price)
+        for index, digit in enumerate(price_string):
+            if digit not in ['0','.']:
+                if index == 0:
+                    return float(price_string[:precision + 1])
+                else:
+                    return float(price_string[:index + precision])
+
     def place_order(self,
                     is_sell: bool,
                     pay_token: Address,
                     pay_amount: Wad,
                     buy_token: Address,
                     buy_amount: Wad,
-                    fee_address: Address,
+                    ethfinex_address: Address,
                     pair: str) -> Order:
 
         assert(isinstance(is_sell, bool))
@@ -225,35 +239,80 @@ class TEthfinexApi():
         assert(isinstance(pay_amount, Wad))
         assert(isinstance(buy_token, Address))
         assert(isinstance(buy_amount, Wad))
-        assert(isinstance(fee_address, Address))
+        assert(isinstance(ethfinex_address, Address))
         assert(isinstance(pair, str))
 
+        # check if symbol pair exists in tethefinex exchange
+        symbols_details = self.get_symbols_details()
+        pair_exist = False
+        precision = 0
+        for symbol in symbols_details:
+            if symbol['pair'] == pair.lower():
+                pair_exist = True
+                precision = symbol["price_precision"]
+        assert(pair_exist)
+
+        symbol_one = pair[0:3]
+        symbol_two = pair[3:6]
+
+        sell_symbol = symbol_one if is_sell else symbol_two
+        sell_amount = pay_amount if is_sell else buy_amount
+        sell_token = pay_token if is_sell else buy_token
+
+        buy_symbol = symbol_two if is_sell else symbol_one
+        buy_amount = buy_amount if is_sell else pay_amount
+        buy_token = buy_token if is_sell else pay_token
+
+        # retrieve the minimun order size for each pair symbol
+        ethfinex_config = self.get_config()['0x']
+        sell_currency_min_order = Wad.from_number(ethfinex_config['tokenRegistry'][sell_symbol]['minOrderSize'])
+        buy_currency_min_order =  Wad.from_number(ethfinex_config['tokenRegistry'][buy_symbol]['minOrderSize'])
+
+        # fee rate
+        # use 0.0025 for 0.25% fee
+        # use 0.01   for 1% fee
+        # use 0.05   for 5% fee
+        fee_rate = Wad.from_number(0.0025)
+        price = float(buy_amount / sell_amount) if is_sell else float(sell_amount / buy_amount)
+        # return price with precision
+        price = self.add_price_precision(price, precision)
+        amount = round(float(sell_amount),6) if is_sell else round(float(buy_amount),6)
+
+        buy_amount_order_no_fees = Wad.from_number(price * amount) if is_sell else buy_amount
+        buy_amount_order = buy_amount_order_no_fees - buy_amount_order_no_fees/Wad.from_number(100) * fee_rate * Wad.from_number(100)
+        buy_asset_order = ERC20Asset(buy_token)
+        sell_asset_order = ERC20Asset(sell_token)
+        sell_amount_order = Wad.from_number(amount) if is_sell else Wad.from_number(price * amount)
+        assert(buy_amount_order_no_fees >= buy_currency_min_order)
+        assert(sell_amount_order >= sell_currency_min_order)
+
+
         expiration = int((datetime.datetime.today() + datetime.timedelta(hours=6)).strftime("%s"))
-        order = ZrxOrder(exchange=self.tethfinex,
+        order = ZrxV2Order(exchange=self.tethfinex,
+                         sender=ethfinex_address,
                          maker=Address(self.tethfinex.web3.eth.defaultAccount),
-                         taker=fee_address,
+                         taker=self.tethfinex._ZERO_ADDRESS,
                          maker_fee=Wad(0),
                          taker_fee=Wad(0),
-                         pay_token=pay_token,
-                         pay_amount=(pay_amount / buy_amount) * buy_amount if is_sell else pay_amount,
-                         buy_token=buy_token,
-                         buy_amount=buy_amount if is_sell else (buy_amount / pay_amount) * pay_amount,
-                         salt=self.tethfinex.random_salt(),
-                         fee_recipient=fee_address,
+                         pay_asset=sell_asset_order,
+                         pay_amount=sell_amount_order,
+                         buy_asset=buy_asset_order,
+                         buy_amount=buy_amount_order,
+                         salt=self.tethfinex.generate_salt(),
+                         fee_recipient=ethfinex_address,
                          expiration=expiration,
                          exchange_contract_address=self.tethfinex.address,
-                         ec_signature_r=None,
-                         ec_signature_s=None,
-                         ec_signature_v=None)
+                         signature=None)
 
         signed_order = self.tethfinex.sign_order(order)
         data = {
             "type": 'EXCHANGE LIMIT',
             "symbol": f"t{pair}",
-            "amount": str(buy_amount) if is_sell else str(f"-{pay_amount}"),
-            "price": str(pay_amount / buy_amount) if is_sell else str(buy_amount / pay_amount),
+            "amount": str(f"-{amount}") if is_sell else str(amount),
+            "price": str(price),
             "meta": signed_order.to_json(),
-            "protocol": '0x'
+            "protocol": '0x',
+            "fee_rate": float(fee_rate)
         }
 
         side = "SELL" if is_sell else "BUY"
@@ -293,10 +352,9 @@ class TEthfinexApi():
         assert(page_number == 1)
 
         result = self._get_orders("/trustless/v1/r/orders/hist")
+        orders_executed = filter(lambda order: 'EXECUTED' in order['status'], result)
 
-        executed_orders = filter(lambda order: 'EXECUTED' in order['status'], result)
-
-        return list(map(lambda trade: Trade.to_trade(trade), executed_orders))
+        return list(map(lambda trade: Trade.to_trade(trade), orders_executed))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
