@@ -352,9 +352,9 @@ class TEthfinexApi():
         assert(page_number == 1)
 
         result = self._get_orders("/trustless/v1/r/orders/hist")
-        orders = filter(lambda order: 'EXECUTED' in order['status'] or 'PARTIALLY_FILLED' in order['status'], result)
+        orders_executed = filter(lambda order: 'EXECUTED' in order['status'], result)
 
-        return list(map(lambda trade: Trade.to_trade(trade), orders))
+        return list(map(lambda trade: Trade.to_trade(trade), orders_executed))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
