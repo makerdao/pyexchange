@@ -22,7 +22,7 @@ from typing import List, Optional
 from pymaker import Contract, Address, Transact, Wad
 from pymaker.sign import eth_sign
 from pymaker.util import http_response_summary
-from pymaker.zrxv2 import Asset, ZrxExchangeV2, Order as ZrxV2Order
+from pymaker.zrxv2 import ERC20Asset, ZrxExchangeV2, Order as ZrxV2Order
 from pymaker.token import ERC20Token
 
 import logging
@@ -150,6 +150,7 @@ class TEthfinexToken(ERC20Token):
     abi = Contract._load_abi(__name__, 'abi/TETHFINEX.abi')
     bin = Contract._load_bin(__name__, 'abi/TETHFINEX.bin')
     abi_locker = Contract._load_abi(__name__, 'abi/LOCKER.abi')
+    bin_locker = Contract._load_bin(__name__, 'abi/LOCKER.bin')
 
     def __init__(self, web3, address, token: str):
         assert(isinstance(token, str))
@@ -279,8 +280,8 @@ class TEthfinexApi():
 
         buy_amount_order_no_fees = Wad.from_number(price * amount) if is_sell else buy_amount
         buy_amount_order = buy_amount_order_no_fees - buy_amount_order_no_fees/Wad.from_number(100) * fee_rate * Wad.from_number(100)
-        buy_asset_order = Asset.deserialize('0xf47261b0E' + str(buy_token)[2:])
-        sell_asset_order = Asset.deserialize('0xf47261b0E' + str(sell_token)[2:])
+        buy_asset_order = ERC20Asset(buy_token)
+        sell_asset_order = ERC20Asset(sell_token)
         sell_amount_order = Wad.from_number(amount) if is_sell else Wad.from_number(price * amount)
         assert(buy_amount_order_no_fees >= buy_currency_min_order)
         assert(sell_amount_order >= sell_currency_min_order)
@@ -313,7 +314,6 @@ class TEthfinexApi():
             "protocol": '0x',
             "fee_rate": float(fee_rate)
         }
-        print(data)
 
         side = "SELL" if is_sell else "BUY"
         self.logger.info(f"Placing order ({side}, amount {data['amount']} of {pair},"
@@ -352,10 +352,9 @@ class TEthfinexApi():
         assert(page_number == 1)
 
         result = self._get_orders("/trustless/v1/r/orders/hist")
+        orders = filter(lambda order: 'EXECUTED' in order['status'] or 'PARTIALLY_FILLED' in order['status'], result)
 
-        executed_orders = filter(lambda order: 'EXECUTED' in order['status'], result)
-
-        return list(map(lambda trade: Trade.to_trade(trade), executed_orders))
+        return list(map(lambda trade: Trade.to_trade(trade), orders))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
