@@ -17,14 +17,13 @@
 
 import logging
 import time
+import json
+
 from pprint import pformat
 from typing import Optional, List
 
 import requests
 
-from pyexchange.util import sort_trades
-from pymaker import Wad, Address
-from pymaker.sign import eth_sign
 from pymaker.util import hexstring_to_bytes, http_response_summary
 from web3 import Web3
 
@@ -44,13 +43,12 @@ class AirswapApi:
         self.api_server = api_server
         self.timeout = timeout
 
-     def set_intents(self, maker_token_address, taker_token_address):
-         intents = self._build_intents(maker_token_address, taker_token_address)
-         return self._http_post(f"/setIntents", intents)
+    def set_intents(self, maker_token_address, taker_token_address):
+        intents = self._build_intents(maker_token_address, taker_token_address)
+        return self._http_post(f"/setIntents", intents)
 
-     def sign_order(self, order):
-         return self._http_post(f"/signOrder", order)
-
+    def sign_order(self, order):
+        return self._http_post(f"/signOrder", order)
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
@@ -66,35 +64,20 @@ class AirswapApi:
 
         return data
 
-    def _http_get(self, resource: str, params: dict):
+    def _http_post(self, resource: str, params):
         assert(isinstance(resource, str))
-        assert(isinstance(params, dict))
-
-        return self._result(requests.get(url=f"{self.api_server}{resource}",
+        return self._result(requests.post(url=f"{self.api_server}{resource}",
                                          json=params,
                                          timeout=self.timeout))
 
-
-    def _http_post(self, resource: str, params: dict):
-        assert(isinstance(resource, str))
-        assert(isinstance(params, dict))
-        headers = {'content-type': 'application/json'}
-
-        return self._result(requests.post(url=f"{self.api_server}{resource}",
-                                         json=json.dumps(params),
-                                         headers=headers,
-                                         timeout=self.timeout))
-
-
-     def _build_intents(self, maker_token_address, taker_token_address):
-         return [{
-             "makerToken": maker_token_address,
-             "takerToken": taker_token_address,
-             "role": "maker"
-         }, {
-             "makerToken": taker_token_address,
-             "takerToken": maker_token_address,
-             "role": "maker"
-         }]
-
+    def _build_intents(self, maker_token_address, taker_token_address):
+        return [{
+                "makerToken": maker_token_address,
+                "takerToken": taker_token_address,
+                "role": "maker"
+            }, {
+                "makerToken": taker_token_address,
+                "takerToken": maker_token_address,
+                "role": "maker"
+            }]
 
