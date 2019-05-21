@@ -20,6 +20,9 @@ from pprint import pformat
 from typing import List
 
 import requests
+import time
+import hmac
+import hashlib
 
 from pymaker.numeric import Wad
 from pymaker.util import http_response_summary
@@ -67,12 +70,19 @@ class BinanceApi:
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, timeout: float):
+    def __init__(self, api_server: str, api_key: str, secret_key: str, timeout: float):
         assert(isinstance(api_server, str))
+        assert(isinstance(api_key, str))
+        assert(isinstance(secret_key, str))
         assert(isinstance(timeout, float))
 
         self.api_server = api_server
+        self.api_key = api_key
+        self.secret_key = secret_key
         self.timeout = timeout
+
+    def get_balances(self):
+        return self._http_get_signed("/api/v3/account")['balances']
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
@@ -103,3 +113,19 @@ class BinanceApi:
 
         return self._result(requests.get(url=f"{self.api_server}{resource}?{params}",
                                          timeout=self.timeout))
+
+    def _http_get_signed(self, resource: str):
+
+        timestamp = int(time.time() * 1000)
+        m = hmac.new(self.secret_key.encode('utf-8'), f"timestamp={timestamp}".encode('utf-8'), hashlib.sha256)
+        signature = m.hexdigest()
+
+        return self._result(requests.get(url=f"{self.api_server}{resource}?timestamp={timestamp}&signature={signature}",
+                                         headers={
+                                             'Accept': 'application/json',
+                                             'User-Agent': 'binance/python',
+                                             'X-MBX-APIKEY': self.api_key
+                                         },
+                                         timeout=self.timeout))
+
+
