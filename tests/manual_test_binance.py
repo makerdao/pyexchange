@@ -16,8 +16,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from pyexchange.binance import BinanceApi
+import sys
 
 
-binance = BinanceApi('https://api.binance.com', 9.5)
+binance = BinanceApi('https://api.binance.com', sys.argv[1], sys.argv[2], 9.5)
 
 print(binance.get_all_trades('SNTBTC'))
+print(binance.get_balances())
