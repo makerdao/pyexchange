@@ -25,6 +25,7 @@ from typing import Optional, List
 
 import requests
 
+from pymaker import Address
 from pymaker.util import hexstring_to_bytes, http_response_summary
 from web3 import Web3
 
@@ -44,8 +45,11 @@ class AirswapApi:
         self.api_server = api_server
         self.timeout = timeout
 
-    def set_intents(self, maker_token_address, taker_token_address):
-        intents = self._build_intents(maker_token_address, taker_token_address)
+    def set_intents(self, buy_token: Address, sell_token: Address):
+        assert(isinstance(buy_token, Address))
+        assert(isinstance(sell_token, Address))
+
+        intents = self._build_intents(buy_token.__str__(), sell_token.__str__())
         return self._http_post(f"/setIntents", intents)
 
     def sign_order(self,
@@ -64,6 +68,27 @@ class AirswapApi:
                                   taker_amount)
 
         return self._http_post(f"/signOrder", order)
+
+
+    def approve(self, buy_token: Address, sell_token: Address):
+        assert(isinstance(buy_token, Address))
+        assert(isinstance(sell_token, Address))
+
+        try:
+            buy_token_data = self._build_approve(buy_token.__str__())
+            sell_token_data = self._build_approve(sell_token.__str__())
+
+            self._http_post(f"/approveTokenForTrade", buy_token_data)
+            self._http_post(f"/approveTokenForTrade", sell_token_data)
+            logging.getLogger().info(f"token approval success: {buy_token.__str__()}, {sell_token.__str__()}")
+            return 'ok'
+
+        except Exception as e:
+             logging.getLogger().exception(f"Encountered an error when attempting to approve tokens with Airswap contract({e}).")
+
+
+    def _build_approve(self, token):
+        return {"tokenContractAddr": token}
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
