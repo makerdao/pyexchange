@@ -18,6 +18,7 @@
 import logging
 import time
 import json
+import random
 
 from pprint import pformat
 from typing import Optional, List
@@ -47,7 +48,21 @@ class AirswapApi:
         intents = self._build_intents(maker_token_address, taker_token_address)
         return self._http_post(f"/setIntents", intents)
 
-    def sign_order(self, order):
+    def sign_order(self,
+                   maker_address,
+                   maker_token,
+                   maker_amount,
+                   taker_address,
+                   taker_token,
+                   taker_amount):
+
+        order = self._build_order(maker_address,
+                                  maker_token,
+                                  maker_amount,
+                                  taker_address,
+                                  taker_token,
+                                  taker_amount)
+
         return self._http_post(f"/signOrder", order)
 
     def _result(self, result) -> Optional[dict]:
@@ -80,3 +95,28 @@ class AirswapApi:
                 "takerToken": maker_token_address,
                 "role": "maker"
             }]
+
+    def _build_order(self,
+                     maker_address,
+                     maker_token,
+                     maker_amount,
+                     taker_address,
+                     taker_token,
+                     taker_amount):
+
+        # Set 5-minute expiration on this order
+        expiration = str(int(time.time()) + 300)
+        nonce = random.randint(0, 99999)
+
+        new_order = {
+            "makerAddress": maker_address,
+            "makerToken": maker_token,
+            "makerAmount": maker_amount,
+            "takerAddress": taker_address,
+            "takerToken": taker_token,
+            "takerAmount": taker_amount,
+            "expiration": expiration,
+            "nonce": nonce
+        }
+
+        return new_order
