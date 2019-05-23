@@ -66,6 +66,7 @@ class AirswapContract(Contract):
     Attributes:
         web3: An instance of `Web` from `web3.py`.
         address: Ethereum address of the `Airswap` contract.
+        past_blocks: Number of past ethereum blocks to query
     """
 
     abi = Contract._load_abi(__name__, 'abi/Airswap.abi')
