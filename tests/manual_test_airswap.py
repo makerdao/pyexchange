@@ -1,5 +1,5 @@
 import time
-
+import sys
 import pprint
 
 from web3 import HTTPProvider
@@ -13,7 +13,7 @@ from pymaker.token import DSToken
 
 def test_all_trades():
 
-    web3 = Web3(HTTPProvider(endpoint_uri="https://parity0.mainnet.makerfoundation.com:8545"))
+    web3 = Web3(HTTPProvider(endpoint_uri=sys.argv[1]))
 
     airswap_contract = AirswapContract(web3, Address('0x8fd3121013A07C57f0D69646E86E7a4880b467b7'), 500)
 
@@ -30,8 +30,8 @@ def test_all_trades():
 
 def test_our_trades():
 
-    web3 = Web3(HTTPProvider(endpoint_uri="https://parity0.mainnet.makerfoundation.com:8545"))
-    web3.eth.defaultAccount = "0x63a035B3004A65b7D8ad86e0C28776d83671FFAe"
+    web3 = Web3(HTTPProvider(endpoint_uri=sys.argv[1]))
+    web3.eth.defaultAccount = sys.argv[2]
     airswap_contract = AirswapContract(web3, Address('0x8fd3121013A07C57f0D69646E86E7a4880b467b7'), 500)
 
     pair = {
