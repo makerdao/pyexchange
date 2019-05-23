@@ -147,7 +147,7 @@ class AirswapApi:
         assert(isinstance(sell_token, Address))
 
         intents = self._build_intents(buy_token.__str__(), sell_token.__str__())
-        return self._http_post(f"/setIntents", intents)
+        return self._http_post("/setIntents", intents)
 
     def sign_order(self,
                    maker_address,
@@ -164,7 +164,7 @@ class AirswapApi:
                                   taker_token,
                                   taker_amount)
 
-        return self._http_post(f"/signOrder", order)
+        return self._http_post("/signOrder", order)
 
 
     def approve(self, buy_token: Address, sell_token: Address):
@@ -175,8 +175,8 @@ class AirswapApi:
             buy_token_data = self._build_approve(buy_token.__str__())
             sell_token_data = self._build_approve(sell_token.__str__())
 
-            self._http_post(f"/approveTokenForTrade", buy_token_data)
-            self._http_post(f"/approveTokenForTrade", sell_token_data)
+            self._http_post("/approveTokenForTrade", buy_token_data)
+            self._http_post("/approveTokenForTrade", sell_token_data)
             logging.getLogger().info(f"token approval success: {buy_token.__str__()}, {sell_token.__str__()}")
             return 'ok'
 
