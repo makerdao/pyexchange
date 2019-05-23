@@ -84,7 +84,7 @@ class AirswapContract(Contract):
         self._contract = self._get_contract(web3, self.abi, address)
 
 
-    def past_fill(self, number_of_past_blocks: int, event_filter: dict = None) -> List[Fill]:
+    def past_fill(self, number_of_past_blocks: int, event_filter: dict = None) -> List[Filled]:
         """Synchronously retrieve past Fill events.
         `Fill` events are emitted by the Airswap contract every time someone fills and order.
         Args:
