@@ -20,12 +20,108 @@ import time
 import json
 
 from pprint import pformat
-from typing import Optional, List
+from typing import Optional, List, Iterable, Iterator
 
 import requests
 
 from pymaker.util import hexstring_to_bytes, http_response_summary
 from web3 import Web3
+
+from typing import Optional, List, Iterable, Iterator
+
+from hexbytes import HexBytes
+from web3 import Web3
+from web3.utils.events import get_event_data
+
+from pymaker import Contract, Address, Transact, Receipt
+from pymaker.numeric import Wad
+from pymaker.token import ERC20Token
+from pymaker.util import int_to_bytes32, bytes_to_int
+
+
+class Filled:
+    def __init__(self, log):
+        self.order_id = bytes_to_int(log['transactionHash'])
+        self.maker = Address(log['args']['makerAddress'])
+        self.maker_token = Address(log['args']['makerToken'])
+        self.maker_amount = Wad(log['args']['makerAmount'])
+        self.taker = Address(log['args']['takerAddress'])
+        self.taker_token = Address(log['args']['takerToken'])
+        self.taker_amount = Wad(log['args']['takerAmount'])
+        self.raw = log
+
+    def __eq__(self, other):
+        assert(isinstance(other, Filled))
+        return self.__dict__ == other.__dict__
+
+    def __repr__(self):
+        return pformat(vars(self))
+
+
+class AirswapContract(Contract):
+    """A client for a `Airswap` contract.
+
+    `AirwapContract` is a simple on-chain OTC market for ERC20-compatible tokens.
+
+    Attributes:
+        web3: An instance of `Web` from `web3.py`.
+        address: Ethereum address of the `Airswap` contract.
+    """
+
+    abi = Contract._load_abi(__name__, 'abi/Airswap.abi')
+    bin = Contract._load_bin(__name__, 'abi/Airswap.bin')
+
+    def __init__(self, web3: Web3, address: Address, past_blocks):
+        assert(isinstance(web3, Web3))
+        assert(isinstance(address, Address))
+
+        self.web3 = web3
+        self.address = address
+        self.past_blocks = past_blocks
+        self._contract = self._get_contract(web3, self.abi, address)
+
+
+    def past_fill(self, number_of_past_blocks: int, event_filter: dict = None) -> List[Fill]:
+        """Synchronously retrieve past Fill events.
+        `Fill` events are emitted by the Airswap contract every time someone fills and order.
+        Args:
+            number_of_past_blocks: Number of past Ethereum blocks to retrieve the events from.
+            event_filter: Filter which will be applied to returned events.
+        Returns:
+            List of past `Fill` events represented as :py:class:`pymaker.oasis.LogTake` class.
+        """
+        assert(isinstance(number_of_past_blocks, int))
+        assert(isinstance(event_filter, dict) or (event_filter is None))
+
+        return self._past_events(self._contract, 'Filled', Filled, number_of_past_blocks, event_filter)
+
+
+    def get_trades(self, pair, page_number: int = 1):
+        assert(isinstance(page_number, int))
+
+        fills = self.get_all_trades(pair, page_number)
+        address = Address(self.web3.eth.defaultAccount)
+
+        # Filter trades from address
+        fills = [fill for fill in fills
+                if fill.maker == address or
+                   fill.taker == address]
+
+        return fills
+
+
+    def get_all_trades(self, pair, page_number: int = 1):
+        assert(page_number == 1)
+
+        fills = self.past_fill(self.past_blocks)
+
+        # Filter trades for addresses in pair
+        fills = [fill for fill in fills
+                if fill.maker_token in pair and
+                   fill.taker_token in pair]
+
+        return fills
+
 
 class AirswapApi:
     """Airswap API interface.
