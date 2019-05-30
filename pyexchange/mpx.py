@@ -43,7 +43,7 @@ class MpxPair(Pair):
 
 class Order:
     def __init__(self,
-                 order_id: int,
+                 order_id: str,
                  pair: str,
                  is_sell: bool,
                  price: Wad,
