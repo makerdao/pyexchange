@@ -184,10 +184,14 @@ class MpxApi(PyexAPI):
         self.token = result['data']['attributes']['token']
 
     def get_markets(self):
-        return self._http_unauthenticated("GET", f"/token_pairs", {})
+        return self._http_unauthenticated("GET", "/token_pairs", {})
+
+    def get_pair(self, pair: str):
+        assert (isinstance(pair, str))
+        return self._http_unauthenticated("GET", f"/token_pairs?filter[pairName]={pair}", {})
 
     def get_fee_recipients(self):
-        return self._http_unauthenticated("GET", f"/fee_recipients", {})
+        return self._http_unauthenticated("GET", "/fee_recipients", {})
 
     def get_orders(self, pair: MpxPair) -> List[Order]:
         assert (isinstance(pair, MpxPair))
