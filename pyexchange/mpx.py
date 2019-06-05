@@ -188,7 +188,7 @@ class MpxApi(PyexAPI):
 
     def get_pair(self, pair: str):
         assert (isinstance(pair, str))
-        return self._http_unauthenticated("GET", f"/token_pairs?filter[pairName]={pair}", {})
+        return self._http_unauthenticated("GET", f"/token_pairs?filter[pair-name]={pair}", {})
 
     def get_fee_recipients(self):
         return self._http_unauthenticated("GET", "/fee_recipients", {})
@@ -196,7 +196,7 @@ class MpxApi(PyexAPI):
     def get_orders(self, pair: MpxPair) -> List[Order]:
         assert (isinstance(pair, MpxPair))
 
-        orders = self._http_authenticated("GET", f"/orders?filter[pairName]={pair.get_pair_name()}&filter[state]=open"
+        orders = self._http_authenticated("GET", f"/orders?filter[pair-name]={pair.get_pair_name()}&filter[state]=open"
                                                  f"&filter[maker-address||sender-address]={self.zrx_exchange.web3.eth.defaultAccount}",
                                                  {})
 
@@ -270,7 +270,7 @@ class MpxApi(PyexAPI):
         assert(isinstance(pair, Pair))
         assert(page_number == 1)
 
-        trades = self._http_unauthenticated("GET", f"/fills?filter[pairName]={pair.get_pair_name()}"
+        trades = self._http_unauthenticated("GET", f"/fills?filter[pair-name]={pair.get_pair_name()}"
                                                    f"&filter[maker-address||taker-address]={self.zrx_exchange.web3.eth.defaultAccount}",
                                                    {})['data']
 
@@ -280,7 +280,7 @@ class MpxApi(PyexAPI):
         assert(isinstance(pair, Pair))
         assert(page_number == 1)
 
-        trades = self._http_unauthenticated("GET", f"/fills?filter[pairName]={pair.get_pair_name()}", {})['data']
+        trades = self._http_unauthenticated("GET", f"/fills?filter[pair-name]={pair.get_pair_name()}", {})['data']
 
         return list(map(lambda item: Trade.from_list(item, pair), trades))
 
