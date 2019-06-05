@@ -33,7 +33,6 @@ web3.eth.defaultAccount = sys.argv[1]
 register_key(web3, sys.argv[2])
 zrx_exchange = ZrxExchangeV2(web3, EXCHANGE_ADDR)
 pair = MpxPair("WETH-DAI", WETH_ADDR, 18, DAI_ADDR, 18)
-
 api = MpxApi("https://api.mpexchange.io", zrx_exchange, FEE_RECIPIENT, 9.5)
 
 api.authenticate()

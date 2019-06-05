@@ -100,58 +100,57 @@ class Trade:
                  trade_id: Optional[id],
                  timestamp: int,
                  pair: str,
-                 is_sell: bool,
-                 price: Wad,
-                 amount: Wad):
+                 maker_amount: Wad,
+                 taker_amount: Wad,
+                 taker_asset_data: Address,
+                 maker_asset_data: Address):
         assert(isinstance(trade_id, str) or (trade_id is None))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
+        assert(isinstance(maker_amount, Wad))
+        assert(isinstance(taker_amount, Wad))
+        assert(isinstance(taker_asset_data, Address))
+        assert(isinstance(maker_asset_data, Address))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
         self.pair = pair
-        self.is_sell = is_sell
-        self.price = price
-        self.amount = amount
+        self.maker_amount = maker_amount
+        self.taker_amount = taker_amount
+        self.taker_asset_data = taker_asset_data
+        self.maker_asset_data = maker_asset_data
 
     def __eq__(self, other):
         assert(isinstance(other, Trade))
         return self.trade_id == other.trade_id and \
                self.timestamp == other.timestamp and \
                self.pair == other.pair and \
-               self.is_sell == other.is_sell and \
-               self.price == other.price and \
-               self.amount == other.amount
+               self.maker_amount == other.maker_amount and \
+               self.taker_amount == other.taker_amount and \
+               self.taker_asset_data == other.taker_asset_data and \
+               self.maker_asset_data == other.maker_asset_data
 
     def __hash__(self):
         return hash((self.trade_id,
                      self.timestamp,
                      self.pair,
-                     self.is_sell,
-                     self.price,
-                     self.amount))
+                     self.maker_amount,
+                     self.taker_amount,
+                     self.taker_asset_data,
+                     self.maker_asset_data))
 
     def __repr__(self):
         return pformat(vars(self))
 
     @staticmethod
-    def from_list(trade: list, pair: MpxPair):
-        maker_amount = Wad(int(trade['attributes']['maker-asset-filled-amount']))
-        taker_amount = Wad(int(trade['attributes']['taker-asset-filled-amount']))
-
-        is_sell = pair.sell_token_address == ERC20Asset.deserialize(trade['attributes']['taker-asset-data']).token_address
-        price = maker_amount / taker_amount if is_sell else taker_amount / maker_amount
-        amount = taker_amount if is_sell else maker_amount
-
+    def from_list(trade: list):
         return Trade(trade_id=trade['id'],
                      timestamp=int(float(trade['attributes']['updated-at'])) // 1000,
                      pair=trade['attributes']['pair-name'],
-                     is_sell=is_sell,
-                     price=price,
-                     amount=amount)
+                     maker_amount=Wad(int(trade['attributes']['maker-asset-filled-amount'])),
+                     taker_amount=Wad(int(trade['attributes']['taker-asset-filled-amount'])),
+                     taker_asset_data=ERC20Asset.deserialize(trade['attributes']['taker-asset-data']).token_address,
+                     maker_asset_data=ERC20Asset.deserialize(trade['attributes']['maker-asset-data']).token_address)
 
 
 class MpxApi(PyexAPI):
@@ -196,8 +195,10 @@ class MpxApi(PyexAPI):
     def get_orders(self, pair: MpxPair) -> List[Order]:
         assert (isinstance(pair, MpxPair))
 
+        account = str(self.zrx_exchange.web3.eth.defaultAccount).lower()
+
         orders = self._http_authenticated("GET", f"/orders?filter[pair-name]={pair.get_pair_name()}&filter[state]=open"
-                                                 f"&filter[maker-address||sender-address]={self.zrx_exchange.web3.eth.defaultAccount}",
+                                                 f"&filter[maker-address||sender-address]={account}",
                                                  {})
 
         return list(map(lambda item: Order.from_list(item, pair), orders['data']))
@@ -266,23 +267,25 @@ class MpxApi(PyexAPI):
 
         return True
 
-    def get_trades(self, pair: Pair, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(pair, Pair))
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+        assert(isinstance(pair, str))
         assert(page_number == 1)
 
-        trades = self._http_unauthenticated("GET", f"/fills?filter[pair-name]={pair.get_pair_name()}"
-                                                   f"&filter[maker-address||taker-address]={self.zrx_exchange.web3.eth.defaultAccount}",
+        account = str(self.zrx_exchange.web3.eth.defaultAccount).lower()
+
+        trades = self._http_unauthenticated("GET", f"/fills?filter[pair-name]={pair}"
+                                                   f"&filter[maker-address||taker-address]={account}",
                                                    {})['data']
 
-        return list(map(lambda item: Trade.from_list(item, pair), trades))
+        return list(map(lambda item: Trade.from_list(item), trades))
 
-    def get_all_trades(self, pair: Pair, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(pair, Pair))
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+        assert(isinstance(pair, str))
         assert(page_number == 1)
 
-        trades = self._http_unauthenticated("GET", f"/fills?filter[pair-name]={pair.get_pair_name()}", {})['data']
+        trades = self._http_unauthenticated("GET", f"/fills?filter[pair-name]={pair}", {})['data']
 
-        return list(map(lambda item: Trade.from_list(item, pair), trades))
+        return list(map(lambda item: Trade.from_list(item), trades))
 
     def _http_authenticated(self, method: str, resource: str, body: dict):
         assert (isinstance(method, str))
