@@ -197,7 +197,7 @@ class MpxApi(PyexAPI):
         assert (isinstance(pair, MpxPair))
 
         orders = self._http_authenticated("GET", f"/orders?filter[pairName]={pair.get_pair_name()}&filter[state]=open"
-                                                 f"&filter[makerAddress||takerAddress]={self.zrx_exchange.web3.eth.defaultAccount}",
+                                                 f"&filter[maker-address||sender-address]={self.zrx_exchange.web3.eth.defaultAccount}",
                                                  {})
 
         return list(map(lambda item: Order.from_list(item, pair), orders['data']))
@@ -271,7 +271,7 @@ class MpxApi(PyexAPI):
         assert(page_number == 1)
 
         trades = self._http_unauthenticated("GET", f"/fills?filter[pairName]={pair.get_pair_name()}"
-                                                   f"&filter[makerAddress||takerAddress]={self.zrx_exchange.web3.eth.defaultAccount}",
+                                                   f"&filter[maker-address||taker-address]={self.zrx_exchange.web3.eth.defaultAccount}",
                                                    {})['data']
 
         return list(map(lambda item: Trade.from_list(item, pair), trades))
