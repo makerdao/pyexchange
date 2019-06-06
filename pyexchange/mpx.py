@@ -145,7 +145,7 @@ class Trade:
     @staticmethod
     def from_list(trade: list):
         return Trade(trade_id=trade['id'],
-                     timestamp=int(float(trade['attributes']['updated-at'])) // 1000,
+                     timestamp=trade['attributes']['updated-at'],
                      pair=trade['attributes']['pair-name'],
                      maker_amount=Wad(int(trade['attributes']['maker-asset-filled-amount'])),
                      taker_amount=Wad(int(trade['attributes']['taker-asset-filled-amount'])),
