@@ -159,7 +159,7 @@ class MpxApi(PyexAPI):
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, zrx_exchange: ZrxExchangeV2, fee_recipient: Address, timeout: float, our_address: None):
+    def __init__(self, api_server: str, zrx_exchange: ZrxExchangeV2, fee_recipient: Address, timeout: float, our_address: str):
         assert (isinstance(api_server, str))
         assert (isinstance(zrx_exchange, ZrxExchangeV2) or zrx_exchange is None)
         assert (isinstance(fee_recipient, Address) or fee_recipient is None)
