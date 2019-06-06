@@ -159,25 +159,30 @@ class MpxApi(PyexAPI):
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, zrx_exchange: ZrxExchangeV2, fee_recipient: Address, timeout: float):
+    def __init__(self, api_server: str, zrx_exchange: ZrxExchangeV2, fee_recipient: Address, timeout: float, our_address: str):
         assert (isinstance(api_server, str))
-        assert (isinstance(zrx_exchange, ZrxExchangeV2))
-        assert (isinstance(fee_recipient, Address))
+        assert (isinstance(zrx_exchange, ZrxExchangeV2) or zrx_exchange is None)
+        assert (isinstance(fee_recipient, Address) or fee_recipient is None)
 
         self.api_server = api_server
         self.zrx_exchange = zrx_exchange
         self.timeout = timeout
         self.fee_recipient = fee_recipient
 
+        if our_address is not None:
+            self.our_account = our_address.lower()
+        else:
+            self.our_account = str(self.zrx_exchange.web3.eth.defaultAccount).lower()
+
         self.token = None
 
     def authenticate(self):
-        data = self._http_unauthenticated("GET", f"/json_web_tokens/{self.zrx_exchange.web3.eth.defaultAccount}", {})
+        data = self._http_unauthenticated("GET", f"/json_web_tokens/{self.our_account}", {})
         nonce = data['data']['attributes']['nonce']
 
         signature = eth_sign(bytes(nonce, 'utf-8'), self.zrx_exchange.web3)
         data['data']['attributes']['signature'] = signature
-        result = self._http_unauthenticated("PUT", f"/json_web_tokens/{self.zrx_exchange.web3.eth.defaultAccount}",
+        result = self._http_unauthenticated("PUT", f"/json_web_tokens/{self.our_account}",
                                             data)
 
         self.token = result['data']['attributes']['token']
@@ -195,10 +200,8 @@ class MpxApi(PyexAPI):
     def get_orders(self, pair: MpxPair) -> List[Order]:
         assert (isinstance(pair, MpxPair))
 
-        account = str(self.zrx_exchange.web3.eth.defaultAccount).lower()
-
         orders = self._http_authenticated("GET", f"/orders?filter[pair-name]={pair.get_pair_name()}&filter[state]=open"
-                                                 f"&filter[maker-address||sender-address]={account}",
+                                                 f"&filter[maker-address||sender-address]={self.our_account}",
                                                  {})
 
         return list(map(lambda item: Order.from_list(item, pair), orders['data']))
@@ -271,10 +274,8 @@ class MpxApi(PyexAPI):
         assert(isinstance(pair, str))
         assert(page_number == 1)
 
-        account = str(self.zrx_exchange.web3.eth.defaultAccount).lower()
-
         trades = self._http_unauthenticated("GET", f"/fills?filter[pair-name]={pair}"
-                                                   f"&filter[maker-address||taker-address]={account}",
+                                                   f"&filter[maker-address||taker-address]={self.our_account}",
                                                    {})['data']
 
         return list(map(lambda item: Trade.from_list(item), trades))
