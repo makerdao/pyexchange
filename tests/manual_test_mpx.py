@@ -33,7 +33,7 @@ web3.eth.defaultAccount = sys.argv[1]
 register_key(web3, sys.argv[2])
 zrx_exchange = ZrxExchangeV2(web3, EXCHANGE_ADDR)
 pair = MpxPair("WETH-DAI", WETH_ADDR, 18, DAI_ADDR, 18)
-api = MpxApi("https://api.mpexchange.io", zrx_exchange, FEE_RECIPIENT, 9.5)
+api = MpxApi("https://api.mpexchange.io", zrx_exchange, FEE_RECIPIENT, 9.5, None)
 
 api.authenticate()
 print(api.get_markets())
@@ -52,5 +52,6 @@ print(order)
 print(api.get_orders(pair))
 print(api.cancel_order("0xaf11358f4c30393e38307c7665164c763fcd3a7c1c7a0137028bf3b9857158be"))
 print(api.cancel_order("0x6065f274f5cca563513bc4a48ee1ad74e6dc64697834a389ba68d81339780834"))
-print(api.get_all_trades(pair))
+print(api.get_trades("WETH-DAI"))
+print(api.get_all_trades("WETH-DAI"))
 
