@@ -100,6 +100,8 @@ class Trade:
                  trade_id: Optional[id],
                  timestamp: int,
                  pair: str,
+                 maker_address: Address,
+                 taker_address: Address,
                  maker_amount: Wad,
                  taker_amount: Wad,
                  taker_asset_data: Address,
@@ -107,6 +109,8 @@ class Trade:
         assert(isinstance(trade_id, str) or (trade_id is None))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
+        assert(isinstance(maker_address, Address))
+        assert(isinstance(taker_address, Address))
         assert(isinstance(maker_amount, Wad))
         assert(isinstance(taker_amount, Wad))
         assert(isinstance(taker_asset_data, Address))
@@ -115,6 +119,8 @@ class Trade:
         self.trade_id = trade_id
         self.timestamp = timestamp
         self.pair = pair
+        self.maker_address = maker_address
+        self.taker_address = taker_address
         self.maker_amount = maker_amount
         self.taker_amount = taker_amount
         self.taker_asset_data = taker_asset_data
@@ -125,6 +131,8 @@ class Trade:
         return self.trade_id == other.trade_id and \
                self.timestamp == other.timestamp and \
                self.pair == other.pair and \
+               self.maker_address == other.maker_address and \
+               self.taker_address == other.taker_address and \
                self.maker_amount == other.maker_amount and \
                self.taker_amount == other.taker_amount and \
                self.taker_asset_data == other.taker_asset_data and \
@@ -134,6 +142,8 @@ class Trade:
         return hash((self.trade_id,
                      self.timestamp,
                      self.pair,
+                     self.maker_address,
+                     self.taker_address,
                      self.maker_amount,
                      self.taker_amount,
                      self.taker_asset_data,
@@ -147,6 +157,8 @@ class Trade:
         return Trade(trade_id=trade['id'],
                      timestamp=trade['attributes']['updated-at'],
                      pair=trade['attributes']['pair-name'],
+                     maker_address=Address(trade['attributes']['maker-address']),
+                     taker_address=Address(trade['attributes']['taker-address']),
                      maker_amount=Wad(int(trade['attributes']['maker-asset-filled-amount'])),
                      taker_amount=Wad(int(trade['attributes']['taker-asset-filled-amount'])),
                      taker_asset_data=ERC20Asset.deserialize(trade['attributes']['taker-asset-data']).token_address,
