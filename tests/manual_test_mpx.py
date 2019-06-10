@@ -41,17 +41,18 @@ print(api.get_fee_recipients())
 
 order = api.place_order(pair,
                         is_sell=False,
-                        price=Wad.from_number(19.9),
-                        amount=Wad.from_number(0.9))
+                        price=Wad.from_number(28.8),
+                        amount=Wad.from_number(0.7))
 print(order)
 order = api.place_order(pair,
                         is_sell=True,
-                        price=Wad.from_number(11.52),
-                        amount=Wad.from_number(0.0041))
+                        price=Wad.from_number(300),
+                        amount=Wad.from_number(0.1))
 print(order)
+orders = api.get_orders(pair)
+for o in orders:
+    print(api.cancel_order(o, None))
 print(api.get_orders(pair))
-print(api.cancel_order("0xaf11358f4c30393e38307c7665164c763fcd3a7c1c7a0137028bf3b9857158be"))
-print(api.cancel_order("0x6065f274f5cca563513bc4a48ee1ad74e6dc64697834a389ba68d81339780834"))
 print(api.get_trades("WETH-DAI"))
 print(api.get_all_trades("WETH-DAI"))
 
