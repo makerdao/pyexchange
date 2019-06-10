@@ -44,25 +44,36 @@ class MpxPair(Pair):
 
 class Order(ZrxOrder):
 
+    def __init__(self, exchange, order_hash: str, sender: Address, maker: Address, taker: Address, maker_fee: Wad, taker_fee: Wad,
+                 pay_asset: Asset, pay_amount: Wad, buy_asset: Asset, buy_amount: Wad, salt: int, fee_recipient: Address,
+                 expiration: int, exchange_contract_address: Address, signature: Optional[str]):
+
+        self.order_hash = order_hash
+
+        super().__init__(exchange, sender, maker, taker, maker_fee, taker_fee, pay_asset,
+                         pay_amount, buy_asset, buy_amount, salt, fee_recipient,
+                         expiration, exchange_contract_address, signature)
+
     @staticmethod
     def from_json(exchange, data: dict):
         assert(isinstance(data, dict))
 
-        return ZrxOrder(exchange=exchange,
-                        sender=Address(data['sender-address']),
-                        maker=Address(data['maker-address']),
-                        taker=Address(data['taker-address']),
-                        maker_fee=Wad(int(data['maker-fee'])),
-                        taker_fee=Wad(int(data['taker-fee'])),
-                        pay_asset=Asset.deserialize(str(data['maker-asset-data'])),
-                        pay_amount=Wad(int(data['maker-asset-amount'])),
-                        buy_asset=Asset.deserialize(str(data['taker-asset-data'])),
-                        buy_amount=Wad(int(data['taker-asset-amount'])),
-                        salt=int(data['salt']),
-                        fee_recipient=Address(data['fee-recipient-address']),
-                        expiration=int(data['expiration-time-seconds']),
-                        exchange_contract_address=Address(data['exchange-address']),
-                        signature=data['signature'] if 'signature' in data else None)
+        return Order(exchange=exchange,
+                     order_hash=data['hash'],
+                     sender=Address(data['sender-address']),
+                     maker=Address(data['maker-address']),
+                     taker=Address(data['taker-address']),
+                     maker_fee=Wad(int(data['maker-fee'])),
+                     taker_fee=Wad(int(data['taker-fee'])),
+                     pay_asset=Asset.deserialize(str(data['maker-asset-data'])),
+                     pay_amount=Wad(int(data['maker-asset-amount'])),
+                     buy_asset=Asset.deserialize(str(data['taker-asset-data'])),
+                     buy_amount=Wad(int(data['taker-asset-amount'])),
+                     salt=int(data['salt']),
+                     fee_recipient=Address(data['fee-recipient-address']),
+                     expiration=int(data['expiration-time-seconds']),
+                     exchange_contract_address=Address(data['exchange-address']),
+                     signature=data['signature'] if 'signature' in data else None)
 
 
 class Trade:
