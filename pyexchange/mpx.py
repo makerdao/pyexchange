@@ -43,6 +43,7 @@ class MpxPair(Pair):
 
 
 class Order(ZrxOrder):
+
     @staticmethod
     def from_json(exchange, data: dict):
         assert(isinstance(data, dict))
@@ -183,7 +184,7 @@ class MpxApi(PyexAPI):
                                                  f"&filter[maker-address||sender-address]={self.our_account}",
                                                  {})
 
-        return list(map(lambda item: Order.from_json(self.zrx_exchange.address, item['attributes']), orders['data']))
+        return list(map(lambda item: Order.from_json(self.zrx_exchange, item['attributes']), orders['data']))
 
     def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad) -> ZrxOrder:
         assert (isinstance(pair, Pair))
@@ -240,16 +241,6 @@ class MpxApi(PyexAPI):
         self.logger.info(f"Placed order (#{result}) as #{order_id}")
 
         return order
-
-    def cancel_order(self, order: ZrxOrder, gas_price: None) -> bool:
-        assert (isinstance(order, ZrxOrder))
-
-        if gas_price is None:
-            transact = self.zrx_exchange.cancel_order(order).transact()
-        else:
-            transact = self.zrx_exchange.cancel_order(order).transact(gas_price)
-
-        return transact is not None and transact.successful
 
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
