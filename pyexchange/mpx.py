@@ -25,7 +25,8 @@ from pymaker.util import http_response_summary
 from typing import Optional, List
 from pyexchange.zrxv2 import Pair
 from pymaker.sign import eth_sign
-from pymaker.zrxv2 import ZrxExchangeV2, ERC20Asset
+from pymaker.zrxv2 import ZrxExchangeV2, Asset, ERC20Asset, Order as ZrxOrder
+
 import datetime
 
 
@@ -41,58 +42,26 @@ class MpxPair(Pair):
         return self.pair_name
 
 
-class Order:
-    def __init__(self,
-                 order_id: str,
-                 pair: str,
-                 is_sell: bool,
-                 price: Wad,
-                 amount: Wad):
-        assert (isinstance(pair, str))
-        assert (isinstance(is_sell, bool))
-        assert (isinstance(price, Wad))
-        assert (isinstance(amount, Wad))
-
-        self.order_id = order_id
-        self.pair = pair
-        self.is_sell = is_sell
-        self.price = price
-        self.amount = amount
-
-    @property
-    def sell_to_buy_price(self) -> Wad:
-        return self.price
-
-    @property
-    def buy_to_sell_price(self) -> Wad:
-        return self.price
-
-    @property
-    def remaining_buy_amount(self) -> Wad:
-        return self.amount * self.price if self.is_sell else self.amount
-
-    @property
-    def remaining_sell_amount(self) -> Wad:
-        return self.amount if self.is_sell else self.amount * self.price
-
-    def __repr__(self):
-        return pformat(vars(self))
-
+class Order(ZrxOrder):
     @staticmethod
-    def from_list(item: list, pair: MpxPair):
+    def from_json(exchange, data: dict):
+        assert(isinstance(data, dict))
 
-        maker_amount = Wad(int(item['attributes']['maker-asset-amount']))
-        taker_amount = Wad(int(item['attributes']['taker-asset-amount']))
-
-        is_sell = pair.sell_token_address == ERC20Asset.deserialize(item['attributes']['maker-asset-data']).token_address
-        price = taker_amount / maker_amount if is_sell else maker_amount / taker_amount
-        amount = maker_amount if is_sell else taker_amount
-
-        return Order(order_id=item['id'],
-                     pair=item['attributes']['pair-name'],
-                     is_sell=is_sell,
-                     price=price,
-                     amount=amount)
+        return ZrxOrder(exchange=exchange,
+                        sender=Address(data['sender-address']),
+                        maker=Address(data['maker-address']),
+                        taker=Address(data['taker-address']),
+                        maker_fee=Wad(int(data['maker-fee'])),
+                        taker_fee=Wad(int(data['taker-fee'])),
+                        pay_asset=Asset.deserialize(str(data['maker-asset-data'])),
+                        pay_amount=Wad(int(data['maker-asset-amount'])),
+                        buy_asset=Asset.deserialize(str(data['taker-asset-data'])),
+                        buy_amount=Wad(int(data['taker-asset-amount'])),
+                        salt=int(data['salt']),
+                        fee_recipient=Address(data['fee-recipient-address']),
+                        expiration=int(data['expiration-time-seconds']),
+                        exchange_contract_address=Address(data['exchange-address']),
+                        signature=data['signature'] if 'signature' in data else None)
 
 
 class Trade:
@@ -209,16 +178,16 @@ class MpxApi(PyexAPI):
     def get_fee_recipients(self):
         return self._http_unauthenticated("GET", "/fee_recipients", {})
 
-    def get_orders(self, pair: MpxPair) -> List[Order]:
+    def get_orders(self, pair: MpxPair) -> List[ZrxOrder]:
         assert (isinstance(pair, MpxPair))
 
         orders = self._http_authenticated("GET", f"/orders?filter[pair-name]={pair.get_pair_name()}&filter[state]=open"
                                                  f"&filter[maker-address||sender-address]={self.our_account}",
                                                  {})
 
-        return list(map(lambda item: Order.from_list(item, pair), orders['data']))
+        return list(map(lambda item: Order.from_json(self.zrx_exchange.address, item['attributes']), orders['data']))
 
-    def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad) -> str:
+    def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad) -> ZrxOrder:
         assert (isinstance(pair, Pair))
         assert (isinstance(is_sell, bool))
         assert (isinstance(price, Wad))
@@ -272,15 +241,17 @@ class MpxApi(PyexAPI):
 
         self.logger.info(f"Placed order (#{result}) as #{order_id}")
 
-        return order_id
+        return order
 
-    def cancel_order(self, order_id: str) -> bool:
-        assert (isinstance(order_id, str))
+    def cancel_order(self, order: ZrxOrder, gas_price: None) -> bool:
+        assert (isinstance(order, ZrxOrder))
 
-        self.logger.info(f"Cancelling order #{order_id}...")
-        self._http_authenticated("DELETE", f"/orders/{order_id}", {})
+        if gas_price is None:
+            transact = self.zrx_exchange.cancel_order(order).transact()
+        else:
+            transact = self.zrx_exchange.cancel_order(order).transact(gas_price)
 
-        return True
+        return transact is not None and transact.successful
 
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
