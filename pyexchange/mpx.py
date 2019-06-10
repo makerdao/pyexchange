@@ -242,6 +242,14 @@ class MpxApi(PyexAPI):
 
         return order
 
+    def cancel_order(self, order_id: str) -> bool:
+        assert (isinstance(order_id, str))
+
+        self.logger.info(f"Cancelling order #{order_id}...")
+        self._http_authenticated("DELETE", f"/orders/{order_id}", {})
+
+        return True
+
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(page_number == 1)
