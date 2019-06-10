@@ -155,9 +155,7 @@ class MpxApi(PyexAPI):
         else:
             self.our_account = str(self.zrx_exchange.web3.eth.defaultAccount).lower()
 
-        self.token = None
-
-    def authenticate(self):
+    def _get_token(self) -> str:
         data = self._http_unauthenticated("GET", f"/json_web_tokens/{self.our_account}", {})
         nonce = data['data']['attributes']['nonce']
 
@@ -166,7 +164,7 @@ class MpxApi(PyexAPI):
         result = self._http_unauthenticated("PUT", f"/json_web_tokens/{self.our_account}",
                                             data)
 
-        self.token = result['data']['attributes']['token']
+        return result['data']['attributes']['token']
 
     def get_markets(self):
         return self._http_unauthenticated("GET", "/token_pairs", {})
@@ -283,7 +281,7 @@ class MpxApi(PyexAPI):
                                              data=data,
                                              headers={
                                                  'Content-Type': 'application/vnd.api+json',
-                                                 'Authorization': f'Bearer {self.token}',
+                                                 'Authorization': f'Bearer {self._get_token()}',
                                              },
                                              timeout=self.timeout))
 
