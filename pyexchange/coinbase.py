@@ -24,7 +24,11 @@ import time
 import base64
 import requests
 import json
+
+from datetime import datetime, timezone
 import dateutil.parser
+from dateutil.tz import tzutc
+
 from pymaker import Wad
 from pymaker.util import http_response_summary
 from typing import Optional, List
@@ -122,7 +126,7 @@ class Trade:
     @staticmethod
     def from_our_list(pair, trade):
         return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(dateutil.parser.parse(trade['created_at']).strftime("%s")),
+                     timestamp=int(dateutil.parser.parse(trade['created_at']).timestamp()),
                      pair=pair,
                      is_sell=True if trade['side'] == 'sell' else False,
                      price=Wad.from_number(trade['price']),
@@ -131,7 +135,7 @@ class Trade:
     @staticmethod
     def from_all_list(pair, trade):
         return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(dateutil.parser.parse(trade['time']).strftime("%s")),
+                     timestamp=int(dateutil.parser.parse(trade['time']).timestamp()),
                      pair=pair,
                      is_sell=True if trade['side'] == 'sell' else False,
                      price=Wad.from_number(trade['price']),
