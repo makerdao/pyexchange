@@ -25,9 +25,7 @@ import base64
 import requests
 import json
 
-from datetime import datetime, timezone
 import dateutil.parser
-from dateutil.tz import tzutc
 
 from pymaker import Wad
 from pymaker.util import http_response_summary
