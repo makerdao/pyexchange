@@ -198,7 +198,7 @@ class LiquidApi(PyexAPI):
                          f" price {data['price']})...")
 
         result = self._http_authenticated("POST", "/orders", data)
-        order_id = result['id']
+        order_id = str(result['id'])
 
         self.logger.info(f"Placed order (#{result}) as #{order_id}")
 
