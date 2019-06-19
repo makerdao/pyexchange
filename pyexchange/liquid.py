@@ -211,7 +211,7 @@ class LiquidApi(PyexAPI):
 
         result = self._http_authenticated("PUT", f"/orders/{order_id}/cancel", {})
 
-        if order_id == result['id']:
+        if order_id == str(result['id']):
             self.logger.info(f"Cancelled order #{order_id}")
             return True
 
@@ -227,7 +227,7 @@ class LiquidApi(PyexAPI):
 
         result = self._http_authenticated("GET", f"/executions/me?product_id={product_id}", {})
 
-        return list(map(lambda item: Trade.to_trade(item), result['models']))
+        return list(map(lambda item: Trade.to_trade(pair, item), result['models']))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
