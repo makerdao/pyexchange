@@ -18,10 +18,19 @@
 import sys
 
 from pyexchange.liquid import LiquidApi
+from pymaker import Wad
 
 liquid = LiquidApi('https://api.quoine.com', sys.argv[1], sys.argv[2], 9.5)
 
 # print(liquid.get_markets())
 # print(liquid.get_pair("ETHUSDC"))
+print(liquid.get_balances())
+order = liquid.place_order("ETHUSDC", False, Wad.from_number(260), Wad.from_number(0.01))
+# print(order)
+print(liquid.get_orders("ETHUSDC"))
+# print(liquid.get_trades("ETHUSDC"))
 # print(liquid.get_balances())
-print(liquid.get_all_trades("VETETH"))
+print(liquid.cancel_order(str(order)))
+print(liquid.get_orders("ETHUSDC"))
+# print(liquid.get_orders("ETHUSDC"))
+# print(liquid.get_all_trades("VETETH"))
