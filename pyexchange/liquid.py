@@ -129,7 +129,7 @@ class Trade:
         return Trade(trade_id=str(trade['id']),
                      timestamp=int(trade['created_at']),
                      pair=pair,
-                     is_sell=trade['taker_side'] == 'sell',
+                     is_sell=trade['taker_side'] == 'buy',
                      price=Wad.from_number(trade['price']),
                      amount=Wad.from_number(trade['quantity']))
 
