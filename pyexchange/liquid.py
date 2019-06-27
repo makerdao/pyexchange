@@ -17,6 +17,7 @@
 
 import logging
 import requests
+import threading
 import json
 import time
 import jwt
@@ -151,6 +152,8 @@ class LiquidApi(PyexAPI):
         self.api_key = api_key
         self.secret_key = secret_key
         self.timeout = timeout
+        self.last_nonce = 0
+        self.last_nonce_lock = threading.Lock()
 
     def get_markets(self):
         return self._http_request("GET", "/products", {})
@@ -239,6 +242,20 @@ class LiquidApi(PyexAPI):
 
         return list(map(lambda item: Trade.to_trade(pair, item), result['models']))
 
+    def _choose_nonce(self) -> int:
+        with self.last_nonce_lock:
+            timed_nonce = int(time.time()*1000)
+
+            if self.last_nonce + 1 > timed_nonce:
+                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}'")
+                self.logger.info(f"In this case using '{self.last_nonce + 1}' instead")
+
+                self.last_nonce += 1
+            else:
+                self.last_nonce = timed_nonce
+
+            return self.last_nonce
+
     def _http_request(self, method: str, resource: str, body: dict):
         assert(isinstance(method, str))
         assert(isinstance(resource, str))
@@ -256,27 +273,41 @@ class LiquidApi(PyexAPI):
         assert(isinstance(resource, str))
         assert(isinstance(body, dict) or (body is None))
 
-        auth_payload = {
-            "path": resource,
-            "nonce": int(round(time.time() * 1000)),
-            "token_id": self.api_key
-        }
+        max_attempts = 3
+        for attempt in range(0, max_attempts):
+            our_nonce = self._choose_nonce()
 
-        signature = jwt.encode(auth_payload, self.secret_key, 'HS256')
+            auth_payload = {
+                "path": resource,
+                "nonce": our_nonce,
+                "token_id": self.api_key
+            }
 
-        data = json.dumps(body, separators=(',', ':'))
+            signature = jwt.encode(auth_payload, self.secret_key, 'HS256')
 
-        return self._result(requests.request(method=method,
-                                             url=f"{self.api_server}{resource}",
-                                             data=data,
-                                             headers={
-                                                 "X-Quoine-API-Version": "2",
-                                                 "Content-Type":"application/json",
-                                                 "X-Quoine-Auth":signature
-                                             },
-                                             timeout=self.timeout))
+            data = json.dumps(body, separators=(',', ':'))
 
-    def _result(self, result) -> Optional[dict]:
+            result = self._result(requests.request(method=method,
+                                                 url=f"{self.api_server}{resource}",
+                                                 data=data,
+                                                 headers={
+                                                     "X-Quoine-API-Version": "2",
+                                                     "Content-Type":"application/json",
+                                                     "X-Quoine-Auth":signature
+                                                 },
+                                                 timeout=self.timeout))
+
+            # result will be `None` if we need to readjust nonce
+            # in this case we will try again in the next iteration
+
+            if result is not None:
+                return result
+
+    def _result(self, result, our_nonce: Optional[int] = None) -> Optional[dict]:
+
+        if result.status_code == 401 and f"Your nonce {our_nonce} is smaller than or equal last nonce" in result.json()["message"]:
+            return None
+
         if not result.ok:
             raise Exception(f"Liquid API invalid HTTP response: {http_response_summary(result)}")
 
