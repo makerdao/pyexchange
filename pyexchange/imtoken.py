@@ -20,9 +20,10 @@ from pprint import pformat
 from pyexchange.api import PyexAPI
 import requests
 import json
-from pymaker import Wad
+from pymaker import Contract, Address, Transact, Wad
 from pymaker.util import http_response_summary
 from typing import Optional, List
+from web3 import Web3
 
 
 class Trade:
@@ -122,3 +123,37 @@ class ImtokenApi(PyexAPI):
             raise Exception(f"Imtoken API invalid JSON response: {http_response_summary(result)}")
 
         return data
+
+
+class ImToken(Contract):
+    """A client for the ImToken proxy exchange contract.
+
+    Attributes:
+        web3: An instance of `Web` from `web3.py`.
+        address: Ethereum address of the `ImToken` proxy contract.
+    """
+
+    abi = Contract._load_abi(__name__, 'abi/IMTOKEN.abi')
+
+    def __init__(self, web3: Web3, address: Address):
+        assert(isinstance(web3, Web3))
+        assert(isinstance(address, Address))
+
+        self.web3 = web3
+        self.address = address
+        self._contract = self._get_contract(web3, self.abi, address)
+
+    def withdraw(self, amount: Wad, token: Address, to: Address) -> Transact:
+        """Withdraws `amount` of `token` from ImToken proxy contract `to` address.
+
+        Args:
+            amount: Amount of Token to be withdrawn from ImToken.
+            token: Token address to be withdrawn from ImToken.
+            to: Address to send Tokens from ImToken
+
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+        assert(isinstance(amount, Wad))
+        return Transact(self, self.web3, self.abi, self.address, self._contract, 'withdraw',
+                        [token.address, to.address, amount.value])
