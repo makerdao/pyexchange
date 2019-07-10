@@ -155,7 +155,7 @@ class AirswapApi:
                                       sell_token.__str__()) + \
                   self._build_intents(buy_token.__str__(),
                                       alt_sell_token.__str__())
-        print(f'our intents {intents}')
+
         return self._http_post("/setIntents", intents)
 
     def sign_order(self,
