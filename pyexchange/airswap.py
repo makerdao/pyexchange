@@ -142,11 +142,20 @@ class AirswapApi:
         self.api_server = api_server
         self.timeout = timeout
 
-    def set_intents(self, buy_token: Address, sell_token: Address):
+    def set_intents(self,
+                    buy_token: Address,
+                    sell_token: Address,
+                    alt_sell_token: Address):
+
         assert(isinstance(buy_token, Address))
         assert(isinstance(sell_token, Address))
+        assert(isinstance(alt_sell_token, Address))
 
-        intents = self._build_intents(buy_token.__str__(), sell_token.__str__())
+        intents = self._build_intents(buy_token.__str__(),
+                                      sell_token.__str__()) + \
+                  self._build_intents(buy_token.__str__(),
+                                      alt_sell_token.__str__())
+
         return self._http_post("/setIntents", intents)
 
     def sign_order(self,
@@ -207,14 +216,14 @@ class AirswapApi:
                                          json=params,
                                          timeout=self.timeout))
 
-    def _build_intents(self, maker_token_address, taker_token_address):
+    def _build_intents(self, buy_token_address, sell_token_address):
         return [{
-                "makerToken": maker_token_address,
-                "takerToken": taker_token_address,
+                "makerToken": buy_token_address,
+                "takerToken": sell_token_address,
                 "role": "maker"
             }, {
-                "makerToken": taker_token_address,
-                "takerToken": maker_token_address,
+                "makerToken": sell_token_address,
+                "takerToken": buy_token_address,
                 "role": "maker"
             }]
 
