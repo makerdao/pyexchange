@@ -98,6 +98,7 @@ class ImtokenApi(PyexAPI):
         assert(isinstance(page_number, int))
 
         result = self._http_unauthenticated("GET", f"/getOrdersHistory?page={page_number}&perpage=100", {})['orders']
+        result = list(filter(lambda item: item['status'] == 'success', result))
 
         return list(map(lambda item: Trade.from_list(item), result))
 
