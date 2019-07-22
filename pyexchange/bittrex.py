@@ -235,7 +235,7 @@ class BittrexApi(PyexAPI):
         print(result)
         return list(map(lambda item: Trade(trade_id=int(item['Id']),
                                            timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
-                                           pair=None,
+                                           pair=pair,
                                            is_sell=item['OrderType'] == 'SELL',
                                            price=Wad.from_number(item['Price']),
                                            amount=Wad.from_number(item['Quantity'])), result))
