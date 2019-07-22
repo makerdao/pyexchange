@@ -15,10 +15,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import sys
 from pyexchange.bittrex import BittrexApi
 
 
-bittrex = BittrexApi('https://bittrex.com', 9.5)
+bittrex = BittrexApi('https://bittrex.com', sys.argv[1], sys.argv[2], 9.5)
 
-print(bittrex.get_all_trades('BTC-ZRX'))
+print(bittrex.get_markets())
+# print(bittrex.get_pair('ETH-DAI'))
+# print(bittrex.get_all_trades('ETH-DAI'))
+print(bittrex.get_balances())
+# print(bittrex.get_orders('ETH-DAI'))
 # print(bittrex.get_all_trades('BTC-AAA'))
