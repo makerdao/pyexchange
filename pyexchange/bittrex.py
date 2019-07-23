@@ -86,13 +86,13 @@ class Order:
 
 class Trade:
     def __init__(self,
-                 trade_id: id,
+                 trade_id: str,
                  timestamp: int,
                  pair: Optional[str],
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
-        assert(isinstance(trade_id, int))
+        assert(isinstance(trade_id, str))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str) or (pair is None))
         assert(isinstance(is_sell, bool))
@@ -148,14 +148,14 @@ class BittrexApi(PyexAPI):
         self.timeout = timeout
 
     def get_markets(self):
-        return self._http_request("GET", "/api/v1.1/public/getmarkets", {})
+        return self._http_request("GET", "/api/v1.1/public/getmarkets", {})['result']
 
     def get_pair(self, pair: str):
         assert(isinstance(pair, str))
         return next(filter(lambda symbol: symbol['MarketName'] == pair, self.get_markets()))
 
     def get_balances(self):
-        return self._http_authenticated_request("GET", "/api/v1.1/account/getbalances", {})
+        return self._http_authenticated_request("GET", "/api/v1.1/account/getbalances", {})['result']
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
@@ -164,7 +164,8 @@ class BittrexApi(PyexAPI):
             'market': pair
         }
 
-        orders = self._http_authenticated_request("GET", "/api/v1.1/market/getopenorders", params)
+        orders = self._http_authenticated_request("GET", "/api/v1.1/market/getopenorders", params)['result']
+
         return list(map(lambda item: Order.to_order(item), orders))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
@@ -181,10 +182,10 @@ class BittrexApi(PyexAPI):
 
         order_type = "selllimit" if is_sell else "buylimit"
 
-        self.logger.info(f"Placing order ({order_type}, amount {params['size']} of {pair},"
-                         f" price {params['price']})...")
+        self.logger.info(f"Placing order ({order_type}, amount {params['quantity']} of {pair},"
+                         f" price {params['rate']})...")
 
-        result = self._http_authenticated_request("GET", f"/api/v1.1/market/{order_type}", params)
+        result = self._http_authenticated_request("GET", f"/api/v1.1/market/{order_type}", params)['result']
         order_id = result['uuid']
 
         self.logger.info(f"Placed order type {order_type}, id #{order_id}")
@@ -202,7 +203,7 @@ class BittrexApi(PyexAPI):
 
         result = self._http_authenticated_request("GET", "/api/v1.1/market/cancel", params)
 
-        return order_id == result['uuid']
+        return result['success']
 
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
@@ -213,9 +214,9 @@ class BittrexApi(PyexAPI):
             'market': pair
         }
 
-        result = self._http_authenticated_request("GET", "/api/v1.1/account/getorderhistory", params)
-        print(result)
-        return list(map(lambda item: Trade(trade_id=int(item['OrderUuid']),
+        result = self._http_authenticated_request("GET", "/api/v1.1/account/getorderhistory", params)['result']
+
+        return list(map(lambda item: Trade(trade_id=item['OrderUuid'],
                                            timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
                                            pair=item['Exchange'],
                                            is_sell=item['OrderType'] == 'selllimit',
@@ -231,9 +232,9 @@ class BittrexApi(PyexAPI):
             'market': pair
         }
 
-        result = self._http_request("GET", "/api/v1.1/public/getmarkethistory", params)
-        print(result)
-        return list(map(lambda item: Trade(trade_id=int(item['Id']),
+        result = self._http_request("GET", "/api/v1.1/public/getmarkethistory", params)['result']
+
+        return list(map(lambda item: Trade(trade_id=item['Uuid'],
                                            timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
                                            pair=pair,
                                            is_sell=item['OrderType'] == 'SELL',
@@ -262,6 +263,7 @@ class BittrexApi(PyexAPI):
         params['nonce'] = str(int(time.time()))
 
         url = f"{self.api_server}{resource}?{urlencode(params)}"
+
         signature = hmac.new(self.secret_key.encode(), url.encode(), hashlib.sha512).hexdigest()
 
         return self._result(requests.request(method=method,
@@ -271,6 +273,7 @@ class BittrexApi(PyexAPI):
 
     @staticmethod
     def _result(result) -> dict:
+
         if not result.ok:
             raise Exception(f"Bittrex API invalid HTTP response: {http_response_summary(result)}")
 
@@ -279,11 +282,5 @@ class BittrexApi(PyexAPI):
         except Exception:
             raise Exception(f"Bittrex API invalid JSON response: {http_response_summary(result)}")
 
-        if 'success' not in data or data['success'] is not True:
-            raise Exception(f"Bittrex API negative response: {http_response_summary(result)}")
-
-        if 'result' not in data or data['result'] is None:
-            raise Exception(f"Bittrex API negative response: {http_response_summary(result)}")
-
-        return data['result']
+        return data
 
