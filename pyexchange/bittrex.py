@@ -78,7 +78,7 @@ class Order:
     def to_order(item):
         return Order(order_id=item['OrderUuid'],
                      pair=item['Exchange'],
-                     is_sell=True if item['OrderType'] == 'selllimit' else False,
+                     is_sell=True if item['OrderType'] == 'LIMIT_SELL' else False,
                      price=Wad.from_number(item['Price']),
                      amount=Wad.from_number(item['Quantity']),
                      remaining_amount=Wad.from_number(item['QuantityRemaining']))
@@ -219,7 +219,7 @@ class BittrexApi(PyexAPI):
         return list(map(lambda item: Trade(trade_id=item['OrderUuid'],
                                            timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
                                            pair=item['Exchange'],
-                                           is_sell=item['OrderType'] == 'selllimit',
+                                           is_sell=item['OrderType'] == 'LIMIT_SELL',
                                            price=Wad.from_number(item['Price']),
                                            amount=Wad.from_number(item['Quantity'])), result))
 
