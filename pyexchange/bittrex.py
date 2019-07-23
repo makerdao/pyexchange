@@ -220,7 +220,7 @@ class BittrexApi(PyexAPI):
                                            timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
                                            pair=item['Exchange'],
                                            is_sell=item['OrderType'] == 'LIMIT_SELL',
-                                           price=Wad.from_number(item['Price']),
+                                           price=Wad.from_number(item['PricePerUnit']),
                                            amount=Wad.from_number(item['Quantity'])), result))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
