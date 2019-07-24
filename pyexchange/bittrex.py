@@ -185,8 +185,12 @@ class BittrexApi(PyexAPI):
         self.logger.info(f"Placing order ({order_type}, amount {params['quantity']} of {pair},"
                          f" price {params['rate']})...")
 
-        result = self._http_authenticated_request("GET", f"/api/v1.1/market/{order_type}", params)['result']
-        order_id = result['uuid']
+        response = self._http_authenticated_request("GET", f"/api/v1.1/market/{order_type}", params)
+
+        if response['success'] is False:
+            raise Exception(f"Bittrex Failed to place order {response['message']}")
+
+        order_id = response['result']['uuid']
 
         self.logger.info(f"Placed order type {order_type}, id #{order_id}")
 
