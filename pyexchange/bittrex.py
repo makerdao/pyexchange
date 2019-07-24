@@ -65,11 +65,11 @@ class Order:
 
     @property
     def remaining_buy_amount(self) -> Wad:
-        return self.remaining_amount
+        return self.remaining_amount*self.price if self.is_sell else self.remaining_amount
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        return self.remaining_amount
+        return self.remaining_amount if self.is_sell else self.remaining_amount*self.price
 
     def __repr__(self):
         return pformat(vars(self))
@@ -79,7 +79,7 @@ class Order:
         return Order(order_id=item['OrderUuid'],
                      pair=item['Exchange'],
                      is_sell=True if item['OrderType'] == 'LIMIT_SELL' else False,
-                     price=Wad.from_number(item['Price']),
+                     price=Wad.from_number(item['Limit']),
                      amount=Wad.from_number(item['Quantity']),
                      remaining_amount=Wad.from_number(item['QuantityRemaining']))
 
