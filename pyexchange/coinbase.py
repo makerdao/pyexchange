@@ -172,7 +172,7 @@ class CoinbaseApi(PyexAPI):
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders = self._http_authenticated("GET", "/orders", {})
+        orders = self._http_authenticated("GET", f"/orders?product_id={pair}", {})
 
         return list(map(lambda item: Order.from_list(item, pair), orders))
 
