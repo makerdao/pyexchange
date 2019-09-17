@@ -27,20 +27,15 @@ import time
 import urllib.request
 import json
 
-#w3 = Web3(Web3.HTTPProvider("http://vps-20270-1740-t2.tilaa.cloud:8545/", request_kwargs={'timeout': 60}))
 w3 = Web3(Web3.HTTPProvider("https://ropsten.infura.io/v3/351c78ed30774d93b247c588ec019a34", request_kwargs={'timeout': 60}))
 w3.eth.defaultAccount = "0x3b0194e96c57dd9cFb839720080b5626718C0E48"
-#w3.eth.defaultAccount = "0xE239Caeb4A6eCe2567fa5307f6b5D95149a5188F"
 register_private_key(w3, "DC2CBC1873E77E824E538B8CD591268831759BBBDE2CC6C56076379552899BA5")
-#register_private_key(w3, "D6D1743A72FF5CECEB3D4DD0C57BAF919BCCFB90CA52D945C6B94E609A61D2D6")
 TEST_LEV_ADDRESS='0xAa7127e250E87476FdD253f15e86A4Ea9c4c4BD4'
 TEST_DAI_ADDRESS='0xb0F776EB352738CF25710d92Fca2f4A5e2c24D3e'
 TEST_ETH_ADDRESS='0x0000000000000000000000000000000000000000'
 
-#coinbase = CoinbaseApi("https://api.pro.coinbase.com", sys.argv[1], sys.argv[2], sys.argv[3], 9.5)
 leverj = LeverjAPI(w3, "https://test.leverj.io", "0x3b0194e96c57dd9cFb839720080b5626718C0E48","0x376E7631ef8ABd2685904bB5Ab16Cd8D2C51E862","0xf41c425f1a6b9b0e57ebad73cc01a65a2c9c2acc5f3327acf8930f0dbc74f230"  ,9.5)
 
-#custodian_address =  Address(leverj.get_custodian_address())
 custodian_address =  Address("0xD5727f9d8C5b9E4472566683F4e562Ef9B47dCE3")
 
 
@@ -149,34 +144,5 @@ instruments = result['instruments']
 
 
 
-
-# print("get orders")
-# print(coinbase.get_balances())
-# # print("get balance ETH")
-# print(coinbase.get_balance("USDC"))
-# print("get balance ETH")
-# print(coinbase.get_balance("BTC"))
-# print("cancel orders")
-# print(coinbase.cancel_all_orders())
-# print("cancel orders")
-# print(coinbase.cancel_order("144c6f8e-713f-4682-8435-5280fbe8b2b4"))
-# print("place orders")
-# order_id = coinbase.place_order("ETH-USDC", True, Wad.from_number(120), round(Wad.from_number(0.0156547676576), 8))
-# print("cancel order")
-# print(coinbase.cancel_order(order_id))
-# order_id = coinbase.place_order("ETH-USDC", False, Wad.from_number(90), round(Wad.from_number(0.01), 8))
-# print("place orders")
-# order_id = coinbase.place_order("ETH-USDC", False, Wad.from_number(90.11111111111), Wad.from_number(0.0156547676576))
-# print(coinbase.cancel_order(order_id))
-#print(coinbase.get_trades("ETH-USDC"))
-# print("place orders")
-# order_id = coinbase.place_order("ETH-USDC", False, Wad.from_number(20.11111111111), Wad.from_number(0.0156547676576))
-# print(order_id)
-# print("get orders")
-# print(coinbase.get_orders("ETH-USDC"))
-# print("cancel orders")
-# print(coinbase.cancel_all_orders())
-# print("get trades")
-# print(coinbase.get_trades("ETH-USDC"))
 
 
