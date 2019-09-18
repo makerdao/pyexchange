@@ -15,10 +15,25 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import sys
 from pyexchange.bittrex import BittrexApi
+from pymaker import Wad
 
 
-bittrex = BittrexApi('https://bittrex.com', 9.5)
+bittrex = BittrexApi('https://bittrex.com', sys.argv[1], sys.argv[2], 9.5)
 
-print(bittrex.get_all_trades('BTC-ZRX'))
+# print(bittrex.get_markets())
+# print(bittrex.get_pair('ETH-DAI'))
+# print(bittrex.get_all_trades('ETH-DAI'))
+# print(f"Balance: {bittrex.get_balances()}")
+# order = bittrex.place_order('ETH-DAI', True, Wad.from_number(0.1), Wad.from_number(50))
+# order = bittrex.place_order('ETH-DAI', False, Wad.from_number(0.00001), Wad.from_number(50))
+# print(f"Placed order: {order}")
+# print(f"Balance: {bittrex.get_balances()}")
+# print(bittrex.get_trades('ETH-DAI'))
+# print(bittrex.get_all_trades('ETH-DAI'))
+print(bittrex.cancel_order("16bb9e73-92b6-4e1f-8f59-8d34397eff47"))
+
+print(bittrex.get_orders('ETH-DAI'))
+print(f"Balance: {bittrex.get_balances()}")
 # print(bittrex.get_all_trades('BTC-AAA'))
