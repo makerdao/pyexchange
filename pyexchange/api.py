@@ -11,30 +11,39 @@ class PyexAPI:
     """
 
     def ticker(self, pair):
+        """Retrieves level 1 (OHLC, volume, and last price) market data"""
         raise NotImplementedError()
 
     def get_markets(self):
+        """Retrieve a list of symbols traded on the exchange"""
         raise NotImplementedError()
 
     def get_pair(self, pair):
+        """Retrieve trading characteristics for the pair"""
         raise NotImplementedError()
 
     def get_balances(self):
+        """Retrieve a list of token balances"""
         raise NotImplementedError()
 
     def get_orders(self, pair):
+        """Retrieve a list of open orders"""
         raise NotImplementedError()
 
     def place_order(self, pair, is_sell, price, amount):
+        """Submit a new order to add or remove liquidity"""
         raise NotImplementedError()
 
     def cancel_order(self, order_id):
+        """Terminate an open order"""
         raise NotImplementedError()
 
     def get_trades(self, pair, page_number):
+        """Retrieve a list of our own executions"""
         raise NotImplementedError()
 
     def get_all_trades(self, pair, page_number):
+        """Retrieve a list of prints from all market participants"""
         raise NotImplementedError()
 
 

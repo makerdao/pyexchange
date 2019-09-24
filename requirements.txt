@@ -5,3 +5,5 @@ python-dateutil == 2.6.1
 websockets == 6.0.0
 kucoin-python == 2.0.5
 pyjwt == 1.7.1
+simplefix == 1.0.12
+
