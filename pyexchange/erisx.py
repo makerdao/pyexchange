@@ -20,7 +20,7 @@ import logging
 from pyexchange.fix import FixEngine
 
 
-class ErisxApi(FixEngine):
+class ErisxApi():
     """Abstract baseclass to use with exchanges with we interface with using the FIX
     (Financial Information eXchange) protocol.  This class shall implement common logic for connection management
     and fulfill interface contracts presented by PyexAPI.
@@ -30,32 +30,35 @@ class ErisxApi(FixEngine):
     logger = logging.getLogger()
 
     def __init__(self, endpoint, sender_comp_id, username, password):
-        super(ErisxApi, self).__init__(endpoint, sender_comp_id, "ERISX", username, password)
-        self.logon()
+        self.fix = FixEngine(endpoint, sender_comp_id, "ERISX", username, password)
+        self.fix.logon()
 
     def ticker(self, pair):
-        return super().ticker(pair)
+        raise NotImplementedError()
 
     def get_markets(self):
-        return super().get_markets()
+        raise NotImplementedError()
 
     def get_pair(self, pair):
-        return super().get_pair(pair)
+        raise NotImplementedError()
 
     def get_balances(self):
-        return super().get_balances()
+        # TODO: Call into their WebAPI which provides account balances
+        raise NotImplementedError()
 
     def get_orders(self, pair):
-        return super().get_orders(pair)
+        raise NotImplementedError()
 
     def place_order(self, pair, is_sell, price, amount):
-        return super().place_order(pair, is_sell, price, amount)
+        # TODO: Send 35=D
+        raise NotImplementedError()
 
     def cancel_order(self, order_id):
-        return super().cancel_order(order_id)
+        # TODO: Send 35=F
+        raise NotImplementedError()
 
     def get_trades(self, pair, page_number):
-        return super().get_trades(pair, page_number)
+        raise NotImplementedError()
 
     def get_all_trades(self, pair, page_number):
-        return super().get_all_trades(pair, page_number)
+        raise NotImplementedError()
