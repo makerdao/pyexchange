@@ -263,15 +263,13 @@ class KrakenApi(PyexAPI):
         signature = hmac.new(base64.b64decode(self.secret_key), message, hashlib.sha512)
         sigdigest = base64.b64encode(signature.digest())
 
-        headers = {
-            'API-Key': self.api_key,
-            'API-Sign': sigdigest.decode()
-        }
-
         return self._result(requests.request(method=method,
                                              url=f"{self.api_server}{resource}",
                                              data=body,
-                                             headers=headers,
+                                             headers={
+                                                 'API-Key': self.api_key,
+                                                 'API-Sign': sigdigest.decode()
+                                             },
                                              timeout=self.timeout))
 
     def _http_unauthenticated(self, method: str, resource: str, body: dict):
