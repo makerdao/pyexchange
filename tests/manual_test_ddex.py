@@ -20,6 +20,7 @@ import sys
 import time
 
 from web3 import Web3, HTTPProvider
+import web3.utils
 
 from pyexchange.ddex import DdexApi
 from pymaker import Wad, Address

@@ -16,29 +16,18 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-import time
-import json
 import random
-
+import time
 from pprint import pformat
-from typing import Optional, List, Iterable, Iterator
+from typing import Optional, List
 
 import requests
-
-from pymaker import Address
-from pymaker.util import hexstring_to_bytes, http_response_summary
 from web3 import Web3
 
-from typing import Optional, List, Iterable, Iterator
-
-from hexbytes import HexBytes
-from web3 import Web3
-from web3.utils.events import get_event_data
-
-from pymaker import Contract, Address, Transact, Receipt
+from pymaker import Contract, Address
 from pymaker.numeric import Wad
-from pymaker.token import ERC20Token
-from pymaker.util import int_to_bytes32, bytes_to_int
+from pymaker.util import bytes_to_int
+from pymaker.util import http_response_summary
 
 
 class Filled:

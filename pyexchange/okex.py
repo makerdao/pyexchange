@@ -15,17 +15,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import base64
+import datetime
+import hmac
+import json
 import logging
 from pprint import pformat
 from typing import List
 
-import base64
-import datetime
 import dateutil.parser
-import hmac
-import json
 import requests
-import urllib
 
 from pyexchange.model import Candle
 from pymaker.numeric import Wad

@@ -1,7 +1,8 @@
 pytz == 2017.3
-web3 == 4.8.2
-requests == 2.18.4
+web3 == 5.0.0
+requests == 2.22.0
 python-dateutil == 2.6.1
-websockets == 6.0.0
+websockets == 7.0.0
 kucoin-python == 2.0.5
 pyjwt == 1.7.1
+dydx-python == 0.3.1
