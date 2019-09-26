@@ -22,41 +22,28 @@ import threading
 
 class MockFixServer:
     def __init__(self):
-        self.receivedData = False
-        self.loop = asyncio.new_event_loop()
+        self.loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         self.parser = simplefix.FixParser()
+        self.heartbeat_count = 0
 
-    def start(self):
+        print("server calling asyncio.start_server")
         coro = asyncio.start_server(self.handle_data, '127.0.0.1', 1752, loop=self.loop)
-        self.loop.run_until_complete(coro)
+        self.server = self.loop.run_until_complete(coro)
+        print("server __init__ returning")
 
     def run(self):
         print(f"server running on thread {threading.current_thread()}")
         self.loop.run_forever()
-        print("server stopped running")
 
-    @asyncio.coroutine
-    async def handle_data_old(self, reader, writer):
-        request = None
-        while not self.receivedData:
-            self.receivedData = True
-            request = (await reader.read(255)).decode('utf8')
-            print(f"server received {request}")
-            # TODO: Call a method which responds to the request based on message type (tag 35)
-            response = request
-            writer.write(response.encode('utf8'))
-            print("server sent response")
-            await asyncio.sleep(1)
-        writer.close()
-
-    @asyncio.coroutine
     async def handle_data(self, reader, writer):
+        print(f"server entering handle_data on thread {threading.current_thread()}")
         while True:
             message = await self._read_message(reader)
             self.handle_message(message, writer)
-            self.receivedData = True
-            writer.write(f"response message".encode('utf-8'))
-            print("server sent response")
+            await writer.drain()
+            # await asyncio.sleep(1)
+            # time.sleep(1)
+            # FIXME: I shouldn't need to break this loop.  If I don't, the client read blocks forever.
             break
         writer.close()
         print(f"server exiting handle_data on thread {threading.current_thread()}")
@@ -71,11 +58,17 @@ class MockFixServer:
         print(f"server received message {message}")
         return message
 
+    def _write_message(self, message: simplefix.FixMessage, writer):
+        """Sends a message to the server"""
+        print(f"server sending message {message}")
+        writer.write(message.encode())
+
     def handle_message(self, message, writer):
-        print("server handle_message called")
         message_type = message.get(35)
         if message_type == b'A':
             # Echo back the logon message
-            writer.write(message.encode())
+            self._write_message(message, writer)
+        elif message_type == b'0':
+            self.heartbeat_count += 1
         else:
             raise NotImplementedError(f"message_type={message_type} not supported")

@@ -19,6 +19,7 @@ import threading
 import time
 
 from pyexchange.erisx import ErisxApi
+from pyexchange.fix import FixConnectionState
 from tests.mock_fix_server import MockFixServer
 
 
@@ -27,19 +28,22 @@ class TestErisx:
 
     def setup_method(self):
         self.server = MockFixServer()
-        self.server.start()
         server_thread = threading.Thread(target=self.server.run, daemon=True)
         server_thread.start()
         print(f"test setup on thread {threading.current_thread()}")
 
+        time.sleep(1)
         self.client = ErisxApi(endpoint="127.0.0.1:1752", sender_comp_id=TestErisx.sender_comp_id,
                                username="test", password="test")
-        time.sleep(1)  # TODO: Replace this with a mechanism to wait for a response
-        assert self.server.receivedData
-        # TODO: Confirm logon response received
+        while self.client.fix.connection_state != FixConnectionState.LOGGED_IN:
+            print("waiting for login")
+            time.sleep(5)
 
     def test_init(self):
         assert self.client.fix.senderCompId == TestErisx.sender_comp_id
         assert self.client.fix.targetCompId == "ERISX"
         assert self.client.fix.heartbeatInterval > 0
-        # TODO: Wait past the heartbeatInterval and confirm heartbeats were received
+
+        # Wait past the heartbeatInterval and confirm heartbeats were received
+        time.sleep(self.client.fix.heartbeatInterval+1)
+        assert self.server.heartbeat_count > 0

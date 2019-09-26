@@ -17,15 +17,13 @@
 
 import logging
 
+from pyexchange.api import PyexAPI
 from pyexchange.fix import FixEngine
 
 
-class ErisxApi():
-    """Abstract baseclass to use with exchanges with we interface with using the FIX
-    (Financial Information eXchange) protocol.  This class shall implement common logic for connection management
-    and fulfill interface contracts presented by PyexAPI.
-
-    Ideally, subclasses should not need to import simplefix, insulating them from implementation logic within."""
+class ErisxApi(PyexAPI):
+    """Implementation logic for interacting with the ErisX exchange, which uses FIX for order management and
+    market data, and a WebAPI for retrieving account balances."""
 
     logger = logging.getLogger()
 
@@ -34,23 +32,28 @@ class ErisxApi():
         self.fix.logon()
 
     def ticker(self, pair):
+        # TODO: Subscribe to L1 data, await receipt, and then unsubscribe and return the data.
         raise NotImplementedError()
 
     def get_markets(self):
+        # TODO: Send 35=x, await 35=y
         raise NotImplementedError()
 
     def get_pair(self, pair):
+        # TODO: receive a 35=f (not sure how to request it)
         raise NotImplementedError()
 
     def get_balances(self):
-        # TODO: Call into their WebAPI which provides account balances
+        # TODO: Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
+        # They also offer a detailed /balances API, which I don't believe we need at this time.
         raise NotImplementedError()
 
     def get_orders(self, pair):
+        # TODO: Send 35=MA, await 35=8, map the executions by tag 37 (OrderID) to build order state
         raise NotImplementedError()
 
     def place_order(self, pair, is_sell, price, amount):
-        # TODO: Send 35=D
+        # TODO: Send 35=D; await the execution report confirming order is placed
         raise NotImplementedError()
 
     def cancel_order(self, order_id):
@@ -58,6 +61,7 @@ class ErisxApi():
         raise NotImplementedError()
 
     def get_trades(self, pair, page_number):
+        # TODO: like get_orders, send a 35=MA, filter out any open orders (not partially filled)
         raise NotImplementedError()
 
     def get_all_trades(self, pair, page_number):

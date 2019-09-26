@@ -18,6 +18,17 @@
 import asyncio
 import logging
 import simplefix
+import threading
+
+from enum import Enum
+
+
+class FixConnectionState(Enum):
+    UNKNOWN = 0
+    DISCONNECTED = 1
+    CONNECTED = 2
+    LOGGED_IN = 3
+    LOGGED_OUT = 4
 
 
 class FixEngine:
@@ -30,7 +41,7 @@ class FixEngine:
     logger = logging.getLogger()
 
     def __init__(self, endpoint: str, sender_comp_id: str, target_comp_id: str, username: str, password: str,
-                 fix_version="FIX.4.4", heartbeat_interval=10):
+                 fix_version="FIX.4.4", heartbeat_interval=3):
         assert isinstance(endpoint, str)
         assert isinstance(sender_comp_id, str)
         assert isinstance(target_comp_id, str)
@@ -41,24 +52,31 @@ class FixEngine:
         self.targetCompId = target_comp_id
         self.username = username
         self.password = password
-        self.fixVersion = fix_version
-        self.heartbeatInterval = heartbeat_interval
+        self.fix_version = fix_version
+        self.heartbeat_interval = heartbeat_interval
         self.sequenceNum = 0
+        self.connection_state = FixConnectionState.DISCONNECTED
 
-        self._heartbeatTask = None
         self.reader = None
         self.writer = None
         self.parser = simplefix.FixParser()
 
+        # Synchronously establish a connection with the remote endpoint
         (address, port) = tuple(self.endpoint.split(':'))
-        self.loop = asyncio.get_event_loop()
+        self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
         self.reader, self.writer = self.loop.run_until_complete(asyncio.open_connection(address, port, loop=self.loop))
+        self.connection_state = FixConnectionState.CONNECTED
 
-    def _read_message(self):
+        # Start a thread and loop to asynchronously send heartbeats while we are logged in
+        self.heartbeat_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
+        heartbeat_thread = threading.Thread(target=self.run_heartbeats, daemon=True)
+        heartbeat_thread.start()
+
+    async def _read_message(self):
         """Reads the next message from the server"""
         message = None
         while message is None:
-            buf = yield from self.reader.read()
+            buf = await self.reader.read()
             self.parser.append_buffer(buf)
             message = self.parser.get_message()
         logging.debug(f"client received message {message}")
@@ -69,16 +87,24 @@ class FixEngine:
         logging.debug(f"client sending message {message}")
         self.writer.write(message.encode())
 
-    def logon(self):
+    def create_message(self, message_type: str) -> simplefix.FixMessage:
+        assert isinstance(message_type, str)
+        assert len(message_type) == 1
+
         m = simplefix.FixMessage()
-        m.append_pair(8, self.fixVersion)
-        m.append_pair(35, 'A')
+        m.append_pair(8, self.fix_version)
+        m.append_pair(35, message_type)
         m.append_pair(49, self.senderCompId)
         m.append_pair(56, self.targetCompId)
+        return m
+
+    def logon(self):
+        """Synchronously send a logon message and await its acknowledgement"""
+        m = self.create_message('A')
         self._append_sequence_number(m)
         m.append_utc_timestamp(52, header=True)
         m.append_pair(98, '0')
-        m.append_pair(108, self.heartbeatInterval)
+        m.append_pair(108, self.heartbeat_interval)
         m.append_pair(141, 'Y')
         m.append_pair(553, self.username)
         m.append_pair(554, self.password)
@@ -87,21 +113,30 @@ class FixEngine:
         # Confirm logon request (35=A) is acknowledged
         message = self.loop.run_until_complete(self._read_message())
         assert message.get(35) == b'A'
+        self.connection_state = FixConnectionState.LOGGED_IN
+        logging.debug("client logon complete")
 
-        # Start Lifecycle timer to send heartbeats (35=0)
-        if self._heartbeatTask is None:
-            self._heartbeatTask = asyncio.ensure_future(self._heartbeat())
+    def logout(self):
+        # Send a logout message
+        m = self.create_message('5')
+        self._write_message(m)
 
-    def logoff(self):
-        self._heartbeatTask.cancel()
-        self._heartbeatTask = None
+        # TODO: Should we await a response?  Some exchanges may not ACK the logout.
+        self.connection_state = FixConnectionState.LOGGED_OUT
+
+    def run_heartbeats(self):
+        self.heartbeat_loop.run_until_complete(self._heartbeat())
 
     async def _heartbeat(self):
         while True:
-            await asyncio.sleep(self.heartbeatInterval)
-            m = simplefix.FixMessage()
-            m.append_pair(35, '0')
-            self.writer.write(m.encode())
+            await asyncio.sleep(self.heartbeat_interval)
+            if self.connection_state != FixConnectionState.LOGGED_IN:
+                logging.debug("client not logged in; skipping heartbeat")
+                continue
+            m = self.create_message('0')
+            self._append_sequence_number(m)
+            self._write_message(m)
+            logging.debug("client sent heartbeat")
 
     def _append_sequence_number(self, m: simplefix.FixMessage):
         assert isinstance(m, simplefix.FixMessage)
