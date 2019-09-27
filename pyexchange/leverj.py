@@ -125,21 +125,22 @@ class Trade:
 
     @staticmethod
     def from_our_list(pair, trade):
-        return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(dateutil.parser.parse(trade['created_at']).timestamp()),
-                     pair=pair,
-                     is_sell=True if trade['side'] == 'sell' else False,
-                     price=Wad.from_number(trade['price']),
-                     amount=Wad.from_number(trade['size']))
-
-    @staticmethod
-    def from_all_list(pair, trade):
         return Trade(trade_id=trade['executionid'],
                      timestamp=int(int(trade['eventTime'])/1000000),
                      pair=pair,
                      is_sell=True if trade['side'] == 'sell' else False,
                      price=Wad.from_number(trade['price']),
                      amount=Wad.from_number(trade['quantity']))
+
+
+    @staticmethod
+    def from_all_list(pair, trade):
+        return Trade(trade_id=None,
+                     timestamp=int(trade['date']),
+                     pair=pair,
+                     is_sell=True if trade['side'] == 'sell' else False,
+                     price=Wad.from_number(trade['price']),
+                     amount=Wad.from_number(trade['volume']))
 
 
 
@@ -212,16 +213,26 @@ class LeverjAPI(PyexAPI):
                 result_pair.append(item)
         return list(map(lambda item: Order.from_list(item, pair), result_pair))
 
-    def get_trades(self, pair: str, count: int) -> List[Trade]:
-        assert(isinstance(count, int))
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        count = 200
         result_pair =  []
         result = self._http_authenticated("GET", "/api/v1", f"/account/execution?count={count}", None)
         for item in result:
             if item['instrument'] == pair:
                 result_pair.append(item)
 
-        return list(map(lambda item: Trade.from_all_list(pair, item), result_pair))
+        return list(map(lambda item: Trade.from_our_list(pair, item), result_pair))
+
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+        assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+        result = self._http_authenticated("GET", "/api/v1", f"/instrument/{pair}/trade", None)
+
+        return list(map(lambda item: Trade.from_all_list(pair, item), result))
+
+
 
     def get_symbol_trades(self, symbol: str):
         return self._http_authenticated("GET", "/api/v1", f"/instrument/{symbol}/trade", None)
@@ -356,12 +367,35 @@ class LeverJ(Contract):
         return Transact(self, self.web3, self.token_abi, Address(token_address), token_contract, "approve",[self.address.address, int(amount)], {})
 
 
-    def deposit_ether(self, amount: Wad) -> Transact:
-        return Transact(self, self.web3, self.abi, self.address, self._contract, "depositEther",[], {'value': int(amount.value)})
+    def deposit_ether(self, leverjobj: LeverjAPI, amount: Wad, gluon_block_number):
+        custodian_account = self.address
+        if gluon_block_number is None:
+            gluon_block_number = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}", None)['number'] +2
+            Transact(self, self.web3, self.abi, self.address, self._contract, "depositEther",[], {'value': int(amount.value)}).transact()
+            return gluon_block_number
+        else:
+            current_gluon_block = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}", None)['number']
+            if (current_gluon_block < gluon_block_number):
+                return gluon_block_number
+            else:
+                return None
 
-    def deposit_token(self, token_address: str, amount: int) -> Transact:
-        self.logger.info(f"self.address is {self.address}")
-        return Transact(self, self.web3, self.abi, self.address, self._contract, "depositToken",[token_address, amount], {})
+
+    def deposit_token(self,  leverjobj: LeverjAPI, token_address: str, amount: int, gluon_block_number):
+        custodian_account = self.address
+        if gluon_block_number is None:
+            gluon_block_number = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}", None)['number'] +2
+            Transact(self, self.web3, self.abi, self.address, self._contract, "depositToken",[token_address, amount], {}).transact()
+            return gluon_block_number
+        else:
+            current_gluon_block = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}", None)['number']
+            if (current_gluon_block < gluon_block_number):
+                return gluon_block_number
+            else:
+                return None
+
+
+
 
 
     def withdraw_token(self, leverjobj: LeverjAPI, token_addr: str, quantity: int) -> int:
@@ -374,8 +408,6 @@ class LeverJ(Contract):
         timestamp = int(time.time()*1000)
         api_secret = leverjobj.api_secret
         sha3_hash =  Web3.soliditySha3(['string','string','uint256','uint256'],[ethereum_account, token_addr, int(quantity), timestamp])
-        self.logger.info(f"leverjobj is  {leverjobj.web3}")
-        self.logger.info(f"default account is {leverjobj.web3.eth.defaultAccount}")
         signature = eth_sign(sha3_hash, leverjobj.web3, api_secret, True)
         payload = { 
                     'asset': token_addr,
@@ -383,37 +415,36 @@ class LeverJ(Contract):
                     'timestamp': timestamp,
                     'signature': signature
                   }
-        self.logger.info(f"payload is {payload}")
         leverjobj._http_authenticated("POST", "/api/v1", "/account/withdraw", payload)
         number_dict = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}", None)
-        self.logger.info(f"number_dict is {number_dict}")
         return number_dict['number']+3
 
 
-    def claim_funds(self, leverjobj: LeverjAPI, asset: str, quantity: int) -> Transact:
+    def claim_funds(self, leverjobj: LeverjAPI, asset: str, quantity: int, gluon_block_number):
         assert(isinstance(leverjobj, LeverjAPI))
         assert(isinstance(asset, str))
         assert(isinstance(quantity, int))
-        leverjobj.web3.eth.defaultAccount = leverjobj.account_id
-        gluon_block_number = self.withdraw_token(leverjobj, asset, int(quantity))
-        ethereum_account = leverjobj.account_id
-        custodian_account = self.address
-        self.logger.info(
-            f"ethereum_account: {ethereum_account}, custodian_account: {custodian_account}, asset: {asset}")
-        response = leverjobj._http_authenticated(
-            "GET", "/api/v1", f"/plasma/{custodian_account}/evmparams/withdrawals/account/{ethereum_account}/asset/{asset}", None)
-        self.logger.info(f"response: {response} ")
-        addresses = response['addresses']
-        uints_str = response['uints']
-        uints = [int(i) for i in uints_str]
-        signature = response['signature']
-        proof = response['proof']
-        root = response['root']
-        while (leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}", None)['number'] < gluon_block_number):
-            self.logger.info(f'current gluon block is {leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}", None)["number"]} and the gluon block we are waiting for is {gluon_block_number}')
-            time.sleep(30)
-
-        return Transact(self, self.web3, self.abi, self.address, self._contract, "withdraw",[addresses, uints, signature, proof, root], {})
+        
+        if gluon_block_number is None:
+            return self.withdraw_token(leverjobj, asset, int(quantity))
+        else:
+            leverjobj.web3.eth.defaultAccount = leverjobj.account_id
+            ethereum_account = leverjobj.account_id
+            custodian_account = self.address
+            self.logger.info(f"ethereum_account: {ethereum_account}, custodian_account: {custodian_account}, asset: {asset}")
+            response = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}/evmparams/withdrawals/account/{ethereum_account}/asset/{asset}", None)
+            addresses = response['addresses']
+            uints_str = response['uints']
+            uints = [int(i) for i in uints_str]
+            signature = response['signature']
+            proof = response['proof']
+            root = response['root']
+            if (leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}", None)['number'] >= gluon_block_number):
+                self.logger.info(f"finally gluon_block_number reached {gluon_block_number} and we are running final transact")
+                Transact(self, self.web3, self.abi, self.address, self._contract, "withdraw",[addresses, uints, signature, proof, root], {}).transact()
+                return None
+        self.logger.info(f'does not look like gluon_block_number reached {gluon_block_number} and we are currently at {leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{custodian_account}", None)["number"]}')
+        return gluon_block_number
 
 
 
