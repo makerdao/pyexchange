@@ -74,18 +74,27 @@ class FixEngine:
 
     async def _read_message(self):
         """Reads the next message from the server"""
-        message = None
-        while message is None:
-            buf = await self.reader.read()
-            self.parser.append_buffer(buf)
-            message = self.parser.get_message()
-        logging.debug(f"client received message {message}")
-        return message
+        try:
+            message = None
+            while message is None:
+                await asyncio.sleep(0)
+                buf = await self.reader.read()
+                if not buf:
+                    raise ConnectionError
+                self.parser.append_buffer(buf)
+                message = self.parser.get_message()
+            logging.debug(f"client received message {message}")
+            return message
+        except asyncio.CancelledError:
+            logging.error("client read timed out")
+            assert False
 
-    def _write_message(self, message: simplefix.FixMessage):
+    async def _write_message(self, message: simplefix.FixMessage):
         """Sends a message to the server"""
         logging.debug(f"client sending message {message}")
         self.writer.write(message.encode())
+        await self.writer.drain()
+        logging.debug("client done sending message")
 
     def create_message(self, message_type: str) -> simplefix.FixMessage:
         assert isinstance(message_type, str)
@@ -108,10 +117,10 @@ class FixEngine:
         m.append_pair(141, 'Y')
         m.append_pair(553, self.username)
         m.append_pair(554, self.password)
-        self._write_message(m)
+        self.loop.run_until_complete(asyncio.wait_for(self._write_message(m), 4))
 
         # Confirm logon request (35=A) is acknowledged
-        message = self.loop.run_until_complete(self._read_message())
+        message = self.loop.run_until_complete(asyncio.wait_for(self._read_message(), 4))
         assert message.get(35) == b'A'
         self.connection_state = FixConnectionState.LOGGED_IN
         logging.debug("client logon complete")
@@ -135,7 +144,8 @@ class FixEngine:
                 continue
             m = self.create_message('0')
             self._append_sequence_number(m)
-            self._write_message(m)
+            # FIXME: "socket.send() raised exception" logged here
+            await self._write_message(m)
             logging.debug("client sent heartbeat")
 
     def _append_sequence_number(self, m: simplefix.FixMessage):

@@ -15,7 +15,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import threading
 import time
 
 from pyexchange.erisx import ErisxApi
@@ -27,12 +26,10 @@ class TestErisx:
     sender_comp_id = "unit_test"
 
     def setup_method(self):
-        self.server = MockFixServer()
-        server_thread = threading.Thread(target=self.server.run, daemon=True)
-        server_thread.start()
-        print(f"test setup on thread {threading.current_thread()}")
+        # self.server = MockFixServer()
+        # self.server.run_in_another_thread()
+        # time.sleep(1)
 
-        time.sleep(1)
         self.client = ErisxApi(endpoint="127.0.0.1:1752", sender_comp_id=TestErisx.sender_comp_id,
                                username="test", password="test")
         while self.client.fix.connection_state != FixConnectionState.LOGGED_IN:
@@ -42,8 +39,9 @@ class TestErisx:
     def test_init(self):
         assert self.client.fix.senderCompId == TestErisx.sender_comp_id
         assert self.client.fix.targetCompId == "ERISX"
-        assert self.client.fix.heartbeatInterval > 0
+        assert self.client.fix.heartbeat_interval > 0
 
         # Wait past the heartbeatInterval and confirm heartbeats were received
-        time.sleep(self.client.fix.heartbeatInterval+1)
-        assert self.server.heartbeat_count > 0
+        time.sleep(self.client.fix.heartbeat_interval*10)
+        assert self.client.fix.sequenceNum > 2
+        assert False
