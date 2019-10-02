@@ -30,19 +30,24 @@ class ErisxApi(PyexAPI):
     market data, and a WebAPI for retrieving account balances."""
 
     logger = logging.getLogger()
-    clearing_url = "https://clearing.erisx.com/api/v1/"
     timeout = 5
 
-    def __init__(self, endpoint:str, sender_comp_id:str, username:str, password:str, api_secret:str, api_key:str):
-        assert isinstance(endpoint, str)
+    def __init__(self, fix_endpoint: str, sender_comp_id: str, username: str, password: str,
+                 clearing_url: str, api_secret: str, api_key: str):
+        assert isinstance(fix_endpoint, str)
         assert isinstance(sender_comp_id, str)
         assert isinstance(username, str)
         assert isinstance(password, str)
+
+        assert isinstance(clearing_url, str)
         assert isinstance(api_secret, str)
         assert isinstance(api_key, str)
 
-        self.fix = FixEngine(endpoint, sender_comp_id, "ERISX", username, password)
-        self.fix.logon()
+        # FIXME: Commented out temporarily so clearing API can be tested without the FIX connection
+        # self.fix = FixEngine(fix_endpoint, sender_comp_id, "ERISX", username, password)
+        # self.fix.logon()
+
+        self.clearing_url = clearing_url
         self.api_secret = api_secret
         self.api_key = api_key
 
@@ -102,20 +107,24 @@ class ErisxApi(PyexAPI):
         assert(isinstance(params, dict))
         # Auth headers are required for all POST requests
 
+        # FIXME: For debugging only
+        print(f"{self.clearing_url}{resource}")
+        print(json.dumps(params))
+        print(self._create_http_headers("POST", resource))
+
         return self._result(
             requests.post(url=f"{self.clearing_url}{resource}",
-                          data=json.dumps(params),
-                          headers=self._create_http_headers("POST", resource, json.dumps(params)),
+                          json=json.dumps(params),
+                          headers=self._create_http_headers("POST", resource),
                           timeout=self.timeout))
 
-    def _create_http_headers(self, method, request_path, body):
+    def _create_http_headers(self, method, request_path):
         assert(method in ["GET", "POST"])
         assert(isinstance(request_path, str))
-        assert(isinstance(body, str))
 
         unix_timestamp = int(round(time.time()))
         payload_dict = {'sub': self.api_key, 'iat': unix_timestamp}
-        token = jwt.encode(payload_dict, self.api_secret, algorithm='HS256')
+        token = jwt.encode(payload_dict, self.api_secret, algorithm='HS256').decode('utf-8')
 
         headers = {
             "Authorization": f"Bearer {token}"

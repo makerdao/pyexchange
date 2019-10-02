@@ -45,8 +45,9 @@ class TestErisx:
         # time.sleep(1)
         self.clearing_server = ErisXMockClearingAPIServer()
 
-        self.client = ErisxApi(endpoint="127.0.0.1:1752", sender_comp_id=TestErisx.sender_comp_id,
+        self.client = ErisxApi(fix_endpoint="127.0.0.1:1752", sender_comp_id=TestErisx.sender_comp_id,
                                username="test", password="test",
+                               clearing_url="https://clearing.newrelease.erisx.com/api/v1/",
                                api_key="key", api_secret="secret")
         while self.client.fix.connection_state != FixConnectionState.LOGGED_IN:
             print("waiting for login")
