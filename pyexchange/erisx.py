@@ -23,6 +23,7 @@ import time
 
 from pyexchange.api import PyexAPI
 from pyexchange.fix import FixEngine
+from pymaker.util import http_response_summary
 
 
 class ErisxApi(PyexAPI):
@@ -33,15 +34,15 @@ class ErisxApi(PyexAPI):
     timeout = 5
 
     def __init__(self, fix_endpoint: str, sender_comp_id: str, username: str, password: str,
-                 clearing_url: str, api_secret: str, api_key: str):
+                 clearing_url: str, api_key: str, api_secret: str):
         assert isinstance(fix_endpoint, str)
         assert isinstance(sender_comp_id, str)
         assert isinstance(username, str)
         assert isinstance(password, str)
 
         assert isinstance(clearing_url, str)
-        assert isinstance(api_secret, str)
         assert isinstance(api_key, str)
+        assert isinstance(api_secret, str)
 
         # FIXME: Commented out temporarily so clearing API can be tested without the FIX connection
         # self.fix = FixEngine(fix_endpoint, sender_comp_id, "ERISX", username, password)
@@ -66,7 +67,7 @@ class ErisxApi(PyexAPI):
     def get_balances(self):
         # TODO: Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
         # They also offer a detailed /balances API, which I don't believe we need at this time.
-        result = self._http_post("accounts", {})
+        result = self._http_post("accounts", {})["result"]
         return result["accounts"]
 
     def get_orders(self, pair):
@@ -102,19 +103,14 @@ class ErisxApi(PyexAPI):
                          headers=self._create_http_headers("GET", request, ""),
                          timeout=self.timeout))
 
-    def _http_post(self, resource: str, params: dict, has_cursor=False):
+    def _http_post(self, resource: str, params: dict):
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
-        # Auth headers are required for all POST requests
-
-        # FIXME: For debugging only
-        print(f"{self.clearing_url}{resource}")
-        print(json.dumps(params))
-        print(self._create_http_headers("POST", resource))
+        # Auth headers are required for all requests
 
         return self._result(
             requests.post(url=f"{self.clearing_url}{resource}",
-                          json=json.dumps(params),
+                          data=json.dumps(params),
                           headers=self._create_http_headers("POST", resource),
                           timeout=self.timeout))
 
@@ -134,9 +130,7 @@ class ErisxApi(PyexAPI):
     @staticmethod
     def _result(response) -> dict:
         """Interprets the response to an HTTP GET or POST request"""
-        print(f"response={response}")
         if not response.ok:
-            raise Exception(f"Error in HTTP response: {response}")
+            raise Exception(f"Error in HTTP response: {http_response_summary(response)}")
         else:
-            # Remove `"result":,` from the beginning of the response to make it valid json
-            return json.loads(response.text[9:])
+            return response.json()
