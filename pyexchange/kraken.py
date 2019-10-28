@@ -24,6 +24,7 @@ import time
 import base64
 import requests
 import json
+import threading
 
 from pymaker import Wad
 from pymaker.util import http_response_summary
@@ -171,6 +172,9 @@ class KrakenApi(PyexAPI):
         self.secret_key = secret_key
         self.timeout = timeout
 
+        self.last_nonce = 0
+        self.last_nonce_lock = threading.Lock()
+
     def get_markets(self):
         return self._http_unauthenticated("POST", "/0/public/AssetPairs", {})
 
@@ -256,7 +260,7 @@ class KrakenApi(PyexAPI):
         assert(isinstance(resource, str))
         assert(isinstance(body, dict) or (body is None))
 
-        body['nonce'] = int(1000 * time.time())
+        body['nonce'] = self._choose_nonce()
         postdata = urlencode(body)
         encoded = (str(body['nonce']) + postdata).encode()
         message = resource.encode() + hashlib.sha256(encoded).digest()
@@ -283,6 +287,20 @@ class KrakenApi(PyexAPI):
                                              url=f"{self.api_server}{resource}",
                                              data=data,
                                              timeout=self.timeout))
+
+    def _choose_nonce(self) -> int:
+        with self.last_nonce_lock:
+            timed_nonce = int(time.time()*1000)
+
+            if self.last_nonce + 1 > timed_nonce:
+                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}'")
+                self.logger.info(f"In this case using '{self.last_nonce + 1}' instead")
+
+                self.last_nonce += 1
+            else:
+                self.last_nonce = timed_nonce
+
+            return self.last_nonce
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
