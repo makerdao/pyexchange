@@ -225,7 +225,7 @@ class BittrexApi(PyexAPI):
                                            pair=item['Exchange'],
                                            is_sell=item['OrderType'] == 'LIMIT_SELL',
                                            price=Wad.from_number(item['PricePerUnit']),
-                                           amount=Wad.from_number(item['Quantity'])), result))
+                                           amount=Wad.from_number(item['Quantity'] - item['QuantityRemaining'])), result))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
