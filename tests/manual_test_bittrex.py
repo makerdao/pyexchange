@@ -33,6 +33,7 @@ bittrex = BittrexApi('https://bittrex.com', sys.argv[1], sys.argv[2], 9.5)
 # print(bittrex.get_trades('ETH-DAI'))
 # print(bittrex.get_all_trades('ETH-DAI'))
 
-print(bittrex.get_all_trades('BTC-DAI'))
+print(bittrex.get_trades('BTC-DAI'))
+#print(bittrex.get_all_trades('BTC-DAI'))
 print(f"Balance: {bittrex.get_balances()}")
 # print(bittrex.get_all_trades('BTC-AAA'))
