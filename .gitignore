@@ -9,3 +9,8 @@ __pycache__
 
 venv
 _virtualenv
+
+node_modules
+package.json
+yarn.lock
+
