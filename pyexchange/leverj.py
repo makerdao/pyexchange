@@ -181,7 +181,6 @@ class LeverjAPI(PyexAPI):
         for key in balances:
             if balances[key]['symbol'] == coin:
                 return balances[key]['plasma']
-        return 0
 
     def get_pending(self, coin: str):
         assert(isinstance(coin, str))
@@ -189,7 +188,6 @@ class LeverjAPI(PyexAPI):
         for key in balances:
             if balances[key]['symbol'] == coin:
                 return balances[key]['pending']
-        return 0
 
     def get_config(self):
         return self.config
@@ -240,15 +238,12 @@ class LeverjAPI(PyexAPI):
 
         return list(map(lambda item: Trade.from_all_list(pair, item), result))
 
-
-
     def get_symbol_trades(self, symbol: str):
         return self._http_authenticated("GET", "/api/v1", f"/instrument/{symbol}/trade", None)
 
     def get_orderbook_symbol(self, symbol: str):
         return self._http_authenticated("GET", "/api/v1", f"/instrument/{symbol}/orderbook", None)
                                                                                                      
-
     def createNewOrder(self, side: str, price: str, quantity: str, orderInstrument: dict) -> dict:
         precision = self.get_product(orderInstrument['symbol'])['quoteSignificantDigits']
         qty_precision = self.get_product(orderInstrument['symbol'])['baseSignificantDigits']
@@ -264,7 +259,6 @@ class LeverjAPI(PyexAPI):
                 }
         order['signature'] = sign_order(order, orderInstrument, self.api_secret)
         return order
-
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad):
         assert(isinstance(pair, str))
@@ -299,8 +293,6 @@ class LeverjAPI(PyexAPI):
             result.append(self.cancel_order(order_id))
 
         return result
-
-
 
     def _http_authenticated(self, method: str, api_path: str, resource: str, body):
         assert(isinstance(method, str))
@@ -379,13 +371,18 @@ class LeverJ(Contract):
         self.address = address
         self._contract = self._get_contract(web3, self.abi, address)
     
-
     def approve_token(self, token_address: str, amount: int) -> Transact:
+        assert(isinstance(token_address, str))
+        assert(isinstance(amount, int))
+
         token_contract = self._get_contract(self.web3, self.token_abi, Address(token_address))
         return Transact(self, self.web3, self.token_abi, Address(token_address), token_contract, "approve",[self.address.address, int(amount)], {})
 
-
     def deposit_ether(self, leverjobj: LeverjAPI, amount: Wad, gluon_block_number):
+        assert(isinstance(leverjobj, LeverjAPI))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(gluon_block_number, None) or isinstance(gluon_block_number, int))
+
         custodian_account = self.address
         app_id = leverjobj.get_spot_exchange_id()
         if gluon_block_number is None:
@@ -399,8 +396,12 @@ class LeverJ(Contract):
             else:
                 return None
 
-
     def deposit_token(self,  leverjobj: LeverjAPI, token_address: str, amount: int, gluon_block_number):
+        assert(isinstance(leverjobj, LeverjAPI))
+        assert(isinstance(token_address, str))
+        assert(isinstance(amount, int))
+        assert(isinstance(gluon_block_number, None) or isinstance(gluon_block_number, int))
+
         custodian_account = self.address
         app_id = leverjobj.get_spot_exchange_id()
         if gluon_block_number is None:
@@ -413,10 +414,6 @@ class LeverJ(Contract):
                 return gluon_block_number
             else:
                 return None
-
-
-
-
 
     def withdraw_token(self, leverjobj: LeverjAPI, token_addr: str, quantity: int) -> int:
         assert(isinstance(leverjobj, LeverjAPI))
@@ -439,7 +436,6 @@ class LeverJ(Contract):
         leverjobj._http_authenticated("POST", "/api/v1", "/account/withdraw", payload)
         number_dict = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{app_id}", None)
         return number_dict['number']+3
-
 
     def claim_funds(self, leverjobj: LeverjAPI, asset: str, quantity: int, gluon_block_number):
         assert(isinstance(leverjobj, LeverjAPI))
