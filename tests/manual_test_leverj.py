@@ -27,21 +27,24 @@ import time
 import urllib.request
 import json
 
-#w3 = Web3(Web3.HTTPProvider("http://vps-20270-1740-t2.tilaa.cloud:8545/", request_kwargs={'timeout': 60}))
-w3 = Web3(Web3.HTTPProvider("https://ropsten.infura.io/v3/351c78ed30774d93b247c588ec019a34", request_kwargs={'timeout': 60}))
-w3.eth.defaultAccount = "0x3b0194e96c57dd9cFb839720080b5626718C0E48"
-#w3.eth.defaultAccount = "0xE239Caeb4A6eCe2567fa5307f6b5D95149a5188F"
-register_private_key(w3, "DC2CBC1873E77E824E538B8CD591268831759BBBDE2CC6C56076379552899BA5")
+w3 = Web3(Web3.HTTPProvider("NodeAddressWithPort", request_kwargs={'timeout': 60}))
+w3.eth.defaultAccount = "ethAccount"
+register_private_key(w3, "PrivateKey")
 #register_private_key(w3, "D6D1743A72FF5CECEB3D4DD0C57BAF919BCCFB90CA52D945C6B94E609A61D2D6")
-TEST_LEV_ADDRESS='0xAa7127e250E87476FdD253f15e86A4Ea9c4c4BD4'
-TEST_DAI_ADDRESS='0xb0F776EB352738CF25710d92Fca2f4A5e2c24D3e'
+TEST_LEV_ADDRESS='LevAddress'
+TEST_DAI_ADDRESS='DaiAddress'
+TEST_REP_ADDRESS='RepAddress'
 TEST_ETH_ADDRESS='0x0000000000000000000000000000000000000000'
 
 #coinbase = CoinbaseApi("https://api.pro.coinbase.com", sys.argv[1], sys.argv[2], sys.argv[3], 9.5)
-leverj = LeverjAPI(w3, "https://test.leverj.io", "0x3b0194e96c57dd9cFb839720080b5626718C0E48","0x376E7631ef8ABd2685904bB5Ab16Cd8D2C51E862","0xf41c425f1a6b9b0e57ebad73cc01a65a2c9c2acc5f3327acf8930f0dbc74f230"  ,9.5)
+#leverj = LeverjAPI(w3, "https://test.leverj.io", "0x3b0194e96c57dd9cFb839720080b5626718C0E48","0x376E7631ef8ABd2685904bB5Ab16Cd8D2C51E862","0xf41c425f1a6b9b0e57ebad73cc01a65a2c9c2acc5f3327acf8930f0dbc74f230"  ,9.5)
+leverj = LeverjAPI(w3, "LeverjWebsiteAddress", "AccountID","apiKey","secret"  ,9.5)
 
 #custodian_address =  Address(leverj.get_custodian_address())
-custodian_address =  Address("0xD5727f9d8C5b9E4472566683F4e562Ef9B47dCE3")
+#below is for ropsten
+#custodian_address =  Address("0xD5727f9d8C5b9E4472566683F4e562Ef9B47dCE3")
+#below is for kovan
+custodian_address =  Address("GluonEthereumAddressFromLeverj")
 
 
 leverj_custodian = LeverJ(w3, custodian_address)
@@ -81,10 +84,15 @@ print("get balances for ETH")
 print(leverj.get_balance("ETH"))
 
 print("get balances for DAI")
+print(f"type of dai balance is {type(leverj.get_balance('DAI'))}")
 print(leverj.get_balance("DAI"))
 
 print("getting LEVETH instrument from get_product")
 print(leverj.get_product("LEVETH"))
+print(leverj.get_product("FEEETH"))
+print(leverj.get_product("ETHDAI"))
+#print(leverj.get_product("USDCDAI"))
+print(leverj.get_product("LEVDAI"))
 
 
 print("getting config")
@@ -93,7 +101,7 @@ result = leverj.get_config()
 instruments = result['instruments']
 #LEVETH_instrument = instruments['LEVETH']
 #
-#print(result)
+print(result)
 #
 #print("get custodian address for either mainnet or ropsten")
 #print(leverj.get_custodian_address())
@@ -109,7 +117,7 @@ instruments = result['instruments']
 #print(newOrder)
 #
 #print('sending order to test leverj')
-#leverj.place_order(newOrder)
+#leverj.place_order("LEVETH", False, Wad.from_number(0.001229), Wad.from_number(20))
 #
 #print('sending aggressive order to trade')
 #leverj.place_order(tradeNewOrder)
@@ -129,11 +137,11 @@ instruments = result['instruments']
 #print("executions")
 #print(leverj.get_trades("LEVETH",3))
 #print(len(leverj.get_trades("LEVETH",3)))
-print("7 executions")
-print(leverj.get_trades("LEVETH"))
+#print("7 executions")
+#print(leverj.get_trades("LEVETH"))
 
-print("trades for LEVETH")
-print(leverj.get_all_trades("LEVETH"))
+#print("trades for LEVETH")
+#print(leverj.get_all_trades("LEVETH"))
 
 
 #time.sleep(15)
