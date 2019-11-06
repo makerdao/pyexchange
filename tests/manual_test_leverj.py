@@ -107,8 +107,8 @@ print(result)
 #    print("there was an issue sending orders")
 #    print("error", sys.exc_info()[0], "occurred.")
 
-#print("orders on the platform test")
-#print(leverj.get_all_orders())
+print("orders on the platform test")
+print(leverj.get_all_orders())
 #
 #print("orders from LEVETH")
 #print(leverj.get_orders("LEVETH"))
