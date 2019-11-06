@@ -80,7 +80,6 @@ class Order:
                      amount=Wad.from_number(item['quantity']))
 
 
-
 class Trade:
     def __init__(self,
                  trade_id: Optional[id],
@@ -132,7 +131,6 @@ class Trade:
                      price=Wad.from_number(trade['price']),
                      amount=Wad.from_number(trade['quantity']))
 
-
     @staticmethod
     def from_all_list(pair, trade):
         return Trade(trade_id=None,
@@ -143,12 +141,9 @@ class Trade:
                      amount=Wad.from_number(trade['volume']))
 
 
-
-
 class LeverjAPI(PyexAPI):
     """LeverJ API interface.
-    """
-    
+    """    
 
     logger = logging.getLogger()
 
@@ -358,7 +353,6 @@ class LeverJ(Contract):
     """
     
     logger = logging.getLogger()
-
 
     abi = Contract._load_abi(__name__, 'abi/GLUON.abi')
     token_abi = Contract._load_abi(__name__, 'abi/TOKEN_ABI.abi')
