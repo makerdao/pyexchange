@@ -355,7 +355,7 @@ class LeverJ(Contract):
     logger = logging.getLogger()
 
     abi = Contract._load_abi(__name__, 'abi/GLUON.abi')
-    token_abi = Contract._load_abi(__name__, 'abi/TOKEN_ABI.abi')
+    token_abi = Contract._load_abi(__name__, 'abi/ERC20TOKEN.abi')
 
     def __init__(self, web3: Web3, address: Address):
         assert(isinstance(web3, Web3))
