@@ -61,16 +61,8 @@ class FixEngine:
         self.writer = None
         self.parser = simplefix.FixParser()
 
-        # Synchronously establish a connection with the remote endpoint
-        (address, port) = tuple(self.endpoint.split(':'))
-        self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
-        self.reader, self.writer = self.loop.run_until_complete(asyncio.open_connection(address, port, loop=self.loop))
-        self.connection_state = FixConnectionState.CONNECTED
-
-        # Start a thread and loop to asynchronously send heartbeats while we are logged in
-        self.heartbeat_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
-        heartbeat_thread = threading.Thread(target=self.run_heartbeats, daemon=True)
-        heartbeat_thread.start()
+        self.loop = None
+        self.heartbeat_loop = None
 
     async def _read_message(self):
         """Reads the next message from the server"""
@@ -108,6 +100,17 @@ class FixEngine:
         return m
 
     def logon(self):
+        # Synchronously establish a connection with the remote endpoint
+        (address, port) = tuple(self.endpoint.split(':'))
+        self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
+        self.reader, self.writer = self.loop.run_until_complete(asyncio.open_connection(address, port, loop=self.loop))
+        self.connection_state = FixConnectionState.CONNECTED
+
+        # Start a thread and loop to asynchronously send heartbeats while we are logged in
+        self.heartbeat_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
+        heartbeat_thread = threading.Thread(target=self.run_heartbeats, daemon=True)
+        heartbeat_thread.start()
+
         """Synchronously send a logon message and await its acknowledgement"""
         m = self.create_message('A')
         self._append_sequence_number(m)

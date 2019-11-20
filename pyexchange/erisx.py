@@ -33,11 +33,13 @@ class ErisxApi(PyexAPI):
     logger = logging.getLogger()
     timeout = 5
 
-    def __init__(self, fix_endpoint: str, sender_comp_id: str, username: str, password: str,
+    def __init__(self, fix_trading_endpoint: str, fix_trading_user: str,
+                 fix_marketdata_endpoint: str, fix_marketdata_user: str, password: str,
                  clearing_url: str, api_key: str, api_secret: str):
-        assert isinstance(fix_endpoint, str)
-        assert isinstance(sender_comp_id, str)
-        assert isinstance(username, str)
+        assert isinstance(fix_trading_endpoint, str)
+        assert isinstance(fix_trading_user, str)
+        assert isinstance(fix_marketdata_endpoint, str)
+        assert isinstance(fix_marketdata_user, str)
         assert isinstance(password, str)
 
         assert isinstance(clearing_url, str)
@@ -45,8 +47,12 @@ class ErisxApi(PyexAPI):
         assert isinstance(api_secret, str)
 
         # FIXME: Commented out temporarily so clearing API can be tested without the FIX connection
-        # self.fix = FixEngine(fix_endpoint, sender_comp_id, "ERISX", username, password)
-        # self.fix.logon()
+        self.fix_trading = FixEngine(fix_trading_endpoint, fix_trading_user, "ERISX",
+                                     fix_trading_user, password)
+        # self.fix_trading.logon()
+        self.fix_marketdata = FixEngine(fix_marketdata_endpoint, fix_marketdata_user, "ERISX",
+                                        fix_trading_user, password)
+        # self.fix_marketdata.logon()
 
         self.clearing_url = clearing_url
         self.api_secret = api_secret
@@ -67,8 +73,16 @@ class ErisxApi(PyexAPI):
     def get_balances(self):
         # TODO: Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
         # They also offer a detailed /balances API, which I don't believe we need at this time.
-        result = self._http_post("accounts", {})["result"]
-        return result["accounts"]
+        response = self._http_post("accounts", {})
+        if "result" in response:
+            # This is how it behaved on 2019.10.02
+            result = response["result"]
+            return result["accounts"]
+        elif "accounts" in response:
+            # This is how it behaves on 2019.10.05
+            return response["accounts"]
+        else:
+            raise Exception("Couldn't interpret response")
 
     def get_orders(self, pair):
         # TODO: Send 35=MA, await 35=8, map the executions by tag 37 (OrderID) to build order state

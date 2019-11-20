@@ -38,32 +38,34 @@ class ErisXMockClearingAPIServer(MockWebAPIServer):
 
 
 class TestErisx:
-    sender_comp_id = "unit_test"
-
     def setup_method(self):
         # self.fix_server = MockFixServer()
         # self.fix_server.run_in_another_thread()
         # time.sleep(1)
         self.clearing_server = ErisXMockClearingAPIServer()
 
-        self.client = ErisxApi(fix_endpoint="127.0.0.1:1752", sender_comp_id=TestErisx.sender_comp_id,
-                               username="test", password="test",
+        self.client = ErisxApi(fix_trading_endpoint="127.0.0.1:1752", fix_trading_user="test",
+                               fix_marketdata_endpoint="127.0.0.1:1753", fix_marketdata_user="test",
+                               password="test",
                                clearing_url="https://clearing.newrelease.erisx.com/api/v1/",
                                api_key="key", api_secret="secret")
         # while self.client.fix.connection_state != FixConnectionState.LOGGED_IN:
         #     print("waiting for login")
         #     time.sleep(5)
 
-    @pytest.mark.skip("mock FIX server remains under construction")
     def test_init(self):
-        assert self.client.fix.senderCompId == TestErisx.sender_comp_id
-        assert self.client.fix.targetCompId == "ERISX"
-        assert self.client.fix.heartbeat_interval > 0
+        assert self.client.fix_trading.senderCompId == "test"
+        assert self.client.fix_trading.targetCompId == "ERISX"
+        assert self.client.fix_trading.heartbeat_interval > 0
+        assert self.client.fix_marketdata.senderCompId == "test"
+        assert self.client.fix_marketdata.targetCompId == "ERISX"
+        assert self.client.fix_marketdata.heartbeat_interval > 0
 
+    @pytest.mark.skip("mock FIX server remains under construction")
+    def test_heartbeats(self):
         # Wait past the heartbeatInterval and confirm heartbeats were received
-        time.sleep(self.client.fix.heartbeat_interval*10)
-        assert self.client.fix.sequenceNum > 2
-        # assert False
+        time.sleep(self.client.fix_trading.heartbeat_interval*10)
+        assert self.client.fix_trading.sequenceNum > 2
 
     def test_get_balances(self, mocker):
         mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
