@@ -456,7 +456,6 @@ class LeverJ(Contract):
         else:
             current_block = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{app_id}", None)['number']
             if current_block >= gluon_block_number:
-                leverjobj.web3.eth.defaultAccount = leverjobj.account_id
                 ethereum_account = leverjobj.account_id
                 custodian_account = self.address
                 self.logger.info(f"ethereum_account: {ethereum_account}, custodian_account: {custodian_account}, asset: {asset}")
