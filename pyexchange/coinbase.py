@@ -258,7 +258,7 @@ class CoinbaseApi(PyexAPI):
         assert isinstance(coin, str)
         wallet = self.get_coinbase_wallet(coin)
         if wallet is None:
-            raise ValueError(f"Wallet for {coin} not found")
+            raise ValueError(f"Wallet for {coin} not found; ensure Coinbase Pro supports this token")
         wallet_id = wallet['id']
         result = self._http_authenticated("POST", f"/coinbase-accounts/{wallet_id}/addresses", {})
         return Address(result['address'])
