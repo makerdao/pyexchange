@@ -15,17 +15,28 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
 import base64
+import json
+import sys
 
 from pyexchange.coinbase import CoinbaseApi
-from pymaker import Wad
+from pymaker import Address, Wad
+
 
 coinbase = CoinbaseApi("https://api.pro.coinbase.com", sys.argv[1], sys.argv[2], sys.argv[3], 9.5)
 
+# balance = coinbase.get_balance("ETH")
+# print(balance)
+
+wallet_address = coinbase.get_coinbase_wallet_address("BAT")
+print(wallet_address)
+
+# response = coinbase.withdraw(Wad.from_number(0.003), "ETH", Address('0x29aD3317a7E230Dcf30438fFF631c9ca6d733bBd'))
+# print(response)
+
 # print("get orders")
 # print(coinbase.get_balances())
-# # print("get balance ETH")
+# print("get balance ETH")
 # print(coinbase.get_balance("USDC"))
 # print("get balance ETH")
 # print(coinbase.get_balance("BTC"))
@@ -41,7 +52,7 @@ coinbase = CoinbaseApi("https://api.pro.coinbase.com", sys.argv[1], sys.argv[2],
 # print("place orders")
 # order_id = coinbase.place_order("ETH-USDC", False, Wad.from_number(90.11111111111), Wad.from_number(0.0156547676576))
 # print(coinbase.cancel_order(order_id))
-print(coinbase.get_trades("ETH-USDC"))
+# print(coinbase.get_trades("ETH-USDC"))
 # print("place orders")
 # order_id = coinbase.place_order("ETH-USDC", False, Wad.from_number(20.11111111111), Wad.from_number(0.0156547676576))
 # print(order_id)
