@@ -451,14 +451,13 @@ class LeverJ(Contract):
         assert(isinstance(quantity, int))
         
         app_id = leverjobj.get_spot_exchange_id()
+        current_block = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{app_id}", None)['number']
         
         if gluon_block_number is None:
             return self.withdraw_token(leverjobj, asset, int(quantity))
         
         else:
-            current_block = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{app_id}", None)['number']
             if current_block >= gluon_block_number:
-                #leverjobj.web3.eth.defaultAccount = leverjobj.account_id
                 ethereum_account = leverjobj.account_id
                 custodian_account = self.address
                 self.logger.info(f"ethereum_account: {ethereum_account}, custodian_account: {custodian_account}, asset: {asset}")
@@ -469,7 +468,6 @@ class LeverJ(Contract):
                 Transact(self, self.web3, self.abi, self.address, self._contract, "withdraw",[response_app_id, response_bytes], {}).transact(from_address=self.middle_account)
                 return None
 
-        current_block = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{app_id}", None)['number']
         self.logger.info(f'does not look like gluon_block_number reached {gluon_block_number} and we are currently at {current_block}')
         return gluon_block_number
 
