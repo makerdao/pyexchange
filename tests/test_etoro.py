@@ -26,7 +26,7 @@ from pyexchange.okex import Order
 from pyexchange.okex import Trade
 from pyexchange.okex import OKEXApi
 
-# Models HTTP response, produced by EToroMockServer
+# Models HTTP response, produced by OkexMockServer
 class MockedResponse:
     def __init__(self, text: str, status_code=200):
         assert (isinstance(text, str))
@@ -40,11 +40,11 @@ class MockedResponse:
         return json.loads(self.text)
 
 # Determines response to provide based on the requested URL
-class EToroMockServer:
+class OkexMockServer:
     # Read JSON responses from a pipe-delimited file, avoiding JSON-inside-JSON parsing complexities
     responses = {}
     cwd = os.path.dirname(os.path.realpath(__file__))
-    response_file_path = os.path.join(cwd, "mock/etoro-api-responses")
+    response_file_path = os.path.join(cwd, "mock/okex-api-responses")
     with open(response_file_path, 'r') as file:
         for line in file:
             kvp = line.split("|")
@@ -56,9 +56,9 @@ class EToroMockServer:
         assert("url" in kwargs)
         url = kwargs["url"]
         if "data" not in kwargs:
-            return EToroMockServer.handle_get(url)
+            return OkexMockServer.handle_get(url)
         else:
-            return EToroMockServer.handle_post(url, kwargs["data"])
+            return OkexMockServer.handle_post(url, kwargs["data"])
 
     @staticmethod
     def handle_get(url: str):
@@ -95,9 +95,9 @@ class EToroMockServer:
             raise Exception("Unable to match HTTP POST request to canned response")
 
 
-class TestEToro:
+class TestOKEX:
     def setup_method(self):
-        self.etoro = OKEXApi(
+        self.okex = OKEXApi(
             api_server = "localhost",
             api_key = "00000000-0000-0000-0000-000000000000",
             secret_key = "DEAD000000000000000000000000DEAD",
