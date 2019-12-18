@@ -40,20 +40,20 @@ from pymaker.util import http_response_summary
 class Order:
     def __init__(self,
                  order_id: str,
-                 pair: str,
+                 instrument_id: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad,
                  remaining_amount: Wad):
 
-        assert(isinstance(pair, str))
+        assert(isinstance(instrument_id, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
         assert(isinstance(remaining_amount, Wad))
 
         self.order_id = order_id
-        self.pair = pair
+        self.instrument_id = instrument_id
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -81,7 +81,7 @@ class Order:
     @staticmethod
     def to_order(item):
         return Order(order_id=item['OrderUuid'],
-                     pair=item['Exchange'],
+                     instrument_id=item['Exchange'],
                      is_sell=True if item['OrderType'] == 'LIMIT_SELL' else False,
                      price=Wad.from_number(item['Limit']),
                      amount=Wad.from_number(item['Quantity']),
@@ -92,20 +92,20 @@ class Trade:
     def __init__(self,
                  trade_id: str,
                  timestamp: int,
-                 pair: Optional[str],
+                 instrument_id: Optional[str],
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
         assert(isinstance(trade_id, str))
         assert(isinstance(timestamp, int))
-        assert(isinstance(pair, str) or (pair is None))
+        assert(isinstance(instrument_id, str) or (instrument_id is None))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
-        self.pair = pair
+        self.instrument_id = instrument_id
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -114,7 +114,7 @@ class Trade:
         assert(isinstance(other, Trade))
         return self.trade_id == other.trade_id and \
                self.timestamp == other.timestamp and \
-               self.pair == other.pair and \
+               self.instrument_id == other.instrument_id and \
                self.is_sell == other.is_sell and \
                self.price == other.price and \
                self.amount == other.amount
@@ -122,7 +122,7 @@ class Trade:
     def __hash__(self):
         return hash((self.trade_id,
                      self.timestamp,
-                     self.pair,
+                     self.instrument_id,
                      self.is_sell,
                      self.price,
                      self.amount))
@@ -154,50 +154,55 @@ class EToroApi(PyexAPI):
     def get_markets(self):
         return self._http_authenticated_request("GET", "/api/v1/instruments", {})['result']
 
-    def get_pair(self, pair: str):
-        assert(isinstance(pair, str))
-        return next(filter(lambda symbol: symbol['MarketName'] == pair, self.get_markets()))
+    def get_pair(self, instrument_id: str):
+        assert(isinstance(instrument_id, str))
+        return next(filter(lambda symbol: symbol['MarketName'] == instrument_id, self.get_markets()))
 
     def get_balances(self):
         return self._http_authenticated_request("GET", "/api/v1/balances", {})['result']
 
-    def get_orders(self, pair: str) -> List[Order]:
-        assert(isinstance(pair, str))
+    def get_orders(self, instrument_id: str, limit: int, state: str, before: str) -> List[Order]:
+        assert(isinstance(instrument_id, str))
+        assert(isinstance(limit, int))
+        assert(isinstance(state, str))
+        assert(isinstance(before, str))
 
+        # optional params for filtering orders
         params = {
-            "instrument_id": pair,
-            "state": "",
-            "limit": "",
-            "before": ""
+            "instrument_id": instrument_id,
+            "state": state, # open, cancelled, executed
+            "limit": limit, # number of orders to return, defaults to 25
+            "before": before # latest date from which to retreive orders
         }
 
         orders = self._http_authenticated_request("GET", "/api/v1/orders", params)['result']
 
         return list(map(lambda item: Order.to_order(item), orders))
 
-    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
-        assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
+    def place_order(self, instrument_id: str, side: str, price: Wad, amount: Wad) -> str:
+        assert(isinstance(instrument_id, str))
+        assert(isinstance(side, str))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
-        params = {
-            "quantity": str(amount),
-            "rate": str(price),
-            "market": pair
+        request_body = {
+            "instrument_id": instrument_id,
+            "side": side,
+            "price": str(price),
+            "volume": str(amount)
         }
 
-        order_type = "selllimit" if is_sell else "buylimit"
+        order_type = "selllimit" if side == "ask" else "buylimit"
 
-        self.logger.info(f"Placing order ({order_type}, amount {params['quantity']} of {pair},"
+        self.logger.info(f"Placing order ({order_type}, amount {params['quantity']} of {instrument_id},"
                          f" price {params['rate']})...")
 
-        response = self._http_authenticated_request("POST", f"/api/v1/orders", params)
+        response = self._http_authenticated_request("POST", f"/api/v1/orders", params, request_body)
 
         if response['success'] is False:
-            raise Exception(f"Bittrex Failed to place order {response['message']}")
+            raise Exception(f"eToro Failed to place order {response['message']}")
 
-        order_id = response['result']['uuid']
+        order_id = response['result']['id']
 
         self.logger.info(f"Placed order type {order_type}, id #{order_id}")
 
@@ -208,31 +213,30 @@ class EToroApi(PyexAPI):
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        params = {
-            "uuid": order_id
-        }
-
-        result = self._http_authenticated_request("GET", "/api/v1/orders/{order_id}", params)
+        result = self._http_authenticated_request("GET", "/api/v1/orders/{order_id}", {})
 
         return result['success']
 
-    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(pair, str))
+    def get_trades(self, instrument_id: str, before: str, limit: int = 25) -> List[Trade]:
+        assert(isinstance(instrument_id, str))
+        assert(isinstance(before, str))
         assert(isinstance(page_number, int))
-        assert(page_number == 1)
 
+        # optional params
         params = {
-            'market': pair
+            'instrument_id': instrument_id
+            'before': before,
+            'limit': limit
         }
 
         result = self._http_authenticated_request("GET", "/api/v1/trades", params)['result']
 
-        return list(map(lambda item: Trade(trade_id=item['OrderUuid'],
-                                           timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
-                                           pair=item['Exchange'],
-                                           is_sell=item['OrderType'] == 'LIMIT_SELL',
-                                           price=Wad.from_number(item['PricePerUnit']),
-                                           amount=Wad.from_number(item['Quantity'] - item['QuantityRemaining'])), result))
+        return list(map(lambda item: Trade(trade_id=item['trade_id'],
+                                           timestamp=int(dateutil.parser.parse(item['created_at']).timestamp()),
+                                           instrument_id=item['instrument_id'],
+                                           is_sell=item['side'] == 'bid',
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad.from_number(item['volume'])), result))
 
     def _http_request(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
@@ -247,35 +251,42 @@ class EToroApi(PyexAPI):
                                              url=url,
                                              timeout=self.timeout))
 
-    def _http_authenticated_request(self, method: str, resource: str, params: dict):
+        def _http_authenticated_request(self, method: str, resource: str, params: dict, req_body: dict = {}):
         assert(isinstance(method, str))
         assert(isinstance(resource, str))
         assert(isinstance(params, dict) or (params is None))
+        assert(isinstance(req_body, dict))
 
         params['correlationId'] = str(uuid.uuid4())
 
-        nonce = str(uuid.uuid4()) # requires a random, noncolliding uuid
+        nonce = str(int(time.time())) 
         timestamp = str(int(time.time()))       
 
-        digest = hmac.new(self.secret_key.encode(), str(nonce + timestamp), hashlib.sha256).digest() 
+        digest = hmac.new(self.secret_key.encode(), str(nonce + timestamp), hashlib.sha256).hexdigest() 
         signature = base64.b64encode(digest) 
-        # signature = hmac.new(self.secret_key.encode(), url.encode(), hashlib.sha512).hexdigest()
 
         headers = {
-            user-agent: "maker/python",
-            ex-access-key: self.api_key,
-            ex-access-sign: signature,
-            ex-access-nonce: nonce,
-            ex-access-timestamp: timestamp,
+            "user-agent": "maker-lp",
+            "ex-access-key": self.api_key,
+            "ex-access-sign": signature,
+            "ex-access-nonce": nonce,
+            "ex-access-timestamp": timestamp,
         } 
 
         url = f"{self.api_server}{resource}?{urlencode(params)}"
 
-        return self._result(requests.request(method=method,
+        if method != "POST":
+            return self._result(requests.request(method=method,
                                              url=url,
                                              headers=headers,
                                              timeout=self.timeout))
 
+        else:
+            return self._result(requests.request(method=method,
+                                             url=url,
+                                             headers=headers,
+                                             data=req_body,
+                                             timeout=self.timeout))
     @staticmethod
     def _result(result) -> dict:
 
