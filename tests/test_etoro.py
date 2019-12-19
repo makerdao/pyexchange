@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2019 EdNoepel
+# Copyright (C) 2019 MikeHathaway 
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -22,11 +22,11 @@ import time
 
 from pymaker import Wad
 from pyexchange.model import Candle
-from pyexchange.okex import Order
-from pyexchange.okex import Trade
-from pyexchange.okex import OKEXApi
+from pyexchange.etoro import Order
+from pyexchange.etoro import Trade
+from pyexchange.etoro import EToroApi
 
-# Models HTTP response, produced by OkexMockServer
+# Models HTTP response, produced by EToroMockServer
 class MockedResponse:
     def __init__(self, text: str, status_code=200):
         assert (isinstance(text, str))
@@ -40,11 +40,11 @@ class MockedResponse:
         return json.loads(self.text)
 
 # Determines response to provide based on the requested URL
-class OkexMockServer:
+class EToroMockServer:
     # Read JSON responses from a pipe-delimited file, avoiding JSON-inside-JSON parsing complexities
     responses = {}
     cwd = os.path.dirname(os.path.realpath(__file__))
-    response_file_path = os.path.join(cwd, "mock/okex-api-responses")
+    response_file_path = os.path.join(cwd, "mock/etoro-api-responses")
     with open(response_file_path, 'r') as file:
         for line in file:
             kvp = line.split("|")
@@ -56,54 +56,58 @@ class OkexMockServer:
         assert("url" in kwargs)
         url = kwargs["url"]
         if "data" not in kwargs:
-            return OkexMockServer.handle_get(url)
+            return EToroMockServer.handle_get(url)
         else:
-            return OkexMockServer.handle_post(url, kwargs["data"])
+            return EToroMockServer.handle_post(url, kwargs["data"])
 
     @staticmethod
     def handle_get(url: str):
         # Parse the URL to determine which piece of canned data to return
-        if re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/ticker", url):
-            return MockedResponse(text=OkexMockServer.responses["ticker1"])
-        elif re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/book", url):
-            return MockedResponse(text=OkexMockServer.responses["book1"])
-        elif re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/candles", url):
-            return MockedResponse(text=OkexMockServer.responses["candles1"])
-        elif "/api/spot/v3/accounts" in url:
-            return MockedResponse(text=OkexMockServer.responses["accounts1"])
-        elif "/api/spot/v3/orders_pending" in url:
-            return MockedResponse(text=OkexMockServer.responses["orders1"])
-        elif re.search(r"\/api\/spot\/v3\/orders\?state=[\w_%]+&instrument_id=[\w\-_]+&limit=\d+", url):
-            return MockedResponse(text=OkexMockServer.responses["orders2"])
-        elif re.search(r"\/api\/spot\/v3\/orders\?state=1&instrument_id=[\w\-_]+", url):
-            return MockedResponse(text="[]")  # assume no partial fills
-        elif re.search(r"\/api\/spot\/v3\/orders\?state=2&instrument_id=[\w\-_]+", url):
-            return MockedResponse(text=OkexMockServer.responses["trades1"])
-        elif re.search(r"\/api\/spot\/v3\/instruments\/[\w\-_]+\/trades", url):
-            return MockedResponse(text=OkexMockServer.responses["trades2"])
+        if re.search(r"api\/v1\/instruments", url):
+            return MockedResponse(text=EToroMockServer.responses["markets"])
+        elif re.search(r"api\/v1\/balances", url):
+            return MockedResponse(text=EToroMockServer.responses["balances"])
+        elif re.search(r"api\/v1\/orders", url):
+            return MockedResponse(text=EToroMockServer.responses["get_orders"])
+        elif re.search(r"\/api\/v1\/trades", url):
+            return MockedResponse(text=EToroMockServer.responses["trades"])
         else:
             raise Exception("Unable to match HTTP GET request to canned response")
 
     @staticmethod
     def handle_post(url: str, data):
         assert(data is not None)
-        if "/api/spot/v3/orders" in url:
-            return MockedResponse(text=OkexMockServer.responses["place_order1"])
-        elif "/api/spot/v3/cancel_orders" in url:
-            return MockedResponse(text=OkexMockServer.responses["cancel_order1"])
+        if re.search(r"\/api\/v1\/orders", url):
+            return MockedResponse(text=EToroMockServer.responses["place_order_success"])
+        elif re.search(r"\/api\/v1\/orders", url):
+            return MockedResponse(text=EToroMockServer.responses["place_order_failure"])
         else:
             raise Exception("Unable to match HTTP POST request to canned response")
 
+    
+    @staticmethod
+    def handle_delete(url: str):
+        if re.search(r"\/api\/v1\/orders\/[\w\-_]+", url):
+            return MockedResponse(text=EToroMockServer.responses["cancel_order"])
+        else:
+            raise Exception("Unable to match HTTP DELETE request to canned response")
 
-class TestOKEX:
+class TestEToro:
     def setup_method(self):
-        self.okex = OKEXApi(
+        self.etoro = EToroApi(
             api_server = "localhost",
             api_key = "00000000-0000-0000-0000-000000000000",
             secret_key = "DEAD000000000000000000000000DEAD",
             password = "password to nonexistant account",
             timeout = 15.5
         )
+
+    def test_get_markets(self, mocker):
+        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        response = self.etoro.get_markets()
+        assert(len(response) > 0)
+        assert("MKR" in response)
+        assert("ETH" in response)
 
     def test_order(self):
         price = Wad.from_number(4.8765)
@@ -112,7 +116,7 @@ class TestOKEX:
         order = Order(
             order_id="153153",
             timestamp=int(time.time()),
-            pair="MKR-ETH",
+            instrument_id="MKR-ETH",
             is_sell=False,
             price=price,
             amount=amount,
@@ -124,26 +128,26 @@ class TestOKEX:
         assert(order.remaining_sell_amount == (amount-filled_amount)*price)
 
     def test_ticker(self, mocker):
-        pair = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.ticker(pair)
-        assert(str(response["instrument_id"]).lower().replace('-', '_') == pair)
+        instrument_id = "mkr_usdt"
+        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        response = self.etoro.ticker(instrument_id)
+        assert(str(response["instrument_id"]).lower().replace('-', '_') == instrument_id)
         assert(float(response["best_ask"]) > 0)
         assert(response["instrument_id"] == response["product_id"])
 
     def test_depth(self, mocker):
-        pair = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.depth(pair)
+        instrument_id = "mkr_usdt"
+        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        response = self.etoro.depth(instrument_id)
         assert("bids" in response)
         assert("asks" in response)
         assert(len(response["bids"]) > 0)
         assert(len(response["asks"]) > 0)
 
     def test_candles(self, mocker):
-        pair = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.candles(pair, "1min")
+        instrument_id = "mkr_usdt"
+        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        response = self.etoro.candles(instrument_id, "1min")
         assert(len(response) > 0)
         for item in response:
             assert(isinstance(item, Candle))
@@ -154,8 +158,8 @@ class TestOKEX:
             assert(float(item.close) > 0)
 
     def test_get_balances(self, mocker):
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.get_balances()
+        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        response = self.etoro.get_balances()
         assert(len(response) > 0)
         assert("MKR" in response)
         assert("ETH" in response)
@@ -196,34 +200,25 @@ class TestOKEX:
         assert(missorted_found is False)
 
     def test_get_orders(self, mocker):
-        pair = "mkr_eth"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.get_orders(pair)
+        instrument_id = "mkr_eth"
+        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        response = self.etoro.get_orders(instrument_id)
         assert (len(response) > 0)
         for order in response:
             # Open orders cannot be completed filled
             assert(order.filled_amount < order.amount)
             assert(isinstance(order.is_sell, bool))
             assert(order.price > Wad(0))
-        TestOKEX.check_orders(response)
-
-    def test_get_all_orders(self, mocker):
-        pair = "mkr_eth"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.get_orders_history(pair, 99)
-        assert (len(response) > 0)
-        for order in response:
-            assert(isinstance(order.is_sell, bool))
-            assert(order.price > Wad(0))
-        TestOKEX.check_orders(response)
+        TestEToro.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        pair = "mkr_usdt"
-        mocker.patch("requests.post", side_effect=OkexMockServer.handle_request)
-        order_id = self.okex.place_order(pair, True, Wad.from_number(639.3), Wad.from_number(0.15))
+        instrument_id = "mkr_usdt"
+        side = "ask"
+        mocker.patch("requests.post", side_effect=EToroMockServer.handle_request)
+        order_id = self.etoro.place_order(instrument_id, side, Wad.from_number(639.3), Wad.from_number(0.15))
         assert(isinstance(order_id, str))
         assert(order_id is not None)
-        cancel_result = self.okex.cancel_order(pair, order_id)
+        cancel_result = self.etoro.cancel_order(instrument_id, order_id)
         assert(cancel_result)
 
     @staticmethod
@@ -256,15 +251,8 @@ class TestOKEX:
         assert(missorted_found is False)
 
     def test_get_trades(self, mocker):
-        pair = "mkr_eth"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.get_trades(pair)
+        instrument_id = "mkr_eth"
+        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        response = self.etoro.get_trades(instrument_id)
         assert (len(response) > 0)
-        TestOKEX.check_trades(response)
-
-    def test_get_all_trades(self, mocker):
-        pair = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
-        response = self.okex.get_all_trades(pair)
-        assert (len(response) > 0)
-        TestOKEX.check_trades(response)
+        TestEToro.check_trades(response)
