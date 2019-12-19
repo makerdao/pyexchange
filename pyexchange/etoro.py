@@ -251,7 +251,7 @@ class EToroApi(PyexAPI):
                                              url=url,
                                              timeout=self.timeout))
 
-        def _http_authenticated_request(self, method: str, resource: str, params: dict, req_body: dict = {}):
+    def _http_authenticated_request(self, method: str, resource: str, params: dict, req_body: dict = {}):
         assert(isinstance(method, str))
         assert(isinstance(resource, str))
         assert(isinstance(params, dict) or (params is None))
