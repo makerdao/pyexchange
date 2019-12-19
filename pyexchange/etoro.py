@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017-2019 reverendus, grandizzy
+# Copyright (C) 2017-2019 MikeHathaway 
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -213,7 +213,7 @@ class EToroApi(PyexAPI):
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        result = self._http_authenticated_request("GET", "/api/v1/orders/{order_id}", {})
+        result = self._http_authenticated_request("DELETE", "/api/v1/orders/{order_id}", {})
 
         return result['success']
 
