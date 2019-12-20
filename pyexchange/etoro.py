@@ -80,11 +80,11 @@ class Order:
 
     @staticmethod
     def to_order(item):
-        return Order(order_id=item['OrderUuid'],
-                     instrument_id=item['Exchange'],
+        return Order(order_id=item['id'],
+                     instrument_id=item['instrument_id'],
                      is_sell=True if item['OrderType'] == 'LIMIT_SELL' else False,
                      price=Wad.from_number(item['Limit']),
-                     amount=Wad.from_number(item['Quantity']),
+                     amount=Wad.from_number(item['volume']),
                      remaining_amount=Wad.from_number(item['QuantityRemaining']))
 
 
@@ -194,10 +194,10 @@ class EToroApi(PyexAPI):
 
         order_type = "selllimit" if side == "ask" else "buylimit"
 
-        self.logger.info(f"Placing order ({order_type}, amount {params['quantity']} of {instrument_id},"
-                         f" price {params['rate']})...")
+        self.logger.info(f"Placing order ({order_type}, amount {amount} of {instrument_id},"
+                         f" price {price})...")
 
-        response = self._http_authenticated_request("POST", f"/api/v1/orders", params, request_body)
+        response = self._http_authenticated_request("POST", f"/api/v1/orders", {}, request_body)
 
         if response['success'] is False:
             raise Exception(f"eToro Failed to place order {response['message']}")
@@ -262,13 +262,13 @@ class EToroApi(PyexAPI):
         nonce = str(int(time.time())) 
         timestamp = str(int(time.time()))       
 
-        digest = hmac.new(self.secret_key.encode(), str(nonce + timestamp), hashlib.sha256).hexdigest() 
-        signature = base64.b64encode(digest) 
+        signature = hmac.new(self.secret_key.encode(), str(nonce + timestamp), hashlib.sha256).hexdigest() 
+        base64_signature = base64.b64encode(signature) 
 
         headers = {
             "user-agent": "maker-lp",
             "ex-access-key": self.api_key,
-            "ex-access-sign": signature,
+            "ex-access-sign": base64_signature,
             "ex-access-nonce": nonce,
             "ex-access-timestamp": timestamp,
         } 
