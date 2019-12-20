@@ -25,20 +25,11 @@ from pymaker import Address, Wad
 
 coinbase = CoinbaseApi("https://api.pro.coinbase.com", sys.argv[1], sys.argv[2], sys.argv[3], 9.5)
 
-# balance = coinbase.get_balance("ETH")
-# print(balance)
-
-wallet_address = coinbase.get_coinbase_wallet_address("BAT")
-print(wallet_address)
-
-# response = coinbase.withdraw(Wad.from_number(0.003), "ETH", Address('0x29aD3317a7E230Dcf30438fFF631c9ca6d733bBd'))
-# print(response)
-
-# print("get orders")
+# print("get balances")
 # print(coinbase.get_balances())
-# print("get balance ETH")
-# print(coinbase.get_balance("USDC"))
-# print("get balance ETH")
+print("get balance ETH")
+print(coinbase.get_balance("ETH"))
+# print("get balance BTC")
 # print(coinbase.get_balance("BTC"))
 # print("cancel orders")
 # print(coinbase.cancel_all_orders())
@@ -62,5 +53,7 @@ print(wallet_address)
 # print(coinbase.cancel_all_orders())
 # print("get trades")
 # print(coinbase.get_trades("ETH-USDC"))
-
-
+# print("wallet address")
+# print(coinbase.get_coinbase_wallet_address("ETH"))
+# print("withdraw")
+# print(coinbase.withdraw(Wad.from_number(0.0782), "ETH", Address('0x?')))
