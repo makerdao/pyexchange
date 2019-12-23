@@ -162,7 +162,7 @@ class LeverjAPI(PyexAPI):
         self.timeout = timeout
         self.config = requests.get(url).json()
 
-        self.logger.info(f"account id is {self.account_id} and web3.eth.default account is {self.web3.eth.defaultAccount}")
+        self.logger.info(f"LEVERJ: account id is {self.account_id} and web3.eth.default account is {self.web3.eth.defaultAccount}")
 
     def get_account(self):
         return self._http_authenticated("GET", "/api/v1", "/account", None)
@@ -171,6 +171,13 @@ class LeverjAPI(PyexAPI):
         return self._http_authenticated("GET", "/api/v1", "/account/balance", None)
 
     def get_balance(self, coin: str):
+        assert(isinstance(coin, str))
+        balances = self.get_balances()
+        for key in balances:
+            if balances[key]['symbol'] == coin:
+                return balances[key]['plasma']
+
+    def get_available_balance(self, coin: str):
         assert(isinstance(coin, str))
         balances = self.get_balances()
         for key in balances:
@@ -266,7 +273,7 @@ class LeverjAPI(PyexAPI):
         price = str(price)
         quantity = str(amount)
         order = self.createNewOrder(side, price, quantity, orderInstrument)
-        self.logger.info(f'order is {order}')
+        self.logger.info(f'LEVERJ: order is {order}')
         return self._http_authenticated("POST", "/api/v1", "/order", [order])[0]['uuid']
 
     def cancel_order(self, order_id: str) -> bool:
@@ -460,15 +467,15 @@ class LeverJ(Contract):
             if current_block >= gluon_block_number:
                 ethereum_account = leverjobj.account_id
                 custodian_account = self.address
-                self.logger.info(f"ethereum_account: {ethereum_account}, custodian_account: {custodian_account}, asset: {asset}")
+                self.logger.info(f"LEVERJ: ethereum_account: {ethereum_account}, custodian_account: {custodian_account}, asset: {asset}")
                 response = leverjobj._http_authenticated("GET", "/api/v1", f"/plasma/{app_id}/evmparams/withdrawals/account/{ethereum_account}/asset/{asset}", None)
                 response_app_id = int(response[0])
                 response_bytes = response[1]
-                self.logger.info(f"finally gluon_block_number reached {gluon_block_number} and we are running final transact")
+                self.logger.info(f"LEVERJ: finally gluon_block_number reached {gluon_block_number} and we are running final transact")
                 Transact(self, self.web3, self.abi, self.address, self._contract, "withdraw",[response_app_id, response_bytes], {}).transact(from_address=self.middle_account)
                 return None
 
-        self.logger.info(f'does not look like gluon_block_number reached {gluon_block_number} and we are currently at {current_block}')
+        self.logger.info(f'LEVERJ: does not look like gluon_block_number reached {gluon_block_number} and we are currently at {current_block}')
         return gluon_block_number
 
 
