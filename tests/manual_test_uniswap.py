@@ -15,11 +15,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import pprint
 import sys
-from web3 import Web3, HTTPProvider
 
 from pymaker import Address, Wad
+from web3 import Web3, HTTPProvider
 from pymaker.keys import register_key
 from pyexchange.uniswap import Uniswap
 
@@ -33,7 +32,7 @@ web3 = Web3(HTTPProvider("http://localhost:8545", request_kwargs={"timeout": 600
 web3.eth.defaultAccount = sys.argv[1]
 register_key(web3, sys.argv[2])
 
-uniswap = Uniswap(web3, MKR_ADDRESS, MKR_DAI_ADDRESS)
+uniswap = Uniswap(web3, DAI_ADDRESS, ETH_DAI_ADDRESS)
 current_liq = uniswap.get_current_liquidity()
 print(current_liq)
 
@@ -54,5 +53,4 @@ print(transact.transaction_hash.hex())
 current_liq = uniswap.get_current_liquidity()
 print(current_liq)
 
-trades = uniswap.get_all_trades(100)
-pprint.pprint(trades)
+
