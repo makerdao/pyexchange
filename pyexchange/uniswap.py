@@ -92,6 +92,38 @@ class Uniswap(Contract):
         return Transact(self, self.web3, self.abi, self.exchange, self._contract,
                         'removeLiquidity', [amount.value, 1, 1, self._deadline()])
 
+    def eth_to_token_swap_input(self, eth_sold: Wad) -> Transact:
+        """Convert ETH to Tokens.
+
+        Args:
+            eth_sold: Amount of ETH to swap for token.
+
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+        return Transact(self, self.web3, self.abi, self.exchange, self._contract,
+                        'ethToTokenSwapInput', [1, self._deadline()], {'value': eth_sold.value})
+
+    def token_to_eth_swap_input(self, tokens_sold: Wad) -> Transact:
+        """Convert Tokens to ETH.
+
+        Args:
+            eth_sold: Amount of token to swap for ETH.
+
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+        return Transact(self, self.web3, self.abi, self.exchange, self._contract,
+                        'tokenToEthSwapInput', [tokens_sold.value, 1, self._deadline()])
+
     def _deadline(self):
         """Get a predefined deadline."""
         return int(time.time()) + 1000
+
+    def __eq__(self, other):
+        assert(isinstance(other, UniswapExchange))
+        return self.address == other.address
+
+    def __repr__(self):
+        return f"UniswapExchange('{self.exchange}')"
+
