@@ -294,7 +294,7 @@ class OKEXApi:
                                              timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
                                              is_sell=item['side'] == 'sell',
                                              price=Wad.from_number(item['price']),
-                                             amount=Wad.from_number(item['size']),
+                                             amount=Wad.from_number(item['filled_size']),
                                              amount_symbol=item['instrument_id'].split('-')[0].lower()),
                           result_part_filled + result_filled))
 
