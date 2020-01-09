@@ -27,7 +27,7 @@ import json
 
 import dateutil.parser
 
-from pymaker import Wad
+from pymaker import Address, Wad
 from pymaker.util import http_response_summary
 from typing import Optional, List
 
@@ -160,7 +160,7 @@ class CoinbaseApi(PyexAPI):
     def get_balances(self):
         return self._http_authenticated("GET", "/accounts", {})
 
-    def get_balance(self, coin : str):
+    def get_balance(self, coin: str):
         assert(isinstance(coin, str))
         for balance in self.get_balances():
             if balance['currency'] == coin:
@@ -242,6 +242,43 @@ class CoinbaseApi(PyexAPI):
         result = self._http_unauthenticated("GET", f"/products/{pair}/trades?before={page_number}&limit={limit}", {})
 
         return list(map(lambda item: Trade.from_all_list(pair, item), result))
+
+    def get_coinbase_wallets(self):
+        return self._http_authenticated("GET", "/coinbase-accounts", {})
+
+    def get_coinbase_wallet(self, coin: str):
+        assert isinstance(coin, str)
+        coinbase_wallets = self.get_coinbase_wallets()
+        for wallet in coinbase_wallets:
+            if wallet['currency'] == coin:
+                return wallet
+        return None
+
+    def get_coinbase_wallet_address(self, coin: str) -> Address:
+        assert isinstance(coin, str)
+        wallet = self.get_coinbase_wallet(coin)
+        if wallet is None:
+            raise ValueError(f"Wallet for {coin} not found; ensure Coinbase Pro supports this token")
+        wallet_id = wallet['id']
+        result = self._http_authenticated("POST", f"/coinbase-accounts/{wallet_id}/addresses", {})
+        return Address(result['address'])
+
+    def withdraw(self, amount: Wad, coin: str, address: Address) -> str:
+        assert isinstance(amount, Wad)
+        assert isinstance(coin, str)
+        assert isinstance(address, Address)
+
+        data = {
+            "amount": str(float(amount)),
+            "currency": coin,
+            "crypto_address": address.address
+        }
+        self.logger.info(f"Withdrawing {amount} {coin} to {address.address}")
+        result = self._http_authenticated("POST", "/withdrawals/crypto", data)
+
+        withdrawal_id = result['id']
+        self.logger.info(f"Submitted withdrawal {withdrawal_id}")
+        return withdrawal_id
 
     def _http_authenticated(self, method: str, resource: str, body: dict):
         assert(isinstance(method, str))
