@@ -10,3 +10,5 @@ __pycache__
 venv
 _virtualenv
 *.swp
+.vscode
+.etoro-private-key
