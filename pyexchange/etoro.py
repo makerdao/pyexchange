@@ -220,11 +220,11 @@ class EToroApi(PyexAPI):
     def get_trades(self, instrument_id: str, before: str, limit: int = 25) -> List[Trade]:
         assert(isinstance(instrument_id, str))
         assert(isinstance(before, str))
-        assert(isinstance(page_number, int))
+        assert(isinstance(limit, int))
 
         # optional params
         params = {
-            'instrument_id': instrument_id
+            'instrument_id': instrument_id,
             'before': before,
             'limit': limit
         }
@@ -259,18 +259,18 @@ class EToroApi(PyexAPI):
 
         params['correlationId'] = str(uuid.uuid4())
 
-        nonce = str(int(time.time())) 
-        timestamp = str(int(time.time()))       
+        nonce = str(uuid.uuid4())
+        timestamp = str(int(time.time() * 1000))
 
-        signature = hmac.new(self.secret_key.encode(), str(nonce + timestamp), hashlib.sha256).hexdigest() 
-        base64_signature = base64.b64encode(signature) 
+        print(self.secret_key)
+        signature = base64.b64encode(hmac.new(self.secret_key.encode('utf-8'), f"{nonce}{timestamp}".encode('utf-8'), hashlib.sha256).digest())
 
         headers = {
-            "user-agent": "maker-lp",
+            "user-agent": "mm@liquidityproviders.io",
             "ex-access-key": self.api_key,
-            "ex-access-sign": base64_signature,
+            "ex-access-sign": str(signature),
             "ex-access-nonce": nonce,
-            "ex-access-timestamp": timestamp,
+            "ex-access-timestamp": timestamp
         } 
 
         url = f"{self.api_server}{resource}?{urlencode(params)}"
