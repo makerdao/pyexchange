@@ -20,6 +20,8 @@ import sys
 from pyexchange.etoro import EToroApi
 from pymaker.numeric import Wad
 
-etoro = EToroApi('https://7vriaeqd.hft.etorox.com', sys.argv[1], open(sys.argv[2], "r",encoding='utf-8').read(), 9.5)
+# openssl pkcs8 -in .etoro-key -out
+etoro = EToroApi('https://7vriaeqd.hft.etorox.com', sys.argv[1], open('./.etoro-unencrypted-key', 'r').read(), 9.5)
+# etoro = EToroApi('https://7vriaeqd.hft.etorox.com', sys.argv[1], open(sys.argv[2], "r",encoding='utf-8').read(), 9.5)
 
 print(etoro.get_markets())

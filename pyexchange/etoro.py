@@ -35,6 +35,10 @@ from pyexchange.api import PyexAPI
 from pymaker.numeric import Wad
 from pymaker.util import http_response_summary
 
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256
+from Crypto.PublicKey import RSA
+
 # API Documentation: https://etorox.github.io/docs/#/
 
 class Order:
@@ -262,13 +266,20 @@ class EToroApi(PyexAPI):
         nonce = str(uuid.uuid4())
         timestamp = str(int(time.time() * 1000))
 
-        print(self.secret_key)
-        signature = base64.b64encode(hmac.new(self.secret_key.encode('utf-8'), f"{nonce}{timestamp}".encode('utf-8'), hashlib.sha256).digest())
+        # https://legrandin.github.io/pycryptodome/Doc/3.4.6/Crypto.Signature.pkcs1_15-module.html
+        message = f"{nonce}{timestamp}".encode('utf-8')
+        hashed_message = SHA256.new(message)
+
+        # Need to import key string as RSA Key
+        private_key = RSA.importKey(self.secret_key)
+
+        signer = pkcs1_15.new(private_key)
+        signature = base64.b64encode(signer.sign(hashed_message))
 
         headers = {
             "user-agent": "mm@liquidityproviders.io",
             "ex-access-key": self.api_key,
-            "ex-access-sign": str(signature),
+            "ex-access-sign": signature,
             "ex-access-nonce": nonce,
             "ex-access-timestamp": timestamp
         } 
