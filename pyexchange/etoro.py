@@ -86,10 +86,10 @@ class Order:
     def to_order(item):
         return Order(order_id=item['id'],
                      instrument_id=item['instrument_id'],
-                     is_sell=True if item['OrderType'] == 'LIMIT_SELL' else False,
-                     price=Wad.from_number(item['Limit']),
+                     is_sell=True if item['side'] == 'sell' else False,
+                     price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['volume']),
-                     remaining_amount=Wad.from_number(item['QuantityRemaining']))
+                     remaining_amount=Wad.from_number(float(item['origin_volume']) - float(item['volume'])))
 
 
 class Trade:
@@ -156,31 +156,34 @@ class EToroApi(PyexAPI):
         self.timeout = timeout
 
     def get_markets(self):
-        return self._http_authenticated_request("GET", "/api/v1/instruments", {})['result']
+        return self._http_authenticated_request("GET", "/api/v1/instruments", {})
 
     def get_pair(self, instrument_id: str):
         assert(isinstance(instrument_id, str))
-        return next(filter(lambda symbol: symbol['MarketName'] == instrument_id, self.get_markets()))
+        return list(filter(lambda market: market['name'] == instrument_id, self.get_markets()))
 
     def get_balances(self):
-        return self._http_authenticated_request("GET", "/api/v1/balances", {})['result']
+        return self._http_authenticated_request("GET", "/api/v1/balances", {})
 
-    def get_orders(self, instrument_id: str, limit: int, state: str, before: str) -> List[Order]:
+    def get_order(self, order_id: str):
+        assert(isinstance(order_id, str))
+        return self._http_authenticated_request("GET", f"/api/v1/order/{order_id}", {})
+
+    def get_orders(self, instrument_id: str,  before: str, state: str, limit: int = 25) -> List[Order]:
         assert(isinstance(instrument_id, str))
-        assert(isinstance(limit, int))
-        assert(isinstance(state, str))
         assert(isinstance(before, str))
+        assert(isinstance(state, str))
+        assert(isinstance(limit, int))
 
         # optional params for filtering orders
         params = {
             "instrument_id": instrument_id,
+            "before": before, # latest date from which to retreive orders
             "state": state, # open, cancelled, executed
-            "limit": limit, # number of orders to return, defaults to 25
-            "before": before # latest date from which to retreive orders
+            "limit": limit # number of orders to return, defaults to 25
         }
 
-        orders = self._http_authenticated_request("GET", "/api/v1/orders", params)['result']
-
+        orders = self._http_authenticated_request("GET", "/api/v1/orders", params)
         return list(map(lambda item: Order.to_order(item), orders))
 
     def place_order(self, instrument_id: str, side: str, price: Wad, amount: Wad) -> str:
@@ -203,10 +206,7 @@ class EToroApi(PyexAPI):
 
         response = self._http_authenticated_request("POST", f"/api/v1/orders", {}, request_body)
 
-        if response['success'] is False:
-            raise Exception(f"eToro Failed to place order {response['message']}")
-
-        order_id = response['result']['id']
+        order_id = response['id']
 
         self.logger.info(f"Placed order type {order_type}, id #{order_id}")
 
@@ -217,9 +217,8 @@ class EToroApi(PyexAPI):
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        result = self._http_authenticated_request("DELETE", "/api/v1/orders/{order_id}", {})
-
-        return result['success']
+        result = self._http_authenticated_request("DELETE", f"/api/v1/orders/{order_id}", {})
+        return result
 
     def get_trades(self, instrument_id: str, before: str, limit: int = 25) -> List[Trade]:
         assert(isinstance(instrument_id, str))
@@ -233,7 +232,7 @@ class EToroApi(PyexAPI):
             'limit': limit
         }
 
-        result = self._http_authenticated_request("GET", "/api/v1/trades", params)['result']
+        result = self._http_authenticated_request("GET", "/api/v1/trades", params)
 
         return list(map(lambda item: Trade(trade_id=item['trade_id'],
                                            timestamp=int(dateutil.parser.parse(item['created_at']).timestamp()),
@@ -241,6 +240,76 @@ class EToroApi(PyexAPI):
                                            is_sell=item['side'] == 'bid',
                                            price=Wad.from_number(item['price']),
                                            amount=Wad.from_number(item['volume'])), result))
+
+    def get_deposit_address(self, coin: str):
+        assert(isinstance(coin, str))
+        result = self._http_authenticated_request("GET", f"/api/v1/funds/deposits/{coin}/address", {})
+
+        return result['address']
+
+    def withdraw(self, coin: str, amount: Wad, address: str):
+        assert(isinstance(coin, str))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(address, str))
+
+        request_body = {
+            'coin': coin,
+            'amount': amount,
+            'address': address
+        }
+
+        response = self._http_authenticated_request("POST", f"/api/v1/funds/withdrawals", {}, request_body)
+
+        withdrawal_id = response['id']
+        return withdrawal_id
+
+    def get_withdrawals(self, coin: str, before: str, created_at: str, txid: str, limit: int = 25):
+        assert(isinstance(coin, str))
+        assert(isinstance(before, str))
+        assert(isinstance(created_at, str))
+        assert(isinstance(txid, str))        
+        assert(isinstance(limit, int))
+
+        params = {
+            "coin": coin,
+            "before": before, # latest date from which to retreive orders
+            "created_at": created_at,
+            "txid": txid,
+            "state": state, # open, cancelled, executed
+            "limit": limit # number of orders to return, defaults to 25
+        }
+
+        withdrawals = self._http_authenticated_request("GET", "/api/v1/funds/withdrawals", params)
+        return withdrawals
+
+    def get_withdrawal(self, withdrawal_id: str):
+        assert(isinstance(withdrawal_id, str))
+        result = self._http_authenticated_request("GET", f"/api/v1/funds/withdrawals/{withdrawal_id}", {})
+        
+        return result
+
+    def get_deposits(self, coin: str, before: str, created_at: str, limit: int = 25):
+        assert(isinstance(coin, str))
+        assert(isinstance(before, str))
+        assert(isinstance(created_at, str))
+        assert(isinstance(limit, int))
+
+        params = {
+            "coin": coin,
+            "before": before,
+            "created_at": created_at,
+            "state": state,
+            "limit": limit
+        }
+
+        deposits = self._http_authenticated_request("GET", "​/api​/v1​/reports​/funds​/deposits", params)
+        return deposits
+
+    def get_deposit(self, deposit_id: str):
+        assert(isinstance(deposit_id, str))
+        result = self._http_authenticated_request("GET", f"/api/v1/reports/funds/deposits/{deposit_id}", {})
+        
+        return result
 
     def _http_request(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
@@ -255,6 +324,23 @@ class EToroApi(PyexAPI):
                                              url=url,
                                              timeout=self.timeout))
 
+    def _generate_signature(self, nonce: str, timestamp: str):
+        assert(isinstance(nonce, str))
+        assert(isinstance(timestamp, str))
+                
+        # https://legrandin.github.io/pycryptodome/Doc/3.4.6/Crypto.Signature.pkcs1_15-module.html
+        message = f"{nonce}{timestamp}".encode('utf-8')
+        hashed_message = SHA256.new(message)
+
+        # Need to import key string as RSA Key
+        private_key = RSA.importKey(self.secret_key)
+
+        # sign hashed message with RSA private key, and then base64 encode it
+        signer = pkcs1_15.new(private_key)
+        signature = base64.b64encode(signer.sign(hashed_message))
+        
+        return signature        
+
     def _http_authenticated_request(self, method: str, resource: str, params: dict, req_body: dict = {}):
         assert(isinstance(method, str))
         assert(isinstance(resource, str))
@@ -266,15 +352,7 @@ class EToroApi(PyexAPI):
         nonce = str(uuid.uuid4())
         timestamp = str(int(time.time() * 1000))
 
-        # https://legrandin.github.io/pycryptodome/Doc/3.4.6/Crypto.Signature.pkcs1_15-module.html
-        message = f"{nonce}{timestamp}".encode('utf-8')
-        hashed_message = SHA256.new(message)
-
-        # Need to import key string as RSA Key
-        private_key = RSA.importKey(self.secret_key)
-
-        signer = pkcs1_15.new(private_key)
-        signature = base64.b64encode(signer.sign(hashed_message))
+        signature = self._generate_signature(nonce, timestamp)
 
         headers = {
             "user-agent": "mm@liquidityproviders.io",

@@ -20,8 +20,34 @@ import sys
 from pyexchange.etoro import EToroApi
 from pymaker.numeric import Wad
 
-# openssl pkcs8 -in .etoro-key -out
+## Need to convert encrypted private key with empty passphrase to an unencrypted private key file
+# openssl pkcs8 -in .etoro-key -out <unencrypted-key-file>
+
 etoro = EToroApi('https://7vriaeqd.hft.etorox.com', sys.argv[1], open('./.etoro-unencrypted-key', 'r').read(), 9.5)
 # etoro = EToroApi('https://7vriaeqd.hft.etorox.com', sys.argv[1], open(sys.argv[2], "r",encoding='utf-8').read(), 9.5)
 
-print(etoro.get_markets())
+# GET "/api/v1/instruments"
+# print(etoro.get_markets())
+# print(etoro.get_pair('ETH/USDC'))
+
+# GET "/api/v1/balances"
+# print(etoro.get_balances())
+
+# GET "/api/v1/orders"
+# print(etoro.get_orders('ethusdc', '10000', 'open', 25))
+
+# POST /api/v1/orders
+# print(etoro.place_order('ethusdc', 'buy', Wad.from_number(144.00156), Wad.from_number(.005)))
+
+# DELETE /api/v1/orders/{order_id}
+# print(etoro.cancel_order('4ffa71ea-9e33-4cff-80d8-55e3898932ae'))
+
+# GET /api/v1/trades
+# print(etoro.get_trades('ethusdc', '10000'))
+
+# GET ​/api​/v1​/funds​/deposits​/{coin}​/address
+# print(etoro.get_deposit_address('eth'))
+
+
+# f3a8c406-e569-402b-85b6-0bcd102ec856
+
