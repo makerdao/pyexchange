@@ -17,6 +17,7 @@
 
 import datetime
 import sys
+from pprint import pprint
 
 from pymaker import Wad
 from pyexchange.okex import OKEXApi
@@ -27,18 +28,18 @@ print(sys.argv)
 print("OKEXApi created\n")
 
 
-pair = "mkr_usdt"
+pair = "btc_dai"
 #l1 = okex.ticker(pair)
 #print(f"best bid: {l1['best_bid']}  best ask: {l1['best_ask']}")
 # book = okex.depth(pair)
 # print(f"bids: {book['bids'][0:3]}")
 # print(f"asks: {book['asks'][0:3]}")
-# print(okex.candles(pair, '1min')[0:3])
-# print()
+print(okex.candles(pair, '1min')[0:3])
+print()
 
-balances = okex.get_balances()
-print(f"Account balances -- USDT: {balances['USDT']}")
-print(f"                     MKR: {balances['MKR']}")
+# balances = okex.get_balances()
+# print(f"Account balances -- USDT: {balances['USDT']}")
+# print(f"                     MKR: {balances['MKR']}")
 
 
 # price in terms of quote currency (USDT), size in terms of base currency (MKR)
@@ -63,18 +64,19 @@ def print_trades(trades):
         print(f"{side} {str(trade.amount)[:9]} {trade.amount_symbol} "
               f"at {str(trade.price)[:12]} "
               f"{pair.split('_')[1]} "
-              f"on {datetime.datetime.utcfromtimestamp(trade.timestamp)}")
+              f"on {datetime.datetime.utcfromtimestamp(trade.timestamp)} "
+              f"({trade.trade_id})")
         
 
 # Gets open orders
 orders = okex.get_orders(pair)
 print_orders(orders)
 # Gets all orders
-#orders = okex.get_orders_history(pair, 9)
-#print_orders(orders)
+# orders = okex.get_orders_history(pair, 9)
+# print_orders(orders)
 
-#trades = okex.get_trades(pair)
-#print(trades[:3])
+# trades = okex.get_trades(pair)
+# print_trades(trades[:3])
 # trades = okex.get_all_trades(pair)
-# print_trades(trades[:9])
+# print_trades(trades[:3])
 

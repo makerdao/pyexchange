@@ -186,7 +186,7 @@ class OKEXApi:
         result = self._http_get(f"/api/spot/v3/instruments/{pair}/candles",
                                 f"granularity={granularity_in_seconds[granularity]}")
 
-        return list(map(lambda item: Candle(timestamp=int(dateutil.parser.parse(item[0]).timestamp()),
+        return list(map(lambda item: Candle(timestamp=int(dateutil.parser.isoparse(item[0]).timestamp()),
                                             open=Wad.from_number(item[1]),
                                             high=Wad.from_number(item[2]),
                                             low=Wad.from_number(item[3]),
@@ -291,10 +291,10 @@ class OKEXApi:
                                        requires_auth=True, has_cursor=False)
 
         trades = list(map(lambda item: Trade(trade_id=item['order_id'],
-                                             timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
+                                             timestamp=int(dateutil.parser.isoparse(item['timestamp']).timestamp()),
                                              is_sell=item['side'] == 'sell',
                                              price=Wad.from_number(item['price']),
-                                             amount=Wad.from_number(item['size']),
+                                             amount=Wad.from_number(item['filled_size']),
                                              amount_symbol=item['instrument_id'].split('-')[0].lower()),
                           result_part_filled + result_filled))
 
@@ -313,7 +313,7 @@ class OKEXApi:
         result = self._http_get(f"/api/spot/v3/instruments/{pair}/trades",
                                 f"symbol={pair}", requires_auth=False, has_cursor=False)
         return list(map(lambda item: Trade(trade_id=item['trade_id'],
-                                           timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
+                                           timestamp=int(dateutil.parser.isoparse(item['timestamp']).timestamp()),
                                            is_sell=item['side'] == 'sell',
                                            price=Wad.from_number(item['price']),
                                            amount=Wad.from_number(item['size']),
@@ -323,7 +323,7 @@ class OKEXApi:
     def _parse_order(item: dict) -> Order:
         assert(isinstance(item, dict))
         return Order(order_id=item['order_id'],
-                     timestamp=int(dateutil.parser.parse(item['timestamp']).strftime("%s")),
+                     timestamp=int(dateutil.parser.isoparse(item['timestamp']).timestamp()),
                      pair=item['instrument_id'],
                      is_sell=item['side'] == 'sell',
                      price=Wad.from_number(item['price']),
