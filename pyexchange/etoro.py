@@ -228,12 +228,11 @@ class EToroApi(PyexAPI):
         # optional params
         params = {
             'instrument_id': instrument_id,
-            'before': before, # formatted as ymd
+            'before': before,
             'limit': limit
         }
 
         result = self._http_authenticated_request("GET", "/api/v1/trades", params)
-
         return list(map(lambda item: Trade(trade_id=item['trade_id'],
                                            timestamp=int(dateutil.parser.parse(item['created_at']).timestamp()),
                                            instrument_id=item['instrument_id'],
