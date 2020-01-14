@@ -228,7 +228,7 @@ class EToroApi(PyexAPI):
         # optional params
         params = {
             'instrument_id': instrument_id,
-            'before': before,
+            'before': before, # formatted as ymd
             'limit': limit
         }
 
