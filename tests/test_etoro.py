@@ -22,9 +22,7 @@ import time
 
 from pymaker import Wad
 from pyexchange.model import Candle
-from pyexchange.etoro import Order
-from pyexchange.etoro import Trade
-from pyexchange.etoro import EToroApi
+from pyexchange.etoro import EToroApi, Order, Trade
 
 # Models HTTP response, produced by EToroMockServer
 class MockedResponse:
@@ -98,7 +96,6 @@ class TestEToro:
             api_server = "localhost",
             api_key = "00000000-0000-0000-0000-000000000000",
             secret_key = "DEAD000000000000000000000000DEAD",
-            password = "password to nonexistant account",
             timeout = 15.5
         )
 
@@ -199,6 +196,18 @@ class TestEToro:
         assert(duplicate_count == 0)
         assert(missorted_found is False)
 
+    def test_get_order(self, mocker):
+        instrument_id = "mkr_eth"
+        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        response = self.etoro.get_order(instrument_id) 
+        assert (len(response) > 0)
+        for order in response:
+            # Open orders cannot be completed filled
+            assert(order.filled_amount < order.amount)
+            assert(isinstance(order.is_sell, bool))
+            assert(order.price > Wad(0))
+        TestEToro.check_orders(response)
+        
     def test_get_orders(self, mocker):
         instrument_id = "mkr_eth"
         mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
