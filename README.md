@@ -38,3 +38,10 @@ source _virtualenv/bin/activate
 ## License
 
 See [COPYING](https://github.com/makerdao/pyexchange/blob/master/COPYING) file.
+
+### Testing
+Run the following commands within a virtualenv
+```
+pip3 install -r requirements-dev.txt
+./test.sh
+```

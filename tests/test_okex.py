@@ -95,7 +95,7 @@ class OkexMockServer:
             raise Exception("Unable to match HTTP POST request to canned response")
 
 
-class TestEToro:
+class TestOKEX:
     def setup_method(self):
         self.okex = OKEXApi(
             api_server = "localhost",

@@ -39,8 +39,6 @@ from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 from Crypto.PublicKey import RSA
 
-# API Documentation: https://etorox.github.io/docs/#/
-
 class Order:
     def __init__(self,
                  order_id: str,
@@ -151,9 +149,12 @@ class EToroApi(PyexAPI):
         assert(isinstance(timeout, float))
 
         self.api_server = api_server
-        self.api_key = api_key
-        self.secret_key = secret_key
         self.timeout = timeout
+        self.api_key = api_key
+
+        ## Need to convert encrypted private key with empty passphrase to an unencrypted private key file
+        # openssl pkcs8 -in .etoro-key -out <unencrypted-key-file>
+        self.secret_key = secret_key
 
     def get_markets(self):
         return self._http_authenticated_request("GET", "/api/v1/instruments", {})
@@ -220,7 +221,7 @@ class EToroApi(PyexAPI):
         result = self._http_authenticated_request("DELETE", f"/api/v1/orders/{order_id}", {})
         return result
 
-    def get_trades(self, instrument_id: str, before: str, limit: int = 25) -> List[Trade]:
+    def get_trades(self, instrument_id: str, before: str = "", limit: int = 25) -> List[Trade]:
         assert(isinstance(instrument_id, str))
         assert(isinstance(before, str))
         assert(isinstance(limit, int))
@@ -327,7 +328,6 @@ class EToroApi(PyexAPI):
         assert(isinstance(nonce, str))
         assert(isinstance(timestamp, str))
                 
-        # https://legrandin.github.io/pycryptodome/Doc/3.4.6/Crypto.Signature.pkcs1_15-module.html
         message = f"{nonce}{timestamp}".encode('utf-8')
         hashed_message = SHA256.new(message)
 
@@ -335,11 +335,9 @@ class EToroApi(PyexAPI):
         private_key = RSA.importKey(self.secret_key)
 
         # sign hashed message with RSA private key, and then base64 encode it
-        signer = pkcs1_15.new(private_key)
-        signature = base64.b64encode(signer.sign(hashed_message))
+        # API Doc: https://legrandin.github.io/pycryptodome/Doc/3.4.6/Crypto.Signature.pkcs1_15-module.html
+        return base64.b64encode(pkcs1_15.new(private_key).sign(hashed_message))
         
-        return signature        
-
     def _http_authenticated_request(self, method: str, resource: str, params: dict, req_body: dict = {}):
         assert(isinstance(method, str))
         assert(isinstance(resource, str))
@@ -351,12 +349,10 @@ class EToroApi(PyexAPI):
         nonce = str(uuid.uuid4())
         timestamp = str(int(time.time() * 1000))
 
-        signature = self._generate_signature(nonce, timestamp)
-
         headers = {
             "user-agent": "mm@liquidityproviders.io",
             "ex-access-key": self.api_key,
-            "ex-access-sign": signature,
+            "ex-access-sign": self._generate_signature(nonce, timestamp),
             "ex-access-nonce": nonce,
             "ex-access-timestamp": timestamp
         } 
