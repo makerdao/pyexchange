@@ -11,4 +11,7 @@ venv
 _virtualenv
 *.swp
 .vscode
-*key
+
+.pytest_cache/
+
+.etoro-unencrypted-key

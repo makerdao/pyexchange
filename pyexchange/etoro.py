@@ -42,6 +42,7 @@ from Crypto.PublicKey import RSA
 class Order:
     def __init__(self,
                  order_id: str,
+                 timestamp: int, # time in seconds
                  instrument_id: str,
                  is_sell: bool,
                  price: Wad,
@@ -49,12 +50,14 @@ class Order:
                  remaining_amount: Wad):
 
         assert(isinstance(instrument_id, str))
+        assert(isinstance(timestamp, int))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
         assert(isinstance(remaining_amount, Wad))
 
         self.order_id = order_id
+        self.timestamp = timestamp
         self.instrument_id = instrument_id
         self.is_sell = is_sell
         self.price = price
@@ -83,6 +86,7 @@ class Order:
     @staticmethod
     def to_order(item):
         return Order(order_id=item['id'],
+                     timestamp=int(time.time()), # No timestamp or created at information is returned as part of get_orders()
                      instrument_id=item['instrument_id'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
@@ -170,7 +174,7 @@ class EToroApi(PyexAPI):
         assert(isinstance(order_id, str))
         return self._http_authenticated_request("GET", f"/api/v1/order/{order_id}", {})
 
-    def get_orders(self, instrument_id: str,  before: str, state: str, limit: int = 25) -> List[Order]:
+    def get_orders(self, instrument_id: str,  before: str = "", state: str = "", limit: int = 25) -> List[Order]:
         assert(isinstance(instrument_id, str))
         assert(isinstance(before, str))
         assert(isinstance(state, str))
@@ -206,7 +210,6 @@ class EToroApi(PyexAPI):
                          f" price {price})...")
 
         response = self._http_authenticated_request("POST", f"/api/v1/orders", {}, request_body)
-
         order_id = response['id']
 
         self.logger.info(f"Placed order type {order_type}, id #{order_id}")
@@ -246,70 +249,6 @@ class EToroApi(PyexAPI):
         result = self._http_authenticated_request("GET", f"/api/v1/funds/deposits/{coin}/address", {})
 
         return result['address']
-
-    def withdraw(self, coin: str, amount: Wad, address: str):
-        assert(isinstance(coin, str))
-        assert(isinstance(amount, Wad))
-        assert(isinstance(address, str))
-
-        request_body = {
-            'coin': coin,
-            'amount': amount,
-            'address': address
-        }
-
-        response = self._http_authenticated_request("POST", f"/api/v1/funds/withdrawals", {}, request_body)
-
-        withdrawal_id = response['id']
-        return withdrawal_id
-
-    def get_withdrawals(self, coin: str, before: str, created_at: str, txid: str, limit: int = 25):
-        assert(isinstance(coin, str))
-        assert(isinstance(before, str))
-        assert(isinstance(created_at, str))
-        assert(isinstance(txid, str))        
-        assert(isinstance(limit, int))
-
-        params = {
-            "coin": coin,
-            "before": before, # latest date from which to retreive orders
-            "created_at": created_at,
-            "txid": txid,
-            "state": state, # open, cancelled, executed
-            "limit": limit # number of orders to return, defaults to 25
-        }
-
-        withdrawals = self._http_authenticated_request("GET", "/api/v1/funds/withdrawals", params)
-        return withdrawals
-
-    def get_withdrawal(self, withdrawal_id: str):
-        assert(isinstance(withdrawal_id, str))
-        result = self._http_authenticated_request("GET", f"/api/v1/funds/withdrawals/{withdrawal_id}", {})
-        
-        return result
-
-    def get_deposits(self, coin: str, before: str, created_at: str, limit: int = 25):
-        assert(isinstance(coin, str))
-        assert(isinstance(before, str))
-        assert(isinstance(created_at, str))
-        assert(isinstance(limit, int))
-
-        params = {
-            "coin": coin,
-            "before": before,
-            "created_at": created_at,
-            "state": state,
-            "limit": limit
-        }
-
-        deposits = self._http_authenticated_request("GET", "​/api​/v1​/reports​/funds​/deposits", params)
-        return deposits
-
-    def get_deposit(self, deposit_id: str):
-        assert(isinstance(deposit_id, str))
-        result = self._http_authenticated_request("GET", f"/api/v1/reports/funds/deposits/{deposit_id}", {})
-        
-        return result
 
     def _http_request(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
