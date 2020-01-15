@@ -52,10 +52,13 @@ class EToroMockServer:
     def handle_request(**kwargs):
         assert("url" in kwargs)
         url = kwargs["url"]
-        if "data" not in kwargs:
+        method = kwargs["method"]
+        if method == "GET":
             return EToroMockServer.handle_get(url)
-        else:
+        elif method == "POST":
             return EToroMockServer.handle_post(url, kwargs["data"])
+        else:
+            return EToroMockServer.handle_delete(url)
 
     @staticmethod
     def handle_get(url: str):
@@ -65,7 +68,7 @@ class EToroMockServer:
         elif re.search(r"api\/v1\/balances", url):
             return MockedResponse(text=EToroMockServer.responses["balances"])
         elif re.search(r"api\/v1\/orders", url):
-            return MockedResponse(text=EToroMockServer.responses["get_orders"])
+            return MockedResponse(text=EToroMockServer.responses["orders"])
         elif re.search(r"\/api\/v1\/trades", url):
             return MockedResponse(text=EToroMockServer.responses["trades"])
         else:
@@ -75,9 +78,9 @@ class EToroMockServer:
     def handle_post(url: str, data):
         assert(data is not None)
         if re.search(r"\/api\/v1\/orders", url):
-            return MockedResponse(text=EToroMockServer.responses["place_order_success"])
-        elif re.search(r"\/api\/v1\/orders", url):
-            return MockedResponse(text=EToroMockServer.responses["place_order_failure"])
+            return MockedResponse(text=EToroMockServer.responses["single_order"])
+        # elif re.search(r"\/api\/v1\/orders", url):
+        #     return MockedResponse(text=EToroMockServer.responses["place_order_failure"])
         else:
             raise Exception("Unable to match HTTP POST request to canned response")
 
@@ -91,11 +94,11 @@ class EToroMockServer:
 
 class TestEToro:
     def setup_method(self):
+        cwd = os.path.dirname(os.path.realpath(__file__))
         self.etoro = EToroApi(
             api_server = "localhost",
             api_key = "00000000-0000-0000-0000-000000000000",
-            secret_key = open('./.etoro-unencrypted-key', 'r').read(),
-            # secret_key = "DEAD000000000000000000000000DEAD",
+            secret_key = open(os.path.join(cwd, "mock/etoro-test-key"), "r").read(),
             timeout = 15.5
         )
 
@@ -103,8 +106,7 @@ class TestEToro:
         mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
         response = self.etoro.get_markets()
         assert(len(response) > 0)
-        assert("USDC" in response)
-        assert("ETH" in response)
+        assert(any(x["id"] == "ethusdc" for x in response))
 
     def test_order(self):
         price = Wad.from_number(4.8765)
@@ -124,21 +126,13 @@ class TestEToro:
         # assert(order.remaining_buy_amount == amount-remaining_amount)
         # assert(order.remaining_sell_amount == (amount-remaining_amount)*price)
 
-    def test_depth(self, mocker):
-        instrument_id = "ethusdc"
-        mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
-        response = self.etoro.depth(instrument_id)
-        assert("bids" in response)
-        assert("asks" in response)
-        assert(len(response["bids"]) > 0)
-        assert(len(response["asks"]) > 0)
-
     def test_get_balances(self, mocker):
         mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
         response = self.etoro.get_balances()
         assert(len(response) > 0)
-        assert("ETH" in response)
-        assert("USDC" in response)
+        for balance in response:
+            if balance["currency"] == "eth":
+                assert(float(balance["balance"]) > 0)
 
     @staticmethod
     def check_orders(orders):
@@ -151,8 +145,6 @@ class TestEToro:
             assert(isinstance(order, Order))
             assert(order.order_id is not None)
             assert(order.timestamp > 0)
-            # An order cannot be filled for more than the order amount
-            assert(order.filled_amount <= order.amount)
 
             # Check for duplicates and missorted orders
             if order.order_id in by_oid:
@@ -174,18 +166,6 @@ class TestEToro:
             print("no duplicates were found")
         assert(duplicate_count == 0)
         assert(missorted_found is False)
-
-    def test_get_order(self, mocker):
-        instrument_id = "ethusdc"
-        mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
-        response = self.etoro.get_order(instrument_id) 
-        assert (len(response) > 0)
-        for order in response:
-            # Open orders cannot be completed filled
-            assert(order.filled_amount < order.amount)
-            assert(isinstance(order.is_sell, bool))
-            assert(order.price > Wad(0))
-        TestEToro.check_orders(response)
         
     def test_get_orders(self, mocker):
         instrument_id = "ethusdc"
@@ -193,21 +173,19 @@ class TestEToro:
         response = self.etoro.get_orders(instrument_id)
         assert (len(response) > 0)
         for order in response:
-            # Open orders cannot be completed filled
-            assert(order.filled_amount < order.get_order)
             assert(isinstance(order.is_sell, bool))
-            assert(order.price > Wad(0))
+            assert(Wad(order.price) > Wad(0))
         TestEToro.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
         instrument_id = "ethusdc"
         side = "ask"
-        mocker.patch("requests.post", side_effect=EToroMockServer.handle_request)
+        mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
         order_id = self.etoro.place_order(instrument_id, side, Wad.from_number(639.3), Wad.from_number(0.15))
         assert(isinstance(order_id, str))
         assert(order_id is not None)
-        cancel_result = self.etoro.cancel_order(instrument_id, order_id)
-        assert(cancel_result)
+        cancel_result = self.etoro.cancel_order(order_id)
+        assert(cancel_result["state"] == "pending cancellation")
 
     @staticmethod
     def check_trades(trades):

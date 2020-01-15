@@ -37,15 +37,11 @@ etoro = EToroApi('https://7vriaeqd.hft.etorox.com', sys.argv[1], open('./.etoro-
 # print(etoro.place_order('ethusdc', 'buy', Wad.from_number(144.94033), Wad.from_number(.005)))
 
 # DELETE /api/v1/orders/{order_id}
-# print(etoro.cancel_order('4ffa71ea-9e33-4cff-80d8-55e3898932ae'))
+# print(etoro.cancel_order('c8e579b0-cfb8-4297-9983-7deb5c454761'))
 
 # GET /api/v1/trades
-print(etoro.get_trades('ethusdc'))
+# print(etoro.get_trades('ethusdc'))
 # print(etoro.get_trades('ethusdc', '1578959828'))
 
 # GET /api​/v1​/funds​/deposits​/{coin}​/address
 # print(etoro.get_deposit_address('eth'))
-
-
-# f3a8c406-e569-402b-85b6-0bcd102ec856
-
