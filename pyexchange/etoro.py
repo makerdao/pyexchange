@@ -174,6 +174,8 @@ class EToroApi(PyexAPI):
         assert(isinstance(order_id, str))
         return self._http_authenticated_request("GET", f"/api/v1/order/{order_id}", {})
 
+    # Trading: Retrieves 25 most recent orders for a particular pair, newest first, 
+    # which have not been completely filled.
     def get_orders(self, instrument_id: str,  before: str = "", state: str = "", limit: int = 25) -> List[Order]:
         assert(isinstance(instrument_id, str))
         assert(isinstance(before, str))
@@ -191,6 +193,8 @@ class EToroApi(PyexAPI):
         orders = self._http_authenticated_request("GET", "/api/v1/orders", params)
         return list(map(lambda item: Order.to_order(item), orders))
 
+    # Trading: Submits and awaits acknowledgement of a limit order,
+    # returning the order id.
     def place_order(self, instrument_id: str, side: str, price: Wad, amount: Wad) -> str:
         assert(isinstance(instrument_id, str))
         assert(isinstance(side, str))
@@ -224,15 +228,16 @@ class EToroApi(PyexAPI):
         result = self._http_authenticated_request("DELETE", f"/api/v1/orders/{order_id}", {})
         return result
 
+    # Trading: Retrieves most recent 25 trades for a pair.
     def get_trades(self, instrument_id: str, before: str = "", limit: int = 25) -> List[Trade]:
         assert(isinstance(instrument_id, str))
         assert(isinstance(before, str))
         assert(isinstance(limit, int))
 
-        # optional params
+        # optional params for filtering trades
         params = {
             'instrument_id': instrument_id,
-            'before': before,
+            'before': before, # latest date from which to retreive orders
             'limit': limit
         }
 
@@ -277,6 +282,8 @@ class EToroApi(PyexAPI):
         # API Doc: https://legrandin.github.io/pycryptodome/Doc/3.4.6/Crypto.Signature.pkcs1_15-module.html
         return base64.b64encode(pkcs1_15.new(private_key).sign(hashed_message))
         
+    # Interprets the response to an HTTP GET, POST or DELETE request
+    # All eToro requests other than retrieving server time require authentication
     def _http_authenticated_request(self, method: str, resource: str, params: dict, req_body: dict = {}):
         assert(isinstance(method, str))
         assert(isinstance(resource, str))
