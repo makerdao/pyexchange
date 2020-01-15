@@ -21,7 +21,6 @@ import re
 import time
 
 from pymaker import Wad
-from pyexchange.model import Candle
 from pyexchange.etoro import EToroApi, Order, Trade
 
 # Models HTTP response, produced by EToroMockServer
@@ -95,71 +94,51 @@ class TestEToro:
         self.etoro = EToroApi(
             api_server = "localhost",
             api_key = "00000000-0000-0000-0000-000000000000",
-            secret_key = "DEAD000000000000000000000000DEAD",
+            secret_key = open('./.etoro-unencrypted-key', 'r').read(),
+            # secret_key = "DEAD000000000000000000000000DEAD",
             timeout = 15.5
         )
 
     def test_get_markets(self, mocker):
-        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
         response = self.etoro.get_markets()
         assert(len(response) > 0)
-        assert("MKR" in response)
+        assert("USDC" in response)
         assert("ETH" in response)
 
     def test_order(self):
         price = Wad.from_number(4.8765)
         amount = Wad.from_number(0.222)
-        filled_amount = Wad.from_number(0.153)
+        remaining_amount = Wad.from_number(0.153)
         order = Order(
             order_id="153153",
             timestamp=int(time.time()),
-            instrument_id="MKR-ETH",
+            instrument_id="ethusdc",
             is_sell=False,
             price=price,
             amount=amount,
-            filled_amount=filled_amount
+            remaining_amount=remaining_amount
         )
         assert(order.price == order.sell_to_buy_price)
         assert(order.price == order.buy_to_sell_price)
-        assert(order.remaining_buy_amount == amount-filled_amount)
-        assert(order.remaining_sell_amount == (amount-filled_amount)*price)
-
-    def test_ticker(self, mocker):
-        instrument_id = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
-        response = self.etoro.ticker(instrument_id)
-        assert(str(response["instrument_id"]).lower().replace('-', '_') == instrument_id)
-        assert(float(response["best_ask"]) > 0)
-        assert(response["instrument_id"] == response["product_id"])
+        # assert(order.remaining_buy_amount == amount-remaining_amount)
+        # assert(order.remaining_sell_amount == (amount-remaining_amount)*price)
 
     def test_depth(self, mocker):
-        instrument_id = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        instrument_id = "ethusdc"
+        mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
         response = self.etoro.depth(instrument_id)
         assert("bids" in response)
         assert("asks" in response)
         assert(len(response["bids"]) > 0)
         assert(len(response["asks"]) > 0)
 
-    def test_candles(self, mocker):
-        instrument_id = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
-        response = self.etoro.candles(instrument_id, "1min")
-        assert(len(response) > 0)
-        for item in response:
-            assert(isinstance(item, Candle))
-            assert(item.timestamp > 0)
-            assert(float(item.open) > 0)
-            assert(float(item.high) > 0)
-            assert(float(item.low) > 0)
-            assert(float(item.close) > 0)
-
     def test_get_balances(self, mocker):
-        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
         response = self.etoro.get_balances()
         assert(len(response) > 0)
-        assert("MKR" in response)
         assert("ETH" in response)
+        assert("USDC" in response)
 
     @staticmethod
     def check_orders(orders):
@@ -197,8 +176,8 @@ class TestEToro:
         assert(missorted_found is False)
 
     def test_get_order(self, mocker):
-        instrument_id = "mkr_eth"
-        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        instrument_id = "ethusdc"
+        mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
         response = self.etoro.get_order(instrument_id) 
         assert (len(response) > 0)
         for order in response:
@@ -209,19 +188,19 @@ class TestEToro:
         TestEToro.check_orders(response)
         
     def test_get_orders(self, mocker):
-        instrument_id = "mkr_eth"
-        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        instrument_id = "ethusdc"
+        mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
         response = self.etoro.get_orders(instrument_id)
         assert (len(response) > 0)
         for order in response:
             # Open orders cannot be completed filled
-            assert(order.filled_amount < order.amount)
+            assert(order.filled_amount < order.get_order)
             assert(isinstance(order.is_sell, bool))
             assert(order.price > Wad(0))
         TestEToro.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        instrument_id = "mkr_usdt"
+        instrument_id = "ethusdc"
         side = "ask"
         mocker.patch("requests.post", side_effect=EToroMockServer.handle_request)
         order_id = self.etoro.place_order(instrument_id, side, Wad.from_number(639.3), Wad.from_number(0.15))
@@ -260,8 +239,8 @@ class TestEToro:
         assert(missorted_found is False)
 
     def test_get_trades(self, mocker):
-        instrument_id = "mkr_eth"
-        mocker.patch("requests.get", side_effect=EToroMockServer.handle_request)
+        instrument_id = "ethusdc"
+        mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
         response = self.etoro.get_trades(instrument_id)
         assert (len(response) > 0)
         TestEToro.check_trades(response)

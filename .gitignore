@@ -11,5 +11,4 @@ venv
 _virtualenv
 *.swp
 .vscode
-.etoro-unencrypted-key
-.etoro-key
+*key

@@ -20,9 +20,6 @@ import sys
 from pyexchange.etoro import EToroApi
 from pymaker.numeric import Wad
 
-## Need to convert encrypted private key with empty passphrase to an unencrypted private key file
-# openssl pkcs8 -in .etoro-key -out <unencrypted-key-file>
-
 etoro = EToroApi('https://7vriaeqd.hft.etorox.com', sys.argv[1], open('./.etoro-unencrypted-key', 'r').read(), 9.5)
 # etoro = EToroApi('https://7vriaeqd.hft.etorox.com', sys.argv[1], open(sys.argv[2], "r",encoding='utf-8').read(), 9.5)
 
@@ -43,6 +40,7 @@ etoro = EToroApi('https://7vriaeqd.hft.etorox.com', sys.argv[1], open('./.etoro-
 # print(etoro.cancel_order('4ffa71ea-9e33-4cff-80d8-55e3898932ae'))
 
 # GET /api/v1/trades
+print(etoro.get_trades('ethusdc'))
 # print(etoro.get_trades('ethusdc', '1578959828'))
 
 # GET /api​/v1​/funds​/deposits​/{coin}​/address
