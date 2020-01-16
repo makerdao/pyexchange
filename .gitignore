@@ -9,3 +9,9 @@ __pycache__
 
 venv
 _virtualenv
+*.swp
+.vscode
+
+.pytest_cache/
+
+.etoro-unencrypted-key
