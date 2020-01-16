@@ -147,6 +147,9 @@ class EToroApi(PyexAPI):
 
     Developed according to the following manual:
     <https://etorox.github.io/docs/#/>.
+
+    Authentication requires conversion of encrypted private key with empty passphrase
+    to an unencrypted private key file: openssl pkcs8 -in .etoro-key -out <unencrypted-key-file>
     """
 
     logger = logging.getLogger()
@@ -162,9 +165,6 @@ class EToroApi(PyexAPI):
         self.account = account
         self.timeout = timeout
         self.api_key = api_key
-
-        ## Need to convert encrypted private key with empty passphrase to an unencrypted private key file
-        # openssl pkcs8 -in .etoro-key -out <unencrypted-key-file>
         self.secret_key = secret_key
 
     def get_markets(self):
@@ -249,7 +249,6 @@ class EToroApi(PyexAPI):
         }
 
         result = self._http_authenticated_request("GET", "/api/v1/trades", params)
-        print("retrieved trades", result)
         return list(map(lambda item: Trade(trade_id=item['trade_id'],
                                            timestamp=int(dateutil.parser.parse(item['created_at']).timestamp()),
                                            instrument_id=item['instrument_id'],
