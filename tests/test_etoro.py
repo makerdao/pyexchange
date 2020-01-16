@@ -72,7 +72,7 @@ class EToroMockServer:
         elif re.search(r"\/api\/v1\/trades", url):
             return MockedResponse(text=EToroMockServer.responses["trades"])
         else:
-            raise Exception("Unable to match HTTP GET request to canned response")
+            raise ValueError("Unable to match HTTP GET request to canned response", url)
 
     @staticmethod
     def handle_post(url: str, data):
@@ -82,7 +82,7 @@ class EToroMockServer:
         # elif re.search(r"\/api\/v1\/orders", url):
         #     return MockedResponse(text=EToroMockServer.responses["place_order_failure"])
         else:
-            raise Exception("Unable to match HTTP POST request to canned response")
+            raise ValueError("Unable to match HTTP POST request to canned response", url, data)
 
     
     @staticmethod
@@ -90,13 +90,14 @@ class EToroMockServer:
         if re.search(r"\/api\/v1\/orders\/[\w\-_]+", url):
             return MockedResponse(text=EToroMockServer.responses["cancel_order"])
         else:
-            raise Exception("Unable to match HTTP DELETE request to canned response")
+            raise ValueError("Unable to match HTTP DELETE request to canned response", url)
 
 class TestEToro:
     def setup_method(self):
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.etoro = EToroApi(
             api_server = "localhost",
+            account = "test-account",
             api_key = "00000000-0000-0000-0000-000000000000",
             secret_key = open(os.path.join(cwd, "mock/etoro-test-key"), "r").read(),
             timeout = 15.5
@@ -123,8 +124,7 @@ class TestEToro:
         )
         assert(order.price == order.sell_to_buy_price)
         assert(order.price == order.buy_to_sell_price)
-        # assert(order.remaining_buy_amount == amount-remaining_amount)
-        # assert(order.remaining_sell_amount == (amount-remaining_amount)*price)
+        assert(order.remaining_amount == remaining_amount)
 
     def test_get_balances(self, mocker):
         mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
