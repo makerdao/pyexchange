@@ -22,6 +22,7 @@ from typing import Optional, List
 import dateutil.parser
 import requests
 import time
+from datetime import datetime, timezone
 
 import uuid
 import base64
@@ -40,7 +41,7 @@ from Crypto.PublicKey import RSA
 class Order:
     def __init__(self,
                  order_id: str,
-                 timestamp: int, # time in seconds
+                 timestamp: str, # current UTC time at order placement
                  instrument_id: str,
                  is_sell: bool,
                  price: Wad,
@@ -48,7 +49,7 @@ class Order:
                  remaining_amount: Wad):
 
         assert(isinstance(instrument_id, str))
-        assert(isinstance(timestamp, int))
+        assert(isinstance(timestamp, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
@@ -90,7 +91,7 @@ class Order:
     @staticmethod
     def from_message(item):
         return Order(order_id=item['id'],
-                     timestamp=int(time.time()), # No timestamp or created_at information is returned as part of get_orders()
+                     timestamp=datetime.now(tz=timezone.utc).isoformat(), # No timestamp or created_at information is returned as part of get_orders()
                      instrument_id=item['instrument_id'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
@@ -248,6 +249,7 @@ class EToroApi(PyexAPI):
         }
 
         result = self._http_authenticated_request("GET", "/api/v1/trades", params)
+        print("retrieved trades", result)
         return list(map(lambda item: Trade(trade_id=item['trade_id'],
                                            timestamp=int(dateutil.parser.parse(item['created_at']).timestamp()),
                                            instrument_id=item['instrument_id'],

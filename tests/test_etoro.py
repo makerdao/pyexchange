@@ -115,7 +115,7 @@ class TestEToro:
         remaining_amount = Wad.from_number(0.153)
         order = Order(
             order_id="153153",
-            timestamp=int(time.time()),
+            timestamp=datetime.now(tz=timezone.utc).isoformat(),
             instrument_id="ethusdc",
             is_sell=False,
             price=price,
