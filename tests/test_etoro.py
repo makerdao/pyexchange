@@ -19,6 +19,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime, timezone
 
 from pymaker import Wad
 from pyexchange.etoro import EToroApi, Order, Trade
@@ -140,24 +141,19 @@ class TestEToro:
         duplicate_count = 0
         duplicate_first_found = -1
         missorted_found = False
-        last_timestamp = 0
+        current_time = datetime.now(tz=timezone.utc).isoformat()
         for index, order in enumerate(orders):
             assert(isinstance(order, Order))
             assert(order.order_id is not None)
-            assert(order.timestamp > 0)
+            assert(order.timestamp < current_time)
 
-            # Check for duplicates and missorted orders
+            # Check for duplicates
             if order.order_id in by_oid:
                 duplicate_count += 1
                 if duplicate_first_found < 0:
                     duplicate_first_found = index
             else:
                 by_oid[order.order_id] = order
-                if not missorted_found and last_timestamp > 0:
-                    if order.timestamp > last_timestamp:
-                        print(f"missorted order found at index {index}")
-                        missorted_found = True
-                last_timestamp = order.timestamp
 
         if duplicate_count > 0:
             print(f"{duplicate_count} duplicate orders were found, "
