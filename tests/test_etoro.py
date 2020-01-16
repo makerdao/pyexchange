@@ -140,7 +140,6 @@ class TestEToro:
         by_oid = {}
         duplicate_count = 0
         duplicate_first_found = -1
-        missorted_found = False
         current_time = datetime.now(tz=timezone.utc).isoformat()
         for index, order in enumerate(orders):
             assert(isinstance(order, Order))
@@ -161,7 +160,6 @@ class TestEToro:
         else:
             print("no duplicates were found")
         assert(duplicate_count == 0)
-        assert(missorted_found is False)
         
     def test_get_orders(self, mocker):
         instrument_id = "ethusdc"
