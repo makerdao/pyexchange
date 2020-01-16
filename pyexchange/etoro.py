@@ -22,8 +22,6 @@ from typing import Optional, List
 import dateutil.parser
 import requests
 import time
-import hmac
-import hashlib
 
 import uuid
 import base64
@@ -80,13 +78,19 @@ class Order:
     def remaining_sell_amount(self) -> Wad:
         return self.remaining_amount if self.is_sell else self.remaining_amount*self.price
 
+    def __hash__(self):
+        return hash((self.order_id,
+                     self.timestamp,
+                     self.price,
+                     self.amount))
+
     def __repr__(self):
         return pformat(vars(self))
 
     @staticmethod
-    def to_order(item):
+    def from_message(item):
         return Order(order_id=item['id'],
-                     timestamp=int(time.time()), # No timestamp or created at information is returned as part of get_orders()
+                     timestamp=int(time.time()), # No timestamp or created_at information is returned as part of get_orders()
                      instrument_id=item['instrument_id'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
@@ -141,18 +145,20 @@ class EToroApi(PyexAPI):
     """eToro API interface.
 
     Developed according to the following manual:
-    <https://etorox.github.io/dxocs/#/>.
+    <https://etorox.github.io/docs/#/>.
     """
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, api_key: str, secret_key: str, timeout: float):
+    def __init__(self, api_server: str, account: str, api_key: str, secret_key: str, timeout: float):
         assert(isinstance(api_server, str))
+        assert(isinstance(account, str))
         assert(isinstance(api_key, str))
         assert(isinstance(secret_key, str))
         assert(isinstance(timeout, float))
 
         self.api_server = api_server
+        self.account = account
         self.timeout = timeout
         self.api_key = api_key
 
@@ -191,7 +197,7 @@ class EToroApi(PyexAPI):
         }
 
         orders = self._http_authenticated_request("GET", "/api/v1/orders", params)
-        return list(map(lambda item: Order.to_order(item), orders))
+        return list(map(lambda item: Order.from_message(item), orders))
 
     # Trading: Submits and awaits acknowledgement of a limit order,
     # returning the order id.
@@ -296,7 +302,7 @@ class EToroApi(PyexAPI):
         timestamp = str(int(time.time() * 1000))
 
         headers = {
-            "user-agent": "mm@liquidityproviders.io",
+            "user-agent": self.account,
             "ex-access-key": self.api_key,
             "ex-access-sign": self._generate_signature(nonce, timestamp),
             "ex-access-nonce": nonce,
