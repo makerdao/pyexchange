@@ -236,16 +236,15 @@ class EToroApi(PyexAPI):
         return result
 
     # Trading: Retrieves most recent 25 trades for a pair.
-    def get_trades(self, instrument_id: str, before: str = "", limit: int = 25) -> List[Trade]:
+    def get_trades(self, instrument_id: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(instrument_id, str))
-        assert(isinstance(before, str))
-        assert(isinstance(limit, int))
+        assert(isinstance(page_number, int))
 
-        # optional params for filtering trades
+        # Params for filtering trades
         params = {
-            'instrument_id': instrument_id,
-            'before': before, # latest date from which to retreive orders
-            'limit': limit
+            'instrument_id': instrument_id.lower()
+            # 'before': '', # latest date from which to retreive orders
+            # 'limit': 25
         }
 
         result = self._http_authenticated_request("GET", "/api/v1/trades", params)
