@@ -183,18 +183,18 @@ class EToroApi(PyexAPI):
 
     # Trading: Retrieves 25 most recent orders for a particular pair, newest first, 
     # which have not been completely filled.
-    def get_orders(self, instrument_id: str,  before: str = "", state: str = "", limit: int = 25) -> List[Order]:
+    def get_orders(self, instrument_id: str, state: str, before: str = "", limit: int = 25) -> List[Order]:
         assert(isinstance(instrument_id, str))
-        assert(isinstance(before, str))
         assert(isinstance(state, str))
+        assert(isinstance(before, str))
         assert(isinstance(limit, int))
 
-        # optional params for filtering orders
+        # Params for filtering orders
         params = {
-            "instrument_id": instrument_id,
-            "before": before, # latest date from which to retreive orders
-            "state": state, # open, cancelled, executed
-            "limit": limit # number of orders to return, defaults to 25
+            "instrument_id": instrument_id, # REQUIRED: pair being traded
+            "state": state, # REQUIRED: open, cancelled, executed
+            "before": before, # OPTIONAL: latest date from which to retreive orders
+            "limit": limit # OPTIONAL: number of orders to return, defaults to 25
         }
 
         orders = self._http_authenticated_request("GET", "/api/v1/orders", params)
