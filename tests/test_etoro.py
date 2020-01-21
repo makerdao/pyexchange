@@ -164,7 +164,7 @@ class TestEToro:
     def test_get_orders(self, mocker):
         instrument_id = "ethusdc"
         mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
-        response = self.etoro.get_orders(instrument_id)
+        response = self.etoro.get_orders(instrument_id, "open")
         assert (len(response) > 0)
         for order in response:
             assert(isinstance(order.is_sell, bool))
