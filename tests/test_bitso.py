@@ -93,11 +93,10 @@ class BitsoMockServer:
         else:
             raise ValueError("Unable to match HTTP DELETE request to canned response", url)
 
-class TestEToro:
+class TestBitso:
     def setup_method(self):
         self.bitso = BitsoApi(
             api_server = "localhost",
-            account = "test-account",
             api_key = "00000000-0000-0000-0000-000000000000",
             secret_key = "bitsosecretkey",
             timeout = 15.5
@@ -107,7 +106,7 @@ class TestEToro:
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
         response = self.bitso.get_markets()
         assert(len(response) > 0)
-        assert(any(x["id"] == "ethusdc" for x in response))
+        assert(any(x["id"] == "eth_btc" for x in response))
 
     def test_order(self):
         price = Wad.from_number(4.8765)
@@ -116,7 +115,7 @@ class TestEToro:
         order = Order(
             order_id="153153",
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
-            instrument_id="ethusdc",
+            instrument_id="eth_btc",
             is_sell=False,
             price=price,
             amount=amount,
@@ -131,7 +130,7 @@ class TestEToro:
         response = self.bitso.get_balances()
         assert(len(response) > 0)
         for balance in response:
-            if balance["currency"] == "eth":
+            if "eth" in balance["book"]:
                 assert(float(balance["balance"]) > 0)
 
     @staticmethod
@@ -161,17 +160,17 @@ class TestEToro:
         assert(duplicate_count == 0)
         
     def test_get_orders(self, mocker):
-        instrument_id = "ethusdc"
+        instrument_id = "eth_btc"
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
-        response = self.bitso.get_orders(instrument_id, "open")
+        response = self.bitso.get_orders(instrument_id)
         assert (len(response) > 0)
         for order in response:
             assert(isinstance(order.is_sell, bool))
             assert(Wad(order.price) > Wad(0))
-        TestEToro.check_orders(response)
+        TestBitso.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        instrument_id = "ethusdc"
+        instrument_id = "eth_btc"
         side = "ask"
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
         order_id = self.bitso.place_order(instrument_id, side, Wad.from_number(639.3), Wad.from_number(0.15))
@@ -210,8 +209,8 @@ class TestEToro:
         assert(missorted_found is False)
 
     def test_get_trades(self, mocker):
-        instrument_id = "ethusdc"
+        instrument_id = "eth_btc"
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
         response = self.bitso.get_trades(instrument_id)
         assert (len(response) > 0)
-        TestEToro.check_trades(response)
+        TestBitso.check_trades(response)
