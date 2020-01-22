@@ -1,0 +1,328 @@
+# This file is part of Maker Keeper Framework.
+#
+# Copyright (C) 2020 MikeHathaway 
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import logging
+from pprint import pformat
+from typing import Optional, List
+
+import dateutil.parser
+import requests
+import time
+from datetime import datetime, timezone
+
+import uuid
+import hmac
+import hashlib
+import json
+
+from urllib.parse import urlencode
+
+from pyexchange.api import PyexAPI
+
+from pymaker.numeric import Wad
+from pymaker.util import http_response_summary
+
+class Order:
+    def __init__(self,
+                 order_id: str,
+                 timestamp: str, # current UTC time at order placement
+                 instrument_id: str,
+                 is_sell: bool,
+                 price: Wad,
+                 amount: Wad,
+                 remaining_amount: Wad):
+
+        assert(isinstance(instrument_id, str))
+        assert(isinstance(timestamp, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+        assert(isinstance(remaining_amount, Wad))
+
+        self.order_id = order_id
+        self.timestamp = timestamp
+        self.instrument_id = instrument_id
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+        self.remaining_amount = remaining_amount
+
+    @property
+    def sell_to_buy_price(self) -> Wad:
+        return self.price
+
+    @property
+    def buy_to_sell_price(self) -> Wad:
+        return self.price
+
+    @property
+    def remaining_buy_amount(self) -> Wad:
+        return self.remaining_amount*self.price if self.is_sell else self.remaining_amount
+
+    @property
+    def remaining_sell_amount(self) -> Wad:
+        return self.remaining_amount if self.is_sell else self.remaining_amount*self.price
+
+    def __hash__(self):
+        return hash((self.order_id,
+                     self.timestamp,
+                     self.price,
+                     self.amount))
+
+    def __repr__(self):
+        return pformat(vars(self))
+
+    @staticmethod
+    def from_message(item):
+        return Order(order_id=item['id'],
+                     timestamp=datetime.now(tz=timezone.utc).isoformat(), # No timestamp or created_at information is returned as part of get_orders()
+                     instrument_id=item['instrument_id'],
+                     is_sell=True if item['side'] == 'sell' else False,
+                     price=Wad.from_number(item['price']),
+                     amount=Wad.from_number(item['volume']),
+                     remaining_amount=Wad.from_number(float(item['origin_volume']) - float(item['volume'])))
+
+
+class Trade:
+    def __init__(self,
+                 trade_id: str,
+                 timestamp: int,
+                 instrument_id: Optional[str],
+                 is_sell: bool,
+                 price: Wad,
+                 amount: Wad):
+        assert(isinstance(trade_id, str))
+        assert(isinstance(timestamp, int))
+        assert(isinstance(instrument_id, str) or (instrument_id is None))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+
+        self.trade_id = trade_id
+        self.timestamp = timestamp
+        self.instrument_id = instrument_id
+        self.is_sell = is_sell
+        self.price = price
+        self.amount = amount
+
+    def __eq__(self, other):
+        assert(isinstance(other, Trade))
+        return self.trade_id == other.trade_id and \
+               self.timestamp == other.timestamp and \
+               self.instrument_id == other.instrument_id and \
+               self.is_sell == other.is_sell and \
+               self.price == other.price and \
+               self.amount == other.amount
+
+    def __hash__(self):
+        return hash((self.trade_id,
+                     self.timestamp,
+                     self.instrument_id,
+                     self.is_sell,
+                     self.price,
+                     self.amount))
+
+    def __repr__(self):
+        return pformat(vars(self))
+
+
+class BitsoApi(PyexAPI):
+    """Bitso API interface.
+
+    Developed according to the following manual:
+    <https://bitso.com/api_info>.
+
+    """
+
+    logger = logging.getLogger()
+
+    def __init__(self, api_server: str, api_key: str, secret_key: str, timeout: float):
+        assert(isinstance(api_server, str))
+        assert(isinstance(account, str))
+        assert(isinstance(api_key, str))
+        assert(isinstance(secret_key, str))
+        assert(isinstance(timeout, float))
+
+        self.api_server = api_server
+        self.timeout = timeout
+        self.api_key = api_key
+        self.secret_key = secret_key
+
+    # This endpoint returns a list of existing exchange order books and their respective order placement limits.
+    def get_markets(self):
+        return self._http_request("GET", "/v3/available_books", {})
+
+    def get_pair(self, instrument_id: str):
+        assert(isinstance(instrument_id, str))
+        return list(filter(lambda market: market['book'] == instrument_id, self.get_markets()))
+
+    def get_balances(self):
+        return self._http_authenticated_request("GET", "/v3/balance", {})
+
+    def get_order(self, order_id: str):
+        assert(isinstance(order_id, str))
+        return self._http_authenticated_request("GET", f"/v3/orders/{order_id}", {})
+
+    # Trading: Retrieves a list of user's open orders
+    def get_orders(self, book: str = "all", marker: str = "", sort: str = "", limit: int = 25) -> List[Order]:
+        assert(isinstance(book, str))
+        assert(isinstance(marker, str))
+        assert(isinstance(sort, str))
+        assert(isinstance(limit, int))
+
+        # Params for filtering orders
+        params = {
+            "book": book, # OPTIONAL: pair being traded
+            "marker": marker, # OPTIONAL: order id to compare placement time against when used with sort
+            "sort": sort, # OPTIONAL: sort direction of returned orders
+            "limit": limit # OPtional: number or orders to return, max 100
+        }
+
+        orders = self._http_authenticated_request("GET", "/v3/open_orders", params)
+        return list(map(lambda item: Order.from_message(item), orders))
+
+    # Trading: Submits and awaits acknowledgement of an (exclusively) limit order,
+    # returning the order id.
+    def place_order(self, book: str, side: str, price: Wad, amount: Wad) -> str:
+        assert(isinstance(book, str))
+        assert(isinstance(side, str))
+        assert(isinstance(price, Wad))
+        assert(isinstance(amount, Wad))
+
+        # Used to help lookup and cancel orders
+        client_id = str(uuid.uuid4())
+
+        request_body = {
+            "book": book, # REQUIRED
+            "side": side, # REQUIRED
+            "type": "limit", # REQUIRED: we exclusively trade limit orders
+            "major": str(amount), # Amount of major currency being ordered
+            "price": str(price),
+            "time_in_force": "goodtillcancelled",
+            "client_id": client_id
+        }
+
+        order_type = "selllimit" if side == "sell" else "buylimit"
+
+        self.logger.info(f"Placing order ({order_type}, amount {amount} of {book},"
+                         f" price {price}), and client_id: {client_id}")
+
+        response = self._http_authenticated_request("POST", f"/v3/orders", {}, request_body)
+        order_id = response['oid']
+
+        self.logger.info(f"Placed order type {order_type}, order_id #{order_id}, and client_id: {client_id}")
+
+        return order_id
+
+    def cancel_order(self, order_id: str) -> bool:
+        assert(isinstance(order_id, str))
+
+        self.logger.info(f"Cancelling order #{order_id}...")
+
+        result = self._http_authenticated_request("DELETE", f"/v3/orders/{order_id}", {})
+        return result
+
+    def cancel_all_orders(self) -> List:
+        self.logger.info(f"Cancelling all orders ...")
+
+        result = self._http_authenticated("DELETE", "/v3/orders/all", {})
+        success = len(result) > 0
+
+        if success:
+            self.logger.info(f"Cancelled orders : #{result}")
+        else:
+            self.logger.info(f"No order canceled ")
+
+        return result
+
+    # Trading: Retrieves most recent trades for a given order_id or client_id.
+    def get_trades(self, instrument_id: str, page_number: int = 1, params: dict = {}) -> List[Trade]:
+        assert(isinstance(instrument_id, str))
+        assert(isinstance(page_number, int))
+
+        result = self._http_authenticated_request("GET", f"/v3/order_trades/{params['oid']}", params)
+        return list(map(lambda item: Trade(trade_id=item['trade_id'],
+                                           timestamp=int(dateutil.parser.parse(item['created_at']).timestamp()),
+                                           instrument_id=item['instrument_id'],
+                                           is_sell=item['side'] == 'bid',
+                                           price=Wad.from_number(item['price']),
+                                           amount=Wad.from_number(item['volume'])), result))
+
+    def _http_request(self, method: str, resource: str, params: dict):
+        assert(isinstance(method, str))
+        assert(isinstance(resource, str))
+        assert(isinstance(params, dict) or (params is None))
+
+        url=f"{self.api_server}{resource}"
+        if params:
+            url=f"{self.api_server}{resource}?{urlencode(params)}"
+
+        return self._result(requests.request(method=method,
+                                             url=url,
+                                             timeout=self.timeout))
+        
+    # Interprets the response to an HTTP GET, POST or DELETE request
+    def _http_authenticated_request(self, method: str, resource: str, params: dict, req_body: dict = {}):
+        assert(isinstance(method, str))
+        assert(isinstance(resource, str))
+        assert(isinstance(params, dict) or (params is None))
+        assert(isinstance(req_body, dict))
+
+        nonce = str(int(round(time.time() * 1000)))
+        message = f'{nonce}{method}{resource}'
+
+        if (http_method == "POST"):
+            message += json.dumps(req_body)
+
+        signature = hmac.new(self.secret_key.encode('utf-8'),
+                                            message.encode('utf-8'),
+                                            hashlib.sha256).hexdigest()
+
+        # Build the auth header
+        auth_header = 'Bitso %s:%s:%s' % (self.api_key, nonce, signature)
+
+        headers = {
+            "Authorization": auth_header
+        }
+
+        url = f"{self.api_server}{resource}?{urlencode(params)}"
+
+        if method != "POST":
+            return self._result(requests.request(method=method,
+                                             url=url,
+                                             headers=headers,
+                                             timeout=self.timeout))
+
+        else:
+            return self._result(requests.request(method=method,
+                                             url=url,
+                                             headers=headers,
+                                             json=req_body,
+                                             timeout=self.timeout))
+    @staticmethod
+    def _result(result) -> dict:
+
+        if not result.ok:
+            raise Exception(f"Bitso API invalid HTTP response: {http_response_summary(result)}")
+
+        try:
+            data = result.json()
+        except Exception:
+            raise Exception(f"Bitso API invalid JSON response: {http_response_summary(result)}")
+
+        return data
+
