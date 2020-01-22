@@ -40,13 +40,13 @@ class Order:
     def __init__(self,
                  order_id: str,
                  timestamp: str, # current UTC time at order placement
-                 instrument_id: str,
+                 book: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad,
                  remaining_amount: Wad):
 
-        assert(isinstance(instrument_id, str))
+        assert(isinstance(book, str))
         assert(isinstance(timestamp, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -55,7 +55,7 @@ class Order:
 
         self.order_id = order_id
         self.timestamp = timestamp
-        self.instrument_id = instrument_id
+        self.book = book
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -90,7 +90,7 @@ class Order:
     def from_message(item):
         return Order(order_id=item['id'],
                      timestamp=datetime.now(tz=timezone.utc).isoformat(), # No timestamp or created_at information is returned as part of get_orders()
-                     instrument_id=item['instrument_id'],
+                     book=item['book'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['volume']),
@@ -101,20 +101,20 @@ class Trade:
     def __init__(self,
                  trade_id: str,
                  timestamp: int,
-                 instrument_id: Optional[str],
+                 book: Optional[str],
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
         assert(isinstance(trade_id, str))
         assert(isinstance(timestamp, int))
-        assert(isinstance(instrument_id, str) or (instrument_id is None))
+        assert(isinstance(book, str) or (book is None))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
-        self.instrument_id = instrument_id
+        self.book = book
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -123,7 +123,7 @@ class Trade:
         assert(isinstance(other, Trade))
         return self.trade_id == other.trade_id and \
                self.timestamp == other.timestamp and \
-               self.instrument_id == other.instrument_id and \
+               self.book == other.book and \
                self.is_sell == other.is_sell and \
                self.price == other.price and \
                self.amount == other.amount
@@ -131,7 +131,7 @@ class Trade:
     def __hash__(self):
         return hash((self.trade_id,
                      self.timestamp,
-                     self.instrument_id,
+                     self.book,
                      self.is_sell,
                      self.price,
                      self.amount))
@@ -166,9 +166,9 @@ class BitsoApi(PyexAPI):
     def get_markets(self):
         return self._http_request("GET", "/v3/available_books", {})
 
-    def get_pair(self, instrument_id: str):
-        assert(isinstance(instrument_id, str))
-        return list(filter(lambda market: market['book'] == instrument_id, self.get_markets()))
+    def get_pair(self, book: str):
+        assert(isinstance(book, str))
+        return list(filter(lambda market: market['book'] == book, self.get_markets()))
 
     def get_balances(self):
         return self._http_authenticated_request("GET", "/v3/balance", {})
@@ -250,14 +250,14 @@ class BitsoApi(PyexAPI):
         return result
 
     # Trading: Retrieves most recent trades for a given order_id or client_id.
-    def get_trades(self, instrument_id: str, page_number: int = 1, params: dict = {}) -> List[Trade]:
-        assert(isinstance(instrument_id, str))
+    def get_trades(self, book: str, page_number: int = 1, params: dict = {}) -> List[Trade]:
+        assert(isinstance(book, str))
         assert(isinstance(page_number, int))
 
         result = self._http_authenticated_request("GET", f"/v3/order_trades/{params['oid']}", params)
         return list(map(lambda item: Trade(trade_id=item['trade_id'],
                                            timestamp=int(dateutil.parser.parse(item['created_at']).timestamp()),
-                                           instrument_id=item['instrument_id'],
+                                           book=item['book'],
                                            is_sell=item['side'] == 'bid',
                                            price=Wad.from_number(item['price']),
                                            amount=Wad.from_number(item['volume'])), result))

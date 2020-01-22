@@ -115,7 +115,7 @@ class TestBitso:
         order = Order(
             order_id="153153",
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
-            instrument_id="eth_btc",
+            book="eth_btc",
             is_sell=False,
             price=price,
             amount=amount,
