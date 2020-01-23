@@ -96,7 +96,7 @@ class Order:
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['volume']),
-                     remaining_amount=Wad.from_number(float(item['origin_volume']) - float(item['volume'])))
+                     remaining_amount=Wad.from_number(float(item['volume'])))
 
 
 class Trade:
@@ -242,9 +242,11 @@ class EToroApi(PyexAPI):
 
         # Params for filtering trades
         params = {
-            'instrument_id': instrument_id.lower()
-            # 'before': '', # latest date from which to retreive orders
-            # 'limit': 25
+            'instrument_id': self._join_string(instrument_id.lower()),
+            'limit': 200
+            # 'start': '2020-01-12T09:17:14.123321Z', # OPTIONAL: Params for recieving trades in a given window
+            # 'end': '2020-01-15T09:17:14.123321Z', # OPTIONAL: Params for recieving trades in a given window
+            # 'market': 'ethusdc' # OPTIONAL: Params for recieving trades in a given window
         }
 
         result = self._http_authenticated_request("GET", "/api/v1/trades", params)
@@ -310,7 +312,6 @@ class EToroApi(PyexAPI):
         } 
 
         url = f"{self.api_server}{resource}?{urlencode(params)}"
-
         if method != "POST":
             return self._result(requests.request(method=method,
                                              url=url,
@@ -336,3 +337,10 @@ class EToroApi(PyexAPI):
 
         return data
 
+    # Sync trades expects pair to be structured as <Major>-<Minor>
+    def _join_string(self, string: str) -> str:
+        assert(isinstance(string, str))
+        if '-' in string:
+            return "".join(string.split('-')).lower()
+        else:
+            return string
