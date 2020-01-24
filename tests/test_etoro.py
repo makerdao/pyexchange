@@ -116,7 +116,7 @@ class TestEToro:
         order = Order(
             order_id="153153",
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
-            instrument_id="ethusdc",
+            pair="ethusdc",
             is_sell=False,
             price=price,
             amount=amount
@@ -159,9 +159,9 @@ class TestEToro:
         assert(duplicate_count == 0)
         
     def test_get_orders(self, mocker):
-        instrument_id = "ethusdc"
+        pair = "ethusdc"
         mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
-        response = self.etoro.get_orders(instrument_id, "open")
+        response = self.etoro.get_orders(pair, "open")
         assert (len(response) > 0)
         for order in response:
             assert(isinstance(order.is_sell, bool))
@@ -169,10 +169,10 @@ class TestEToro:
         TestEToro.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        instrument_id = "ethusdc"
+        pair = "ethusdc"
         side = "ask"
         mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
-        order_id = self.etoro.place_order(instrument_id, side, Wad.from_number(639.3), Wad.from_number(0.15))
+        order_id = self.etoro.place_order(pair, side, Wad.from_number(639.3), Wad.from_number(0.15))
         assert(isinstance(order_id, str))
         assert(order_id is not None)
         cancel_result = self.etoro.cancel_order(order_id)
@@ -208,8 +208,8 @@ class TestEToro:
         assert(missorted_found is False)
 
     def test_get_trades(self, mocker):
-        instrument_id = "ethusdc"
+        pair = "ethusdc"
         mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)
-        response = self.etoro.get_trades(instrument_id)
+        response = self.etoro.get_trades(pair)
         assert (len(response) > 0)
         TestEToro.check_trades(response)

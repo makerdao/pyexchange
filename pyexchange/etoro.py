@@ -42,12 +42,12 @@ class Order:
     def __init__(self,
                  order_id: str,
                  timestamp: str, # current UTC time at order placement
-                 instrument_id: str,
+                 pair: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
 
-        assert(isinstance(instrument_id, str))
+        assert(isinstance(pair, str))
         assert(isinstance(timestamp, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
@@ -55,7 +55,7 @@ class Order:
 
         self.order_id = order_id
         self.timestamp = timestamp
-        self.instrument_id = instrument_id
+        self.pair = pair
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -89,7 +89,7 @@ class Order:
     def from_message(item):
         return Order(order_id=item['id'],
                      timestamp=datetime.now(tz=timezone.utc).isoformat(), # No timestamp or created_at information is returned as part of get_orders()
-                     instrument_id=item['instrument_id'],
+                     pair=item['instrument_id'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['volume']))
@@ -98,20 +98,20 @@ class Trade:
     def __init__(self,
                  trade_id: str,
                  timestamp: int,
-                 instrument_id: Optional[str],
+                 pair: Optional[str],
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
         assert(isinstance(trade_id, str))
         assert(isinstance(timestamp, int))
-        assert(isinstance(instrument_id, str) or (instrument_id is None))
+        assert(isinstance(pair, str) or (pair is None))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
-        self.instrument_id = instrument_id
+        self.pair = pair
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -120,7 +120,7 @@ class Trade:
         assert(isinstance(other, Trade))
         return self.trade_id == other.trade_id and \
                self.timestamp == other.timestamp and \
-               self.instrument_id == other.instrument_id and \
+               self.pair == other.pair and \
                self.is_sell == other.is_sell and \
                self.price == other.price and \
                self.amount == other.amount
@@ -128,7 +128,7 @@ class Trade:
     def __hash__(self):
         return hash((self.trade_id,
                      self.timestamp,
-                     self.instrument_id,
+                     self.pair,
                      self.is_sell,
                      self.price,
                      self.amount))
@@ -165,9 +165,9 @@ class EToroApi(PyexAPI):
     def get_markets(self):
         return self._http_authenticated_request("GET", "/api/v1/instruments", {})
 
-    def get_pair(self, instrument_id: str):
-        assert(isinstance(instrument_id, str))
-        return list(filter(lambda market: market['name'] == instrument_id, self.get_markets()))
+    def get_pair(self, pair: str):
+        assert(isinstance(pair, str))
+        return list(filter(lambda market: market['name'] == pair, self.get_markets()))
 
     def get_balances(self):
         return self._http_authenticated_request("GET", "/api/v1/balances", {})
@@ -178,15 +178,15 @@ class EToroApi(PyexAPI):
 
     # Trading: Retrieves 25 most recent orders for a particular pair, newest first, 
     # which have not been completely filled.
-    def get_orders(self, instrument_id: str, state: str, before: str = "", limit: int = 25) -> List[Order]:
-        assert(isinstance(instrument_id, str))
+    def get_orders(self, pair: str, state: str, before: str = "", limit: int = 25) -> List[Order]:
+        assert(isinstance(pair, str))
         assert(isinstance(state, str))
         assert(isinstance(before, str))
         assert(isinstance(limit, int))
 
         # Params for filtering orders
         params = {
-            "instrument_id": instrument_id, # REQUIRED: pair being traded
+            "instrument_id": pair, # REQUIRED: pair being traded
             "state": state, # REQUIRED: open, cancelled, executed
             "before": before, # OPTIONAL: latest date from which to retreive orders
             "limit": limit # OPTIONAL: number of orders to return, defaults to 25
@@ -197,14 +197,14 @@ class EToroApi(PyexAPI):
 
     # Trading: Submits and awaits acknowledgement of a limit order,
     # returning the order id.
-    def place_order(self, instrument_id: str, side: str, price: Wad, amount: Wad) -> str:
-        assert(isinstance(instrument_id, str))
+    def place_order(self, pair: str, side: str, price: Wad, amount: Wad) -> str:
+        assert(isinstance(pair, str))
         assert(isinstance(side, str))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
         request_body = {
-            "instrument_id": instrument_id,
+            "instrument_id": pair,
             "side": side,
             "price": str(price),
             "volume": str(amount)
@@ -212,7 +212,7 @@ class EToroApi(PyexAPI):
 
         order_type = "selllimit" if side == "ask" else "buylimit"
 
-        self.logger.info(f"Placing order ({order_type}, amount {amount} of {instrument_id},"
+        self.logger.info(f"Placing order ({order_type}, amount {amount} of {pair},"
                          f" price {price})...")
 
         response = self._http_authenticated_request("POST", f"/api/v1/orders", {}, request_body)
@@ -231,13 +231,13 @@ class EToroApi(PyexAPI):
         return result
 
     # Trading: Retrieves most recent 25 trades for a pair.
-    def get_trades(self, instrument_id: str, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(instrument_id, str))
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+        assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
 
         # Params for filtering trades
         params = {
-            'instrument_id': self._join_string(instrument_id),
+            'instrument_id': self._join_string(pair),
             'limit': 200
             # 'start': '2020-01-12T09:17:14.123321Z', # OPTIONAL: Params for recieving trades in a given window
             # 'end': '2020-01-15T09:17:14.123321Z', # OPTIONAL: Params for recieving trades in a given window
@@ -247,7 +247,7 @@ class EToroApi(PyexAPI):
         result = self._http_authenticated_request("GET", "/api/v1/trades", params)
         return list(map(lambda item: Trade(trade_id=item['trade_id'],
                                            timestamp=int(dateutil.parser.parse(item['created_at']).timestamp()),
-                                           instrument_id=item['instrument_id'],
+                                           pair=item['instrument_id'],
                                            is_sell=item['side'] == 'bid',
                                            price=Wad.from_number(item['price']),
                                            amount=Wad.from_number(item['volume'])), result))
