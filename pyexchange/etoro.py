@@ -230,7 +230,7 @@ class EToroApi(PyexAPI):
         result = self._http_authenticated_request("DELETE", f"/api/v1/orders/{order_id}", {})
         return result
 
-    # Trading: Retrieves most recent 25 trades for a pair.
+    # Trading: Retrieves most recent 100 trades for a pair.
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
@@ -238,7 +238,7 @@ class EToroApi(PyexAPI):
         # Params for filtering trades
         params = {
             'instrument_id': self._join_string(pair),
-            'limit': 200
+            'limit': 100
             # 'start': '2020-01-12T09:17:14.123321Z', # OPTIONAL: Params for recieving trades in a given window
             # 'end': '2020-01-15T09:17:14.123321Z', # OPTIONAL: Params for recieving trades in a given window
             # 'market': 'ethusdc' # OPTIONAL: Params for recieving trades in a given window
