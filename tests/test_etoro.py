@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2019 MikeHathaway 
+# Copyright (C) 2020 MakerDAO 
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -113,19 +113,16 @@ class TestEToro:
     def test_order(self):
         price = Wad.from_number(4.8765)
         amount = Wad.from_number(0.222)
-        remaining_amount = Wad.from_number(0.153)
         order = Order(
             order_id="153153",
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
             instrument_id="ethusdc",
             is_sell=False,
             price=price,
-            amount=amount,
-            remaining_amount=remaining_amount
+            amount=amount
         )
         assert(order.price == order.sell_to_buy_price)
         assert(order.price == order.buy_to_sell_price)
-        assert(order.remaining_amount == remaining_amount)
 
     def test_get_balances(self, mocker):
         mocker.patch("requests.request", side_effect=EToroMockServer.handle_request)

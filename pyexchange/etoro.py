@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017-2019 MikeHathaway 
+# Copyright (C) 2020 MakerDAO 
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -45,15 +45,13 @@ class Order:
                  instrument_id: str,
                  is_sell: bool,
                  price: Wad,
-                 amount: Wad,
-                 remaining_amount: Wad):
+                 amount: Wad):
 
         assert(isinstance(instrument_id, str))
         assert(isinstance(timestamp, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        assert(isinstance(remaining_amount, Wad))
 
         self.order_id = order_id
         self.timestamp = timestamp
@@ -61,7 +59,6 @@ class Order:
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
-        self.remaining_amount = remaining_amount
 
     @property
     def sell_to_buy_price(self) -> Wad:
@@ -73,11 +70,11 @@ class Order:
 
     @property
     def remaining_buy_amount(self) -> Wad:
-        return self.remaining_amount*self.price if self.is_sell else self.remaining_amount
+        return self.amount*self.price if self.is_sell else self.amount
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        return self.remaining_amount if self.is_sell else self.remaining_amount*self.price
+        return self.amount if self.is_sell else self.amount*self.price
 
     def __hash__(self):
         return hash((self.order_id,
@@ -95,9 +92,7 @@ class Order:
                      instrument_id=item['instrument_id'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['volume']),
-                     remaining_amount=Wad.from_number(float(item['volume'])))
-
+                     amount=Wad.from_number(item['volume']))
 
 class Trade:
     def __init__(self,
@@ -242,7 +237,7 @@ class EToroApi(PyexAPI):
 
         # Params for filtering trades
         params = {
-            'instrument_id': self._join_string(instrument_id.lower()),
+            'instrument_id': self._join_string(instrument_id),
             'limit': 200
             # 'start': '2020-01-12T09:17:14.123321Z', # OPTIONAL: Params for recieving trades in a given window
             # 'end': '2020-01-15T09:17:14.123321Z', # OPTIONAL: Params for recieving trades in a given window
@@ -343,4 +338,4 @@ class EToroApi(PyexAPI):
         if '-' in string:
             return "".join(string.split('-')).lower()
         else:
-            return string
+            return string.lower()
