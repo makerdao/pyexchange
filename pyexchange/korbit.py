@@ -78,11 +78,12 @@ class Order:
 
     @staticmethod
     def from_list(item: list, pair: str):
-        return Order(order_id=item['id'],
-                     pair=item['product_id'],
-                     is_sell=True if item['side'] == 'sell' else False,
-                     price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['size']))
+        return Order(order_id=item["id"],
+                     timestamp=trade["timestamp"],
+                     pair=pair,
+                     is_sell=True if item["type"] == "ask" else False,
+                     price=Wad.from_number(item["price"]["value"]),
+                     amount=Wad.from_number(item["total"]["value"]))
 
 
 class Trade:
@@ -129,21 +130,22 @@ class Trade:
 
     @staticmethod
     def from_our_list(pair, trade):
-        return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(dateutil.parser.parse(trade['created_at']).timestamp()),
+        return Trade(trade_id=trade["id"],
+                     timestamp=trade["completedAt"],
                      pair=pair,
-                     is_sell=True if trade['side'] == 'sell' else False,
-                     price=Wad.from_number(trade['price']),
-                     amount=Wad.from_number(trade['size']))
+                     is_sell=True if trade["type"] == "sell" else False,
+                     price=Wad.from_number(trade["fillsDetail"]["price"]),
+                     amount=Wad.from_number(trade["fillsDetail"]["amount"]))
 
+    # TODO: determine if should be deleted
     @staticmethod
     def from_all_list(pair, trade):
-        return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(dateutil.parser.parse(trade['time']).timestamp()),
+        return Trade(trade_id=trade["id"],
+                     timestamp=trade["completedAt"],
                      pair=pair,
-                     is_sell=True if trade['side'] == 'sell' else False,
-                     price=Wad.from_number(trade['price']),
-                     amount=Wad.from_number(trade['size']))
+                     is_sell=True if trade["type"] == "sell" else False,
+                     price=Wad.from_number(trade["fillsDetail"]["price"]),
+                     amount=Wad.from_number(trade["fillsDetail"]["amount"]))
 
 
 class KorbitApi(PyexAPI):
@@ -172,7 +174,7 @@ class KorbitApi(PyexAPI):
         self.time_to_expiry = 0
 
     def get_balances(self):
-        return self._http_authenticated_request("GET", "/user/balances", {})
+        return self._http_authenticated_request("GET", "/v1/user/balances", {})
 
     def get_markets(self):
         return self._http_unauthenticated_request("GET", "/v1/ticker/detailed/all", {})
@@ -181,11 +183,11 @@ class KorbitApi(PyexAPI):
         assert(isinstance(pair, str))
         return self.get_markets()[f"{pair}"]
 
-    # TODO: up to hurr
+    # List keepers open orders
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders = self._http_authenticated_request("GET", f"/orders?product_id={pair}", {})
+        orders = self._http_authenticated_request("GET", f"/v1/user/orders/open?currency_pair={pair}", {})
 
         return list(map(lambda item: Order.from_list(item, pair), orders))
 
@@ -195,54 +197,55 @@ class KorbitApi(PyexAPI):
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
+        side = "buy" if is_sell == False else "sell"
+        nonce = str(time.time()) # Nonce must be monotonically increasing
+        
         data = {
-            "size": str(amount),
+            "currency_pair": pair,
+            "type": "limit",
             "price": str(price),
-            "side": "sell" if is_sell else "buy",
-            "product_id": pair
+            "coin_amount": str(amount)
         }
 
-        self.logger.info(f"Placing order ({data['side']}, amount {data['size']} of {pair},"
+        self.logger.info(f"Placing order ({data['side']}, amount {data['coin_amount']} of {pair},"
                          f" price {data['price']})...")
 
-        result = self._http_authenticated_request("POST", "/orders", data)
-        order_id = result['id']
+        result = self._http_authenticated_request("POST", f"/v1/user/orders/{side}", data)
+        order_id = result['orderId']
 
         self.logger.info(f"Placed order (#{result}) as #{order_id}")
 
         return order_id
 
-    def cancel_order(self, order_id: str) -> bool:
+    def cancel_order(self, order_id: str, pair: str) -> bool:
         assert(isinstance(order_id, str))
 
         self.logger.info(f"Cancelling order #{order_id}...")
+        
+        nonce = str(time.time()) # Nonce must be monotonically increasing
 
-        result = self._http_authenticated_request("DELETE", f"/orders/{order_id}", {})
+        data = {
+            "currency_pair": pair,
+            "nonce": nonce,
+            "id": order_id
+        }
 
-        if order_id not in result:
+        result = self._http_authenticated_request("POST", f"/v1/user/orders/cancel", data)
+
+        canceled_orders = list(filter(lambda x: x["orderId"] == order_id, result))
+
+        if len(canceled_orders) > 0 and canceled_orders["status"] == "success":
+            return True
+        else:
             return False
 
-        return True
-
-    def cancel_all_orders(self) -> List:
-        self.logger.info(f"Cancelling all orders ...")
-
-        result = self._http_authenticated_request("DELETE", "/orders", {})
-        success = len(result) > 0
-
-        if success:
-            self.logger.info(f"Cancelled orders : #{result}")
-        else:
-            self.logger.info(f"No order canceled ")
-
-        return result
-
-    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+    def get_trades(self, pair: str, offset: int = 0) -> List[Trade]:
         assert(isinstance(pair, str))
-        assert(isinstance(page_number, int))
-        assert(page_number == 1)
+        assert(isinstance(offset, int))
+        assert(offset == 1)
 
-        result = self._http_authenticated_request("GET", f"/fills?product_id={pair}", {})
+        # Limit and Offset are optional, but limit is hardcoded to the maximum available 40 as opposed to default of 10
+        result = self._http_authenticated_request("GET", f"/v1/user/transactions?currency_pair={pair}&offset={offset}&limit=40", {})
 
         return list(map(lambda item: Trade.from_our_list(pair, item), result))
 
@@ -255,26 +258,6 @@ class KorbitApi(PyexAPI):
         result = self._http_unauthenticated("GET", f"/products/{pair}/trades?before={page_number}&limit={limit}", {})
 
         return list(map(lambda item: Trade.from_all_list(pair, item), result))
-
-    def get_korbit_wallets(self):
-        return self._http_authenticated_request("GET", "/korbit-accounts", {})
-
-    def get_korbit_wallet(self, coin: str):
-        assert isinstance(coin, str)
-        korbit_wallets = self.get_korbit_wallets()
-        for wallet in korbit_wallets:
-            if wallet['currency'] == coin:
-                return wallet
-        return None
-
-    def get_korbit_wallet_address(self, coin: str) -> Address:
-        assert isinstance(coin, str)
-        wallet = self.get_korbit_wallet(coin)
-        if wallet is None:
-            raise ValueError(f"Wallet for {coin} not found; ensure Korbit Pro supports this token")
-        wallet_id = wallet['id']
-        result = self._http_authenticated_request("POST", f"/korbit-accounts/{wallet_id}/addresses", {})
-        return Address(result['address'])
 
     def _get_access_token(self) -> str:
         # Generate access_token if keeper is being initalized for the first time
@@ -332,8 +315,6 @@ class KorbitApi(PyexAPI):
         assert(isinstance(body, dict) or (body is None))
 
         data = json.dumps(body, separators=(',', ':'))
-
-        nonce = str(time.time()) # Nonce must be monotonically increasing
 
         return self._result(requests.request(method=method,
                                              url=f"{self.api_server}{resource}",
