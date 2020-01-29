@@ -160,15 +160,13 @@ class KorbitApi(PyexAPI):
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, api_key: str, secret_key: str, password: str, timeout: float):
+    def __init__(self, api_server: str, api_key: str, secret_key: str, timeout: float):
         assert(isinstance(api_key, str))
         assert(isinstance(secret_key, str))
-        assert(isinstance(password, str))
 
         self.api_server = api_server
         self.api_key = api_key
         self.secret_key = secret_key
-        self.password = password
         self.timeout = timeout
         self.token = {}
         self.time_to_expiry = 0
@@ -204,12 +202,13 @@ class KorbitApi(PyexAPI):
             "currency_pair": pair,
             "type": "limit",
             "price": str(price),
-            "coin_amount": str(amount)
+            "coin_amount": str(amount),
+            "nonce": 1
         }
 
-        self.logger.info(f"Placing order ({data['side']}, amount {data['coin_amount']} of {pair},"
+        self.logger.info(f"Placing order ({side}, amount {data['coin_amount']} of {pair},"
                          f" price {data['price']})...")
-
+        print("side", side, data)
         result = self._http_authenticated_request("POST", f"/v1/user/orders/{side}", data)
         order_id = result['orderId']
 
@@ -261,7 +260,7 @@ class KorbitApi(PyexAPI):
 
     def _get_access_token(self) -> str:
         # Generate access_token if keeper is being initalized for the first time
-        if self.time_to_expiry == 0:
+        if self.time_to_expiry == 0 and not self.token:
             payload = {
                 "client_id": self.api_key,
                 "client_secret": self.secret_key,
@@ -273,7 +272,7 @@ class KorbitApi(PyexAPI):
                 url="https://api.korbit.co.kr/v1/oauth2/access_token",
                 data=payload,
                 timeout=self.timeout
-            ))["access_token"]
+            ))
 
             self.token["refresh_token"] = response["refresh_token"]
             self.token["access_token"] = response["access_token"]
@@ -284,7 +283,8 @@ class KorbitApi(PyexAPI):
         elif self.time_to_expiry > 60:
             return self.token["access_token"]
 
-        # call refresh token to trigger access token regeneration if within get orders timespan
+        # call refresh token to trigger access token regeneration if within above set timespan
+        # Get orders timespan is called every 30 seconds, but 60 is used to establish a buffer
         else:
             self._get_refresh_token()
             return self.token["access_token"]
@@ -315,13 +315,15 @@ class KorbitApi(PyexAPI):
         assert(isinstance(body, dict) or (body is None))
 
         data = json.dumps(body, separators=(',', ':'))
+        print("data", data)
+        access_token = self._get_access_token()
 
         return self._result(requests.request(method=method,
                                              url=f"{self.api_server}{resource}",
                                              data=data,
                                              headers={
                                                  "Accept": "Application/JSON",
-                                                 "Authorization": f"Bearer {self.token["access_token"]}"
+                                                 "Authorization": f"Bearer {access_token}"
                                              },
                                              timeout=self.timeout))
 
