@@ -24,6 +24,7 @@ import requests
 import time
 from datetime import datetime, timezone
 
+import io
 import uuid
 import base64
 
@@ -153,14 +154,14 @@ class EToroApi(PyexAPI):
         assert(isinstance(api_server, str))
         assert(isinstance(account, str))
         assert(isinstance(api_key, str))
-        assert(isinstance(secret_key, str))
+        assert(isinstance(secret_key, io.IOBase))
         assert(isinstance(timeout, float))
 
         self.api_server = api_server
         self.account = account
         self.timeout = timeout
         self.api_key = api_key
-        self.secret_key = secret_key
+        self.secret_key = secret_key.read()
 
     def get_markets(self):
         return self._http_authenticated_request("GET", "/api/v1/instruments", {})
