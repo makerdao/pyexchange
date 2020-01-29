@@ -297,7 +297,7 @@ class EToroApi(PyexAPI):
         params['correlationId'] = str(uuid.uuid4())
 
         nonce = str(uuid.uuid4())
-        timestamp = str(int(time.time() * 1000))
+        timestamp = str(int(round(time.time() * 1000)))
 
         headers = {
             "user-agent": self.account,
