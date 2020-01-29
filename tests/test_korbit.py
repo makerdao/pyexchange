@@ -56,21 +56,19 @@ class KorbitMockServer:
         method = kwargs["method"]
         if method == "GET":
             return KorbitMockServer.handle_get(url)
-        elif method == "POST":
-            return KorbitMockServer.handle_post(url, kwargs["data"])
         else:
-            return KorbitMockServer.handle_delete(url)
+            return KorbitMockServer.handle_post(url, kwargs["data"])
 
     @staticmethod
     def handle_get(url: str):
         # Parse the URL to determine which piece of canned data to return
-        if re.search(r"api\/v1\/instruments", url):
+        if re.search(r"v1\/ticker\/detailed\/all", url):
             return MockedResponse(text=KorbitMockServer.responses["markets"])
-        elif re.search(r"api\/v1\/balances", url):
+        elif re.search(r"v1\/user\/balances", url):
             return MockedResponse(text=KorbitMockServer.responses["balances"])
-        elif re.search(r"api\/v1\/orders", url):
+        elif re.search(r"v1\/user\/orders\/open", url):
             return MockedResponse(text=KorbitMockServer.responses["orders"])
-        elif re.search(r"\/api\/v1\/trades", url):
+        elif re.search(r"v1\/user\/transactions", url):
             return MockedResponse(text=KorbitMockServer.responses["trades"])
         else:
             raise ValueError("Unable to match HTTP GET request to canned response", url)
@@ -78,20 +76,15 @@ class KorbitMockServer:
     @staticmethod
     def handle_post(url: str, data):
         assert(data is not None)
-        if re.search(r"\/api\/v1\/orders", url):
+        if re.search(r"v1\/user\/orders\/sell", url):
             return MockedResponse(text=KorbitMockServer.responses["single_order"])
-        # elif re.search(r"\/api\/v1\/orders", url):
-        #     return MockedResponse(text=KorbitMockServer.responses["place_order_failure"])
+        elif re.search(r"v1\/user\/orders\/cancel", url):
+            return MockedResponse(text=KorbitMockServer.responses["cancel_order"])
+        elif re.search(r"v1\/oauth2\/access_token", url):
+            return MockedResponse(text=KorbitMockServer.responses["access_token"])
         else:
             raise ValueError("Unable to match HTTP POST request to canned response", url, data)
 
-    
-    @staticmethod
-    def handle_delete(url: str):
-        if re.search(r"\/api\/v1\/orders\/[\w\-_]+", url):
-            return MockedResponse(text=KorbitMockServer.responses["cancel_order"])
-        else:
-            raise ValueError("Unable to match HTTP DELETE request to canned response", url)
 
 class TestEToro:
     def setup_method(self):
@@ -99,7 +92,7 @@ class TestEToro:
         self.korbit = KorbitApi(
             api_server = "localhost",
             api_key = "00000000-0000-0000-0000-000000000000",
-            secret_key = open(os.path.join(cwd, "mock/korbit-test-key"), "r").read(),
+            secret_key = "secretkey",
             timeout = 15.5
         )
 
@@ -107,15 +100,15 @@ class TestEToro:
         mocker.patch("requests.request", side_effect=KorbitMockServer.handle_request)
         response = self.korbit.get_markets()
         assert(len(response) > 0)
-        assert(any(x["id"] == "ethusdc" for x in response))
+        assert(response["dai_krw"] is not None)
 
     def test_order(self):
         price = Wad.from_number(4.8765)
         amount = Wad.from_number(0.222)
         order = Order(
             order_id="153153",
-            timestamp=datetime.now(tz=timezone.utc).isoformat(),
-            pair="ethusdc",
+            timestamp=int(time.time()),
+            pair="dai_krw",
             is_sell=False,
             price=price,
             amount=amount
@@ -127,16 +120,14 @@ class TestEToro:
         mocker.patch("requests.request", side_effect=KorbitMockServer.handle_request)
         response = self.korbit.get_balances()
         assert(len(response) > 0)
-        for balance in response:
-            if balance["currency"] == "eth":
-                assert(float(balance["balance"]) > 0)
+        assert(int(response["dai"]["available"]) > 0)
 
     @staticmethod
     def check_orders(orders):
         by_oid = {}
         duplicate_count = 0
         duplicate_first_found = -1
-        current_time = datetime.now(tz=timezone.utc).isoformat()
+        current_time = int(time.time() * 1000)
         for index, order in enumerate(orders):
             assert(isinstance(order, Order))
             assert(order.order_id is not None)
@@ -158,9 +149,9 @@ class TestEToro:
         assert(duplicate_count == 0)
         
     def test_get_orders(self, mocker):
-        pair = "ethusdc"
+        pair = "dai_krw"
         mocker.patch("requests.request", side_effect=KorbitMockServer.handle_request)
-        response = self.korbit.get_orders(pair, "open")
+        response = self.korbit.get_orders(pair)
         assert (len(response) > 0)
         for order in response:
             assert(isinstance(order.is_sell, bool))
@@ -168,14 +159,14 @@ class TestEToro:
         TestEToro.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        pair = "ethusdc"
+        pair = "dai_krw"
         side = "ask"
         mocker.patch("requests.request", side_effect=KorbitMockServer.handle_request)
-        order_id = self.korbit.place_order(pair, side, Wad.from_number(639.3), Wad.from_number(0.15))
-        assert(isinstance(order_id, str))
+        order_id = self.korbit.place_order(pair, True, 1500, Wad.from_number(10))
+        assert(isinstance(order_id, int))
         assert(order_id is not None)
-        cancel_result = self.korbit.cancel_order(order_id)
-        assert(cancel_result["state"] == "pending cancellation")
+        cancel_result = self.korbit.cancel_order(order_id, pair)
+        assert(cancel_result == True)
 
     @staticmethod
     def check_trades(trades):
@@ -207,7 +198,7 @@ class TestEToro:
         assert(missorted_found is False)
 
     def test_get_trades(self, mocker):
-        pair = "ethusdc"
+        pair = "dai_krw"
         mocker.patch("requests.request", side_effect=KorbitMockServer.handle_request)
         response = self.korbit.get_trades(pair)
         assert (len(response) > 0)

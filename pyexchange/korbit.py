@@ -35,17 +35,20 @@ from typing import Optional, List
 class Order:
     def __init__(self,
                  order_id: int,
+                 timestamp: int,
                  pair: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
 
+        assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
         self.order_id = order_id
+        self.timestamp = timestamp
         self.pair = pair
         self.is_sell = is_sell
         self.price = price
@@ -77,9 +80,9 @@ class Order:
         return pformat(vars(self))
 
     @staticmethod
-    def from_list(item: list, pair: str):
+    def from_list(item: dict, pair: str):
         return Order(order_id=item["id"],
-                     timestamp=trade["timestamp"],
+                     timestamp=item["timestamp"],
                      pair=pair,
                      is_sell=True if item["type"] == "ask" else False,
                      price=Wad.from_number(item["price"]["value"]),
@@ -134,8 +137,8 @@ class Trade:
                      timestamp=trade["completedAt"],
                      pair=pair,
                      is_sell=True if trade["type"] == "sell" else False,
-                     price=Wad.from_number(trade["fillsDetail"]["price"]),
-                     amount=Wad.from_number(trade["fillsDetail"]["amount"]))
+                     price=Wad.from_number(trade["fillsDetail"]["price"]["value"]),
+                     amount=Wad.from_number(trade["fillsDetail"]["amount"]["value"]))
 
     # TODO: determine if should be deleted
     @staticmethod
@@ -144,8 +147,8 @@ class Trade:
                      timestamp=trade["completedAt"],
                      pair=pair,
                      is_sell=True if trade["type"] == "sell" else False,
-                     price=Wad.from_number(trade["fillsDetail"]["price"]),
-                     amount=Wad.from_number(trade["fillsDetail"]["amount"]))
+                     price=Wad.from_number(trade["fillsDetail"]["price"]["value"]),
+                     amount=Wad.from_number(trade["fillsDetail"]["amount"]["value"]))
 
 
 class KorbitApi(PyexAPI):
@@ -186,29 +189,27 @@ class KorbitApi(PyexAPI):
         assert(isinstance(pair, str))
 
         orders = self._http_authenticated_request("GET", f"/v1/user/orders/open?currency_pair={pair}", {})
-
         return list(map(lambda item: Order.from_list(item, pair), orders))
 
-    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
+    def place_order(self, pair: str, is_sell: bool, price: int, amount: Wad) -> str:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
+        assert(isinstance(price, int))
         assert(isinstance(amount, Wad))
 
         side = "buy" if is_sell == False else "sell"
-        nonce = str(time.time()) # Nonce must be monotonically increasing
+        nonce = int(time.time()) # Nonce must be monotonically increasing
         
         data = {
             "currency_pair": pair,
             "type": "limit",
-            "price": str(price),
+            "price": int(price),
             "coin_amount": str(amount),
-            "nonce": 1
+            "nonce": nonce
         }
 
         self.logger.info(f"Placing order ({side}, amount {data['coin_amount']} of {pair},"
                          f" price {data['price']})...")
-        print("side", side, data)
         result = self._http_authenticated_request("POST", f"/v1/user/orders/{side}", data)
         order_id = result['orderId']
 
@@ -216,12 +217,13 @@ class KorbitApi(PyexAPI):
 
         return order_id
 
-    def cancel_order(self, order_id: str, pair: str) -> bool:
-        assert(isinstance(order_id, str))
+    def cancel_order(self, order_id: int, pair: str) -> bool:
+        assert(isinstance(order_id, int))
+        assert(isinstance(pair, str))
 
         self.logger.info(f"Cancelling order #{order_id}...")
         
-        nonce = str(time.time()) # Nonce must be monotonically increasing
+        nonce = int(time.time()) # Nonce must be monotonically increasing
 
         data = {
             "currency_pair": pair,
@@ -230,9 +232,28 @@ class KorbitApi(PyexAPI):
         }
 
         result = self._http_authenticated_request("POST", f"/v1/user/orders/cancel", data)
+        if result[0]["status"] == "success":
+            return True
+        else:
+            return False
+
+    # TODO: finish implementation
+    def cancel_orders(self, order_id_list: list, pair) -> bool:
+        assert(isinstance(order_id_list, list))
+        assert(isinstance(pair, str))
+
+        self.logger.info(f"Cancelling orders #{order_id}...")
+        
+        nonce = int(time.time()) # Nonce must be monotonically increasing
+
+        data = {
+            "currency_pair": pair,
+            "nonce": nonce,
+            "id": order_id
+        }
+        result = self._http_authenticated_request("POST", f"/v1/user/orders/cancel", data)
 
         canceled_orders = list(filter(lambda x: x["orderId"] == order_id, result))
-
         if len(canceled_orders) > 0 and canceled_orders["status"] == "success":
             return True
         else:
@@ -241,7 +262,6 @@ class KorbitApi(PyexAPI):
     def get_trades(self, pair: str, offset: int = 0) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(offset, int))
-        assert(offset == 1)
 
         # Limit and Offset are optional, but limit is hardcoded to the maximum available 40 as opposed to default of 10
         result = self._http_authenticated_request("GET", f"/v1/user/transactions?currency_pair={pair}&offset={offset}&limit=40", {})
@@ -314,17 +334,20 @@ class KorbitApi(PyexAPI):
         assert(isinstance(resource, str))
         assert(isinstance(body, dict) or (body is None))
 
-        data = json.dumps(body, separators=(',', ':'))
-        print("data", data)
-        access_token = self._get_access_token()
+        url = f"{self.api_server}{resource}"
 
+        access_token = self._get_access_token()
+        headers = {
+            "Accept": "Application/JSON",
+            "Authorization": f"Bearer {access_token}",
+            "content-type": "Application/JSON"
+        }
+
+        data = json.dumps(body, separators=(',', ':'))
         return self._result(requests.request(method=method,
-                                             url=f"{self.api_server}{resource}",
+                                             url=url,
                                              data=data,
-                                             headers={
-                                                 "Accept": "Application/JSON",
-                                                 "Authorization": f"Bearer {access_token}"
-                                             },
+                                             headers=headers,
                                              timeout=self.timeout))
 
     def _http_unauthenticated_request(self, method: str, resource: str, body: dict):

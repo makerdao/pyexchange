@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017-2018 reverendus
+# Copyright (C) 2020 MikeHathaway
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -20,9 +20,7 @@ import sys
 from pyexchange.korbit import KorbitApi
 from pymaker.numeric import Wad
 
-# korbit = KorbitApi('https://api.korbit.co.kr', sys.argv[1], sys.argv[2], 9.5)
 korbit = KorbitApi('https://api.korbit.co.kr', sys.argv[1], sys.argv[2], 9.5)
-
 print("Starting KorbitAPI with the following parameters: ", sys.argv)
 
 # GET "/api/v1/instruments"
@@ -32,17 +30,14 @@ print("Starting KorbitAPI with the following parameters: ", sys.argv)
 # GET "/api/v1/balances"
 # print(korbit.get_balances())
 
-# TODO:
 # GET "/api/v1/orders"
-# print(korbit.get_orders('ethusdc', '1', 'open', 25))
-
+print(korbit.get_orders('dai_krw'))
 
 # POST /api/v1/orders
-print(korbit.place_order('krw_dai', True, Wad.from_number(1135), Wad.from_number(20)))
-# print(korbit.place_order('dai_krw', True, 1135, 20))
+# print(korbit.place_order('dai_krw', True, 1500, Wad.from_number(5)))
 
 # DELETE /api/v1/orders/{order_id}
-# print(korbit.cancel_order('c8e579b0-cfb8-4297-9983-7deb5c454761'))
+# print(korbit.cancel_order(249334, 'dai_krw'))
 
 # GET /api/v1/trades
-# print(korbit.get_trades('ethusdc', '1578959828'))
+# print(korbit.get_trades('dai_krw'))

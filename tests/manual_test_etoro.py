@@ -21,7 +21,7 @@ from pyexchange.etoro import EToroApi
 from pymaker.numeric import Wad
 
 # etoro = EToroApi(sys.argv[1], 'test_account', sys.argv[2], sys.argv[3], 9.5)
-etoro = EToroApi('https://7vriaeqd.hft.etorox.com', 'test_account', sys.argv[1], open('./.etoro-unencrypted-key', 'r').read(), 9.5)
+etoro = EToroApi('https://7vriaeqd.hft.etorox.com', 'test_account', sys.argv[1], open('./.etoro-unencrypted-key', 'r'), 9.5)
 
 print("Starting eToroAPI with the following parameters: ", sys.argv)
 
@@ -33,7 +33,7 @@ print("Starting eToroAPI with the following parameters: ", sys.argv)
 # print(etoro.get_balances())
 
 # GET "/api/v1/orders"
-# print(etoro.get_orders('ethusdc', '1', 'open', 25))
+print(etoro.get_orders('ethusdc', 'open'))
 
 # POST /api/v1/orders
 # print(etoro.place_order('ethusdc', 'buy', Wad.from_number(144.94033), Wad.from_number(.005)))
