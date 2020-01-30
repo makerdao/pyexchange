@@ -237,28 +237,6 @@ class KorbitApi(PyexAPI):
         else:
             return False
 
-    # TODO: finish implementation
-    def cancel_orders(self, order_id_list: list, pair) -> bool:
-        assert(isinstance(order_id_list, list))
-        assert(isinstance(pair, str))
-
-        self.logger.info(f"Cancelling orders #{order_id}...")
-        
-        nonce = int(time.time()) # Nonce must be monotonically increasing
-
-        data = {
-            "currency_pair": pair,
-            "nonce": nonce,
-            "id": order_id
-        }
-        result = self._http_authenticated_request("POST", f"/v1/user/orders/cancel", data)
-
-        canceled_orders = list(filter(lambda x: x["orderId"] == order_id, result))
-        if len(canceled_orders) > 0 and canceled_orders["status"] == "success":
-            return True
-        else:
-            return False
-
     def get_trades(self, pair: str, offset: int = 0) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(offset, int))
