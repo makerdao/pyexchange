@@ -86,7 +86,7 @@ class KorbitMockServer:
             raise ValueError("Unable to match HTTP POST request to canned response", url, data)
 
 
-class TestEToro:
+class TestKorbit:
     def setup_method(self):
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.korbit = KorbitApi(
@@ -156,7 +156,7 @@ class TestEToro:
         for order in response:
             assert(isinstance(order.is_sell, bool))
             assert(Wad(order.price) > Wad(0))
-        TestEToro.check_orders(response)
+        TestKorbit.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
         pair = "dai_krw"
@@ -202,4 +202,4 @@ class TestEToro:
         mocker.patch("requests.request", side_effect=KorbitMockServer.handle_request)
         response = self.korbit.get_trades(pair)
         assert (len(response) > 0)
-        TestEToro.check_trades(response)
+        TestKorbit.check_trades(response)
