@@ -31,10 +31,10 @@ print("Starting KorbitAPI with the following parameters: ", sys.argv)
 # print(korbit.get_balances())
 
 # GET "/api/v1/orders"
-print(korbit.get_orders('dai_krw'))
+# print(korbit.get_orders('dai_krw'))
 
 # POST /api/v1/orders
-# print(korbit.place_order('dai_krw', True, 1500, Wad.from_number(5)))
+print(korbit.place_order('dai_krw', False, Wad.from_number(1500), Wad.from_number(5)))
 
 # DELETE /api/v1/orders/{order_id}
 # print(korbit.cancel_order(249334, 'dai_krw'))

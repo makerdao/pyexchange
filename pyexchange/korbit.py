@@ -140,7 +140,6 @@ class Trade:
                      price=Wad.from_number(trade["fillsDetail"]["price"]["value"]),
                      amount=Wad.from_number(trade["fillsDetail"]["amount"]["value"]))
 
-    # TODO: determine if should be deleted
     @staticmethod
     def from_all_list(pair, trade):
         return Trade(trade_id=trade["id"],
@@ -173,6 +172,7 @@ class KorbitApi(PyexAPI):
         self.timeout = timeout
         self.token = {}
         self.time_to_expiry = 0
+        self.time_at_generation = 0
 
     def get_balances(self):
         return self._http_authenticated_request("GET", "/v1/user/balances", {})
@@ -191,10 +191,10 @@ class KorbitApi(PyexAPI):
         orders = self._http_authenticated_request("GET", f"/v1/user/orders/open?currency_pair={pair}", {})
         return list(map(lambda item: Order.from_list(item, pair), orders))
 
-    def place_order(self, pair: str, is_sell: bool, price: int, amount: Wad) -> str:
+    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
-        assert(isinstance(price, int))
+        assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
         side = "buy" if is_sell == False else "sell"
@@ -203,7 +203,7 @@ class KorbitApi(PyexAPI):
         data = {
             "currency_pair": pair,
             "type": "limit",
-            "price": int(price),
+            "price": str(price),
             "coin_amount": str(amount),
             "nonce": nonce
         }
@@ -257,8 +257,12 @@ class KorbitApi(PyexAPI):
         return list(map(lambda item: Trade.from_all_list(pair, item), result))
 
     def _get_access_token(self) -> str:
+        # check to see if enough time has elapsed since the oauth tokens were generated, with a 60 second buffer period
+        current_time = int(round(time.time()))
+        should_refresh = self.time_to_expiry < (current_time - self.time_at_generation + 60)
+
         # Generate access_token if keeper is being initalized for the first time
-        if self.time_to_expiry == 0 and not self.token:
+        if should_refresh == False and not self.token:
             payload = {
                 "client_id": self.api_key,
                 "client_secret": self.secret_key,
@@ -275,10 +279,13 @@ class KorbitApi(PyexAPI):
             self.token["refresh_token"] = response["refresh_token"]
             self.token["access_token"] = response["access_token"]
             self.time_to_expiry = response["expires_in"]
+            self.time_at_generation = int(round(time.time())) # record unix epoch at which token was generated
             return self.token["access_token"]
 
+        # use existing access_token if 
+
         # use existing access_token if not near expiry
-        elif self.time_to_expiry > 60:
+        elif should_refresh == False:
             return self.token["access_token"]
 
         # call refresh token to trigger access token regeneration if within above set timespan
