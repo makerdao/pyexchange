@@ -314,6 +314,7 @@ class KorbitApi(PyexAPI):
         self.token["refresh_token"] = response["refresh_token"]
         self.token["access_token"] = response["access_token"]
         self.time_to_expiry = response["expires_in"]
+        self.time_at_generation = int(round(time.time())) # reset record unix epoch at which token was generated
 
     def _http_authenticated_request(self, method: str, resource: str, body: dict):
         assert(isinstance(method, str))
