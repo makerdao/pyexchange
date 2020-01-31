@@ -18,14 +18,9 @@
 import logging
 from pprint import pformat
 from pyexchange.api import PyexAPI
-import hmac
-import hashlib
 import time
-import base64
 import requests
 import json
-
-import dateutil.parser
 
 from pymaker import Address, Wad
 from pymaker.util import http_response_summary
@@ -142,12 +137,12 @@ class Trade:
 
     @staticmethod
     def from_all_list(pair, trade):
-        return Trade(trade_id=trade["id"],
-                     timestamp=trade["completedAt"],
+        return Trade(trade_id=trade["tid"],
+                     timestamp=trade["timestamp"],
                      pair=pair,
                      is_sell=True if trade["type"] == "sell" else False,
-                     price=Wad.from_number(trade["fillsDetail"]["price"]["value"]),
-                     amount=Wad.from_number(trade["fillsDetail"]["amount"]["value"]))
+                     price=Wad.from_number(trade["price"]),
+                     amount=Wad.from_number(trade["amount"]))
 
 
 class KorbitApi(PyexAPI):
@@ -242,9 +237,9 @@ class KorbitApi(PyexAPI):
         assert(isinstance(offset, int))
 
         # Limit and Offset are optional, but limit is hardcoded to the maximum available 40 as opposed to default of 10
-        result = self._http_authenticated_request("GET", f"/v1/user/transactions?currency_pair={pair}&offset={offset}&limit=40", {})
+        result = self._http_authenticated_request("GET", f"/v1/user/transactions?currency_pair={self._format_pair_string(pair)}&offset={offset}&limit=40", {})
 
-        return list(map(lambda item: Trade.from_our_list(pair, item), result))
+        return list(map(lambda item: Trade.from_our_list(self._format_pair_string(pair), item), result))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
@@ -252,7 +247,7 @@ class KorbitApi(PyexAPI):
 
         limit = 100
 
-        result = self._http_unauthenticated("GET", f"/products/{pair}/trades?before={page_number}&limit={limit}", {})
+        result = self._http_unauthenticated("GET", f"/v1/transactions?currency_pair={pair}", {})
 
         return list(map(lambda item: Trade.from_all_list(pair, item), result))
 
@@ -359,3 +354,11 @@ class KorbitApi(PyexAPI):
             raise Exception(f"Korbit API invalid JSON response: {http_response_summary(result)}")
 
         return data
+
+    # Sync trades expects pair to be structured as <Major>-<Minor>, but Korbit expects <Major>_<Minor>
+    def _format_pair_string(self, pair: str) -> str:
+        assert(isinstance(pair, str))
+        if '-' in pair:
+            return "_".join(pair.split('-')).lower()
+        else:
+            return pair.lower()

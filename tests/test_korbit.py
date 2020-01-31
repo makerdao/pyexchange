@@ -162,7 +162,7 @@ class TestKorbit:
         pair = "dai_krw"
         side = "ask"
         mocker.patch("requests.request", side_effect=KorbitMockServer.handle_request)
-        order_id = self.korbit.place_order(pair, True, 1500, Wad.from_number(10))
+        order_id = self.korbit.place_order(pair, True, Wad.from_number(1500), Wad.from_number(10))
         assert(isinstance(order_id, int))
         assert(order_id is not None)
         cancel_result = self.korbit.cancel_order(order_id, pair)
