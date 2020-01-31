@@ -258,8 +258,11 @@ class KorbitApi(PyexAPI):
 
     def _get_access_token(self) -> str:
         # check to see if enough time has elapsed since the oauth tokens were generated, with a 60 second buffer period
-        current_time = int(round(time.time()))
-        should_refresh = self.time_to_expiry < (current_time - self.time_at_generation + 60)
+        if self.token:
+            current_time = int(round(time.time()))
+            should_refresh = self.time_to_expiry < (current_time - self.time_at_generation + 60)
+        else:
+            should_refresh = False
 
         # Generate access_token if keeper is being initalized for the first time
         if should_refresh == False and not self.token:
@@ -281,8 +284,6 @@ class KorbitApi(PyexAPI):
             self.time_to_expiry = response["expires_in"]
             self.time_at_generation = int(round(time.time())) # record unix epoch at which token was generated
             return self.token["access_token"]
-
-        # use existing access_token if 
 
         # use existing access_token if not near expiry
         elif should_refresh == False:
