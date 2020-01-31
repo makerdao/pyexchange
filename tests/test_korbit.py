@@ -69,7 +69,9 @@ class KorbitMockServer:
         elif re.search(r"v1\/user\/orders\/open", url):
             return MockedResponse(text=KorbitMockServer.responses["orders"])
         elif re.search(r"v1\/user\/transactions", url):
-            return MockedResponse(text=KorbitMockServer.responses["trades"])
+            return MockedResponse(text=KorbitMockServer.responses["user_trades"])
+        elif re.search(r"v1\/transactions", url):
+            return MockedResponse(text=KorbitMockServer.responses["all_trades"])            
         else:
             raise ValueError("Unable to match HTTP GET request to canned response", url)
 
@@ -201,5 +203,12 @@ class TestKorbit:
         pair = "dai_krw"
         mocker.patch("requests.request", side_effect=KorbitMockServer.handle_request)
         response = self.korbit.get_trades(pair)
+        assert (len(response) > 0)
+        TestKorbit.check_trades(response)
+
+    def test_get_all_trades(self, mocker):
+        pair = "bat_krw"
+        mocker.patch("requests.request", side_effect=KorbitMockServer.handle_request)
+        response = self.korbit.get_all_trades(pair)
         assert (len(response) > 0)
         TestKorbit.check_trades(response)

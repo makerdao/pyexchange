@@ -21,6 +21,7 @@ from pyexchange.api import PyexAPI
 import time
 import requests
 import json
+import threading
 
 from pymaker import Address, Wad
 from pymaker.util import http_response_summary
@@ -137,7 +138,7 @@ class Trade:
 
     @staticmethod
     def from_all_list(pair, trade):
-        return Trade(trade_id=trade["tid"],
+        return Trade(trade_id=int(trade["tid"]),
                      timestamp=trade["timestamp"],
                      pair=pair,
                      is_sell=True if trade["type"] == "sell" else False,
@@ -168,6 +169,8 @@ class KorbitApi(PyexAPI):
         self.token = {}
         self.time_to_expiry = 0
         self.time_at_generation = 0
+        self.last_nonce = 0
+        self.last_nonce_lock = threading.Lock()
 
     def get_balances(self):
         return self._http_authenticated_request("GET", "/v1/user/balances", {})
@@ -193,14 +196,13 @@ class KorbitApi(PyexAPI):
         assert(isinstance(amount, Wad))
 
         side = "buy" if is_sell == False else "sell"
-        nonce = int(time.time()) # Nonce must be monotonically increasing
         
         data = {
             "currency_pair": pair,
             "type": "limit",
             "price": str(price),
             "coin_amount": str(amount),
-            "nonce": nonce
+            "nonce": self._choose_nonce()
         }
 
         self.logger.info(f"Placing order ({side}, amount {data['coin_amount']} of {pair},"
@@ -218,11 +220,9 @@ class KorbitApi(PyexAPI):
 
         self.logger.info(f"Cancelling order #{order_id}...")
         
-        nonce = int(time.time()) # Nonce must be monotonically increasing
-
         data = {
             "currency_pair": pair,
-            "nonce": nonce,
+            "nonce": self._choose_nonce(),
             "id": order_id
         }
 
@@ -245,11 +245,13 @@ class KorbitApi(PyexAPI):
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
 
-        limit = 100
+        period = "day" # "day, "minute, "hour"
 
-        result = self._http_unauthenticated("GET", f"/v1/transactions?currency_pair={pair}", {})
-
-        return list(map(lambda item: Trade.from_all_list(pair, item), result))
+        result = self._http_unauthenticated_request("GET", f"/v1/transactions?currency_pair={pair}&time={period}", {})
+        print(result)
+        # Retrieve 100 most rcent trades for a given pair, sorted by timestampd
+        most_recent_trades = sorted(result, key=lambda t: t["timestamp"], reverse=True)[:100]
+        return list(map(lambda item: Trade.from_all_list(pair, item), most_recent_trades))
 
     def _get_access_token(self) -> str:
         # check to see if enough time has elapsed since the oauth tokens were generated, with a 60 second buffer period
@@ -338,9 +340,10 @@ class KorbitApi(PyexAPI):
         assert(isinstance(body, dict) or (body is None))
 
         data = json.dumps(body, separators=(',', ':'))
+        url = f"{self.api_server}{resource}"
 
         return self._result(requests.request(method=method,
-                                             url=f"{self.api_server}{resource}",
+                                             url=url,
                                              data=data,
                                              timeout=self.timeout))
 
@@ -362,3 +365,18 @@ class KorbitApi(PyexAPI):
             return "_".join(pair.split('-')).lower()
         else:
             return pair.lower()
+
+    def _choose_nonce(self) -> int:
+        with self.last_nonce_lock:
+            timed_nonce = int(time.time()*1000)
+            time.sleep(0.1)
+
+            if self.last_nonce + 1 > timed_nonce:
+                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}'")
+                self.logger.info(f"In this case using '{self.last_nonce + 1}' instead")
+
+                self.last_nonce += 1
+            else:
+                self.last_nonce = timed_nonce
+
+            return self.last_nonce            
