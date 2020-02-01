@@ -247,8 +247,8 @@ class KorbitApi(PyexAPI):
 
         period = "day" # "day, "minute, "hour"
 
-        result = self._http_unauthenticated_request("GET", f"/v1/transactions?currency_pair={pair}&time={period}", {})
-        print(result)
+        result = self._http_unauthenticated_request("GET", f"/v1/transactions?currency_pair={self._format_pair_string(pair)}&time={period}", {})
+
         # Retrieve 100 most rcent trades for a given pair, sorted by timestampd
         most_recent_trades = sorted(result, key=lambda t: t["timestamp"], reverse=True)[:100]
         return list(map(lambda item: Trade.from_all_list(pair, item), most_recent_trades))
