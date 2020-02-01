@@ -372,8 +372,7 @@ class KorbitApi(PyexAPI):
             time.sleep(0.1)
 
             if self.last_nonce + 1 > timed_nonce:
-                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}'")
-                self.logger.info(f"In this case using '{self.last_nonce + 1}' instead")
+                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}', using '{self.last_nonce + 1}' instead")
 
                 self.last_nonce += 1
             else:
