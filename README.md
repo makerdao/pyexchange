@@ -8,6 +8,15 @@ Python API wrappers for some cryptocurrency exchanges.
 <https://chat.makerdao.com/channel/keeper>
 
 
+## Getting Started
+Run the following commands:
+```
+git submodule update --init --recursive
+bash ./install.sh
+export PYTHONPATH=$PYTHONPATH:$PWD:$PWD/lib/pymaker
+source _virtualenv/bin/activate
+```
+
 ## Key facts
 
 * These API wrappers expose only those endpoints which were necessary to implement
@@ -29,3 +38,10 @@ Python API wrappers for some cryptocurrency exchanges.
 ## License
 
 See [COPYING](https://github.com/makerdao/pyexchange/blob/master/COPYING) file.
+
+### Testing
+Run the following commands within a virtualenv
+```
+pip3 install -r requirements-dev.txt
+./test.sh
+```
