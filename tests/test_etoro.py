@@ -100,7 +100,7 @@ class TestEToro:
             api_server = "localhost",
             account = "test-account",
             api_key = "00000000-0000-0000-0000-000000000000",
-            secret_key = open(os.path.join(cwd, "mock/etoro-test-key"), "r").read(),
+            secret_key = open(os.path.join(cwd, "mock/etoro-test-key"), "r"),
             timeout = 15.5
         )
 
