@@ -167,8 +167,6 @@ class KorbitApi(PyexAPI):
         self.secret_key = secret_key
         self.timeout = timeout
         self.token = {}
-        self.time_to_expiry = 0
-        self.time_at_generation = 0
         self.last_nonce = 0
         self.last_nonce_lock = threading.Lock()
 
@@ -257,7 +255,7 @@ class KorbitApi(PyexAPI):
         # check to see if enough time has elapsed since the oauth tokens were generated, with a 60 second buffer period
         if self.token:
             current_time = int(round(time.time()))
-            should_refresh = self.time_to_expiry < (current_time - self.time_at_generation + 60)
+            should_refresh = current_time > (self.token["expires_at"] - 120)
         else:
             should_refresh = False
 
@@ -278,8 +276,11 @@ class KorbitApi(PyexAPI):
 
             self.token["refresh_token"] = response["refresh_token"]
             self.token["access_token"] = response["access_token"]
-            self.time_to_expiry = response["expires_in"]
-            self.time_at_generation = int(round(time.time())) # record unix epoch at which token was generated
+
+            # create timestamp to enable checking if should refresh by adding returned token liveness + current time
+            current_time = int(round(time.time()))
+            self.token["expires_at"] = current_time + response["expires_in"]
+
             return self.token["access_token"]
 
         # use existing access_token if not near expiry
@@ -294,6 +295,7 @@ class KorbitApi(PyexAPI):
 
     # Regenerates access, refresh, and time to expiry
     def _get_refresh_token(self):
+
         payload = {
             "client_id": self.api_key,
             "client_secret": self.secret_key,
@@ -310,8 +312,11 @@ class KorbitApi(PyexAPI):
 
         self.token["refresh_token"] = response["refresh_token"]
         self.token["access_token"] = response["access_token"]
-        self.time_to_expiry = response["expires_in"]
-        self.time_at_generation = int(round(time.time())) # reset record unix epoch at which token was generated
+
+        # create timestamp to enable checking if should refresh by adding returned token liveness + current time
+        current_time = int(round(time.time()))
+        self.token["expires_at"] = current_time + response["expires_in"]
+
 
     def _http_authenticated_request(self, method: str, resource: str, body: dict):
         assert(isinstance(method, str))
