@@ -52,11 +52,14 @@ class ErisxApi(PyexAPI):
         # self.fix_trading.logon()
         self.fix_marketdata = FixEngine(fix_marketdata_endpoint, fix_marketdata_user, "ERISX",
                                         fix_trading_user, password)
-        # self.fix_marketdata.logon()
+        self.fix_marketdata.logon()
 
         self.clearing_url = clearing_url
         self.api_secret = api_secret
         self.api_key = api_key
+
+    def __del__(self):
+        self.fix_marketdata.logout()
 
     def ticker(self, pair):
         # TODO: Subscribe to L1 data, await receipt, and then unsubscribe and return the data.
@@ -82,7 +85,7 @@ class ErisxApi(PyexAPI):
             # This is how it behaves on 2019.10.05
             return response["accounts"]
         else:
-            raise Exception("Couldn't interpret response")
+            raise RuntimeError("Couldn't interpret response")
 
     def get_orders(self, pair):
         # TODO: Send 35=MA, await 35=8, map the executions by tag 37 (OrderID) to build order state

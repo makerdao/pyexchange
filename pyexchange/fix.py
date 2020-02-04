@@ -120,10 +120,11 @@ class FixEngine:
         m.append_pair(141, 'Y')
         m.append_pair(553, self.username)
         m.append_pair(554, self.password)
-        self.loop.run_until_complete(asyncio.wait_for(self._write_message(m), 4))
+        self.loop.run_until_complete(asyncio.wait_for(self._write_message(m), 10))
 
         # Confirm logon request (35=A) is acknowledged
-        message = self.loop.run_until_complete(asyncio.wait_for(self._read_message(), 4))
+        logging.debug("awaiting logon response")
+        message = self.loop.run_until_complete(asyncio.wait_for(self._read_message(), 30))
         assert message.get(35) == b'A'
         self.connection_state = FixConnectionState.LOGGED_IN
         logging.debug("client logon complete")
@@ -131,10 +132,13 @@ class FixEngine:
     def logout(self):
         # Send a logout message
         m = self.create_message('5')
-        self._write_message(m)
-
-        # TODO: Should we await a response?  Some exchanges may not ACK the logout.
-        self.connection_state = FixConnectionState.LOGGED_OUT
+        try:
+            self.loop.run_until_complete(asyncio.wait_for(self._write_message(m), 3))
+        except ConnectionResetError:
+            # Ignore heartbeats sent while disconnecting
+            pass
+        finally:
+            self.connection_state = FixConnectionState.LOGGED_OUT
 
     def run_heartbeats(self):
         self.heartbeat_loop.run_until_complete(self._heartbeat())
@@ -147,7 +151,6 @@ class FixEngine:
                 continue
             m = self.create_message('0')
             self._append_sequence_number(m)
-            # FIXME: "socket.send() raised exception" logged here
             await self._write_message(m)
             logging.debug("client sent heartbeat")
 
