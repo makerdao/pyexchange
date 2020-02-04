@@ -255,7 +255,7 @@ class KorbitApi(PyexAPI):
         # check to see if enough time has elapsed since the oauth tokens were generated, with a 60 second buffer period
         if self.token:
             current_time = int(round(time.time()))
-            should_refresh = current_time > (self.token["expires_at"] + 60)
+            should_refresh = current_time > (self.token["expires_at"] - 120)
         else:
             should_refresh = False
 
