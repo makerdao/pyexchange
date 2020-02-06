@@ -35,17 +35,20 @@ from typing import Optional, List
 class Order:
     def __init__(self,
                  order_id: int,
+                 timestamp: str,
                  pair: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
 
+        assert(isinstance(timestamp, str))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
         self.order_id = order_id
+        self.timestamp = timestamp
         self.pair = pair
         self.is_sell = is_sell
         self.price = price
@@ -67,12 +70,19 @@ class Order:
     def remaining_sell_amount(self) -> Wad:
         return self.amount if self.is_sell else self.amount*self.price
 
+    def __hash__(self):
+        return hash((self.order_id,
+                     self.timestamp,
+                     self.price,
+                     self.amount))
+
     def __repr__(self):
         return pformat(vars(self))
 
     @staticmethod
     def from_list(item: list, pair: str):
-        return Order(order_id=item['id'],
+        return Order(order_id=item['order_id'],
+                     timestamp=item['timestamp'],
                      pair=item['product_id'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
@@ -131,11 +141,11 @@ class Trade:
                      amount=Wad.from_number(trade['size']))
 
     @staticmethod
-    def from_all_list(pair, trade):
+    def from_all_list(pair, trade, side):
         return Trade(trade_id=trade['trade_id'],
                      timestamp=int(dateutil.parser.parse(trade['time']).timestamp()),
                      pair=pair,
-                     is_sell=True if trade['side'] == 'sell' else False,
+                     is_sell=True if side == 'ask' else False,
                      price=Wad.from_number(trade['price']),
                      amount=Wad.from_number(trade['size']))
 
@@ -188,7 +198,7 @@ class OkcoinApi(PyexAPI):
 
         orders = self._http_authenticated_request("GET", f"/api/spot/v3/orders_pending?instrument_id={pair}", {})
 
-        return list(map(lambda item: Order.from_list(item, pair), orders))
+        return list(map(lambda item: Order.from_list(item, pair), orders[0]))
 
     # Place a limit order
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
@@ -248,8 +258,10 @@ class OkcoinApi(PyexAPI):
         assert(isinstance(page_number, int))
 
         result = self._http_unauthenticated_request("GET", f"api/spot/v3/instruments/{pair}/book?size=200", {})
-
-        return list(map(lambda item: Trade.from_all_list(pair, item), result))
+        
+        asks = list(map(lambda item: Trade.from_all_list(pair, item, 'ask'), result["asks"]))
+        bids = list(map(lambda item: Trade.from_all_list(pair, item, 'bid'), result["bids"]))
+        return asks + bids
 
     # return base64 encoding of a signed auth message
     def _generate_signature(self, message):
