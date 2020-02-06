@@ -251,22 +251,15 @@ class OkcoinApi(PyexAPI):
 
         return list(map(lambda item: Trade.from_all_list(pair, item), result))
 
-    def withdraw(self, amount: Wad, coin: str, address: Address) -> str:
-        assert isinstance(amount, Wad)
-        assert isinstance(coin, str)
-        assert isinstance(address, Address)
+    # return base64 encoding of a signed auth message
+    def _generate_signature(self, message):
+        signature = hmac.new(bytes(self.secret_key, encoding='utf8'), bytes(message, encoding='utf8'), digestmod='sha256')
+        return base64.b64encode(signature.digest())
 
-        data = {
-            "amount": str(float(amount)),
-            "currency": coin,
-            "crypto_address": address.address
-        }
-        self.logger.info(f"Withdrawing {amount} {coin} to {address.address}")
-        result = self._http_authenticated_request("POST", "/withdrawals/crypto", data)
-
-        withdrawal_id = result['id']
-        self.logger.info(f"Submitted withdrawal {withdrawal_id}")
-        return withdrawal_id
+    def _generate_timestamp(self) -> str:
+        now = datetime.datetime.now()
+        t = now.isoformat("T", "milliseconds")
+        return t + "Z"
 
     def _http_authenticated_request(self, method: str, resource: str, body: dict):
         assert(isinstance(method, str))
@@ -275,23 +268,21 @@ class OkcoinApi(PyexAPI):
 
         data = json.dumps(body, separators=(',', ':'))
 
-        timestamp = str(time.time())
-        message = ''.join([timestamp, method, resource, data or ''])
-        message = message.encode('ascii')
-        hmac_key = base64.b64decode(self.secret_key)
-        signature = hmac.new(hmac_key, message, hashlib.sha256)
-        signature_b64 = base64.b64encode(signature.digest()).decode('utf-8')
+        message = ''.join([self._generate_timestamp(), method, resource, data or ''])
+        # message = message.encode('ascii')
+
+        headers = {
+            'Content-Type': 'Application/JSON',
+            'OK_ACCESS_KEY': self.api_key,
+            'OK_ACCESS_SIGN': self._generate_signature(message),
+            'OK_ACCESS_TIMESTAMP': timestamp,
+            'OK_ACCESS_PASSPHRASE': self.passphrase
+        }
 
         return self._result(requests.request(method=method,
                                              url=f"{self.api_server}{resource}",
                                              data=data,
-                                             headers={
-                                                 'Content-Type': 'Application/JSON',
-                                                 'CB-ACCESS-SIGN': signature_b64,
-                                                 'CB-ACCESS-TIMESTAMP': timestamp,
-                                                 'CB-ACCESS-KEY': self.api_key,
-                                                 'CB-ACCESS-PASSPHRASE': self.passphrase
-                                             },
+                                             headers=headers,
                                              timeout=self.timeout))
 
     def _http_unauthenticated_request(self, method: str, resource: str, body: dict):
