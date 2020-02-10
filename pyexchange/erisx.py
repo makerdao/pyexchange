@@ -48,10 +48,10 @@ class ErisxApi(PyexAPI):
 
         # FIXME: Commented out temporarily so clearing API can be tested without the FIX connection
         self.fix_trading = FixEngine(fix_trading_endpoint, fix_trading_user, "ERISX",
-                                     fix_trading_user, password)
+                                     fix_trading_user, password, heartbeat_interval=10)
         # self.fix_trading.logon()
         self.fix_marketdata = FixEngine(fix_marketdata_endpoint, fix_marketdata_user, "ERISX",
-                                        fix_trading_user, password)
+                                        fix_trading_user, password, heartbeat_interval=10)
         self.fix_marketdata.logon()
 
         self.clearing_url = clearing_url
@@ -67,22 +67,25 @@ class ErisxApi(PyexAPI):
 
     def get_markets(self):
         # TODO: Send 35=x, await 35=y
-        raise NotImplementedError()
+        message = self.fix_marketdata.create_message('x')
+        message.append_pair(320, 0)
+        message.append_pair(559, 0)
+        message.append_pair(55, 'NA')
+        message.append_pair(460, 2)
+        self.fix_marketdata.write(message)
+        message = self.fix_marketdata.wait_for_response('y')
+        # TODO: Parse the response into JSON
+        return message
 
     def get_pair(self, pair):
         # TODO: receive a 35=f (not sure how to request it)
         raise NotImplementedError()
 
     def get_balances(self):
-        # TODO: Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
+        # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
         # They also offer a detailed /balances API, which I don't believe we need at this time.
         response = self._http_post("accounts", {})
-        if "result" in response:
-            # This is how it behaved on 2019.10.02
-            result = response["result"]
-            return result["accounts"]
-        elif "accounts" in response:
-            # This is how it behaves on 2019.10.05
+        if "accounts" in response:
             return response["accounts"]
         else:
             raise RuntimeError("Couldn't interpret response")
