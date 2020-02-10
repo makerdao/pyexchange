@@ -20,7 +20,7 @@ import sys
 from pyexchange.okcoin import OkcoinApi
 from pymaker.numeric import Wad
 
-okcoin = OkcoinApi('https://www.okcoin.com/api', sys.argv[1], sys.argv[2], 9.5)
+okcoin = OkcoinApi('https://www.okcoin.com', sys.argv[1], sys.argv[2], 9.5)
 print("Starting OkcoinAPI with the following parameters: ", sys.argv)
 
 # GET "/api/v1/instruments"

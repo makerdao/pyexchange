@@ -18,6 +18,7 @@
 import logging
 from pprint import pformat
 from pyexchange.api import PyexAPI
+from pyexchange.okex import OKEXApi
 import hmac
 import hashlib
 import time
@@ -79,15 +80,6 @@ class Order:
     def __repr__(self):
         return pformat(vars(self))
 
-    @staticmethod
-    def from_list(item: list, pair: str):
-        return Order(order_id=item['order_id'],
-                     timestamp=item['timestamp'],
-                     pair=item['product_id'],
-                     is_sell=True if item['side'] == 'sell' else False,
-                     price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['size']))
-
 
 class Trade:
     def __init__(self,
@@ -131,27 +123,11 @@ class Trade:
     def __repr__(self):
         return pformat(vars(self))
 
-    @staticmethod
-    def from_our_list(pair, trade):
-        return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(dateutil.parser.parse(trade['created_at']).timestamp()),
-                     pair=pair,
-                     is_sell=True if trade['side'] == 'sell' else False,
-                     price=Wad.from_number(trade['price']),
-                     amount=Wad.from_number(trade['size']))
 
-    @staticmethod
-    def from_all_list(pair, trade, side):
-        return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(dateutil.parser.parse(trade['time']).timestamp()),
-                     pair=pair,
-                     is_sell=True if side == 'ask' else False,
-                     price=Wad.from_number(trade['price']),
-                     amount=Wad.from_number(trade['size']))
-
-
-class OkcoinApi(PyexAPI):
+class OkcoinApi(OKEXApi):
     """Okcoin API interface.
+
+    Inherits methods from OkEx API which is part of the same company.
 
     Developed according to the following manuals:
     <https://www.okcoin.com/docs/en/#>.
@@ -166,15 +142,7 @@ class OkcoinApi(PyexAPI):
         assert(isinstance(secret_key, str))
         assert(isinstance(passphrase, str))
 
-        self.api_server = api_server
-        self.api_key = api_key
-        self.secret_key = secret_key
-        self.passphrase = passphrase
-        self.timeout = timeout
-
-    # Retrieve balance information for Okcoin Trading account. This does NOT include funds in the funding account
-    def get_balances(self):
-        return self._http_authenticated_request("GET", "/api/spot/v3/accounts", {})
+        super().__init__(api_server, api_key, secret_key, passphrase, timeout)
 
     def get_markets(self, pair: str):
         return self._http_unauthenticated_request("GET", f"/api/spot/v3/instruments", {})
@@ -191,77 +159,6 @@ class OkcoinApi(PyexAPI):
         transfer = self._http_authenticated_request("POST", f"/api/account/v3/transfer", data)
 
         return transfer["result"]
-
-    # Retrieve 100 most recent orders sorted in reverse chronological order
-    def get_orders(self, pair: str) -> List[Order]:
-        assert(isinstance(pair, str))
-
-        orders = self._http_authenticated_request("GET", f"/api/spot/v3/orders_pending?instrument_id={pair}", {})
-
-        return list(map(lambda item: Order.from_list(item, pair), orders[0]))
-
-    # Place a limit order
-    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
-        assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
-
-        data = {
-            "size": str(amount),
-            "price": str(price),
-            "side": "sell" if is_sell else "buy",
-            "instrument_id": pair
-        }
-
-        self.logger.info(f"Placing order ({data['side']}, amount {data['size']} of {pair},"
-                         f" price {data['price']})...")
-
-        result = self._http_authenticated_request("POST", "/api/spot/v3/orders", data)
-        order_id = result['order_id']
-
-        self.logger.info(f"Placed order (#{result}) as #{order_id}")
-
-        return order_id
-
-    def cancel_order(self, order_id: str, pair: str) -> bool:
-        assert(isinstance(order_id, str))
-
-        data = {
-            "order_id": order_id,
-            "instrument_id": pair
-        }
-
-        self.logger.info(f"Cancelling order #{order_id}...")
-
-        result = self._http_authenticated_request("POST", f"/api/spot/v3/cancel_orders", data)
-
-        if order_id not in result[pair]:
-            return False
-
-        return True
-
-    # Retrieve orders that have a state of filled
-    # TODO: add support for before / after: Order List
-    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(pair, str))
-        assert(isinstance(page_number, int))
-        assert(page_number == 1)
-
-        result = self._http_authenticated_request("GET", f"/api/spot/v3/orders?instrument_id={pair}&state=filled&limit=100", {})
-
-        return list(map(lambda item: Trade.from_our_list(pair, item), result))
-
-    # Retrieve 200 most recent trades for a given pair
-    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(pair, str))
-        assert(isinstance(page_number, int))
-
-        result = self._http_unauthenticated_request("GET", f"api/spot/v3/instruments/{pair}/book?size=200", {})
-        
-        asks = list(map(lambda item: Trade.from_all_list(pair, item, 'ask'), result["asks"]))
-        bids = list(map(lambda item: Trade.from_all_list(pair, item, 'bid'), result["bids"]))
-        return asks + bids
 
     # return base64 encoding of a signed auth message
     def _generate_signature(self, message):
