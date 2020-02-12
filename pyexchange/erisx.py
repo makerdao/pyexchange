@@ -19,6 +19,7 @@ import json
 import jwt
 import logging
 import requests
+import simplefix
 import time
 
 from pyexchange.api import PyexAPI
@@ -46,12 +47,9 @@ class ErisxApi(PyexAPI):
         assert isinstance(api_key, str)
         assert isinstance(api_secret, str)
 
-        # FIXME: Commented out temporarily so clearing API can be tested without the FIX connection
-        self.fix_trading = FixEngine(fix_trading_endpoint, fix_trading_user, "ERISX",
-                                     fix_trading_user, password, heartbeat_interval=10)
+        self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password)
         # self.fix_trading.logon()
-        self.fix_marketdata = FixEngine(fix_marketdata_endpoint, fix_marketdata_user, "ERISX",
-                                        fix_trading_user, password, heartbeat_interval=10)
+        self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password)
         self.fix_marketdata.logon()
 
         self.clearing_url = clearing_url
@@ -66,7 +64,7 @@ class ErisxApi(PyexAPI):
         raise NotImplementedError()
 
     def get_markets(self):
-        # TODO: Send 35=x, await 35=y
+        # Send 35=x, await 35=y
         message = self.fix_marketdata.create_message('x')
         message.append_pair(320, 0)
         message.append_pair(559, 0)
@@ -74,8 +72,7 @@ class ErisxApi(PyexAPI):
         message.append_pair(460, 2)
         self.fix_marketdata.write(message)
         message = self.fix_marketdata.wait_for_response('y')
-        # TODO: Parse the response into JSON
-        return message
+        return ErisxFix.parse_security_list(message)
 
     def get_pair(self, pair):
         # TODO: receive a 35=f (not sure how to request it)
@@ -154,3 +151,36 @@ class ErisxApi(PyexAPI):
             raise Exception(f"Error in HTTP response: {http_response_summary(response)}")
         else:
             return response.json()
+
+
+class ErisxFix(FixEngine):
+    def __init__(self, endpoint: str, sender_comp_id: str, username: str, password: str):
+        super(ErisxFix, self).__init__(endpoint=endpoint, sender_comp_id=sender_comp_id, target_comp_id="ERISX",
+                                       username=username, password=password, fix_version="FIX.4.4", heartbeat_interval=10)
+    @staticmethod
+    def parse_security_list(m: simplefix.FixMessage) -> dict:
+        security_count = int(m.get(146))
+        securities = {}
+        for i in range(1, security_count):
+
+            # Required fields
+            symbol = m.get(55, i).decode('utf-8')
+            securities[symbol] = {
+                "Product": m.get(460, i).decode('utf-8'),
+                "MinPriceIncrement": float(m.get(969, i).decode('utf-8')),
+                "SecurityDesc": m.get(107, i).decode('utf-8'),
+                "Currency": m.get(15, i).decode('utf-8')
+            }
+
+            # Optional fields
+            min_trade_vol = m.get(562, i)
+            if min_trade_vol:
+                securities[symbol]["MinTradeVol"] = float(min_trade_vol.decode('utf-8'))
+            max_trade_vol = m.get(1140, i)
+            if max_trade_vol:
+                securities[symbol]["MaxTradeVol"] = float(max_trade_vol.decode('utf-8'))
+            round_lot = m.get(561, i)
+            if round_lot:
+                securities[symbol]["RoundLot"] = float(round_lot.decode('utf-8'))
+
+        return securities

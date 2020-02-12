@@ -41,7 +41,6 @@ class FixEngine:
     """Enables interfacing with exchanges using the FIX (Financial Information eXchange) protocol.
     This class shall implement common logic for connection management and fulfill relevant functions from PyexAPI.
 
-    Ideally, subclasses should not need to import simplefix, insulating them from implementation logic within.
     Note that simplefix automatically populates fields 9 (message length) and 10 (checksum)."""
 
     logger = logging.getLogger()
@@ -155,6 +154,7 @@ class FixEngine:
                 assert isinstance(message, simplefix.FixMessage)
                 if message.get(35) == message_type.encode('UTF-8'):
                     return message
+            await asyncio.sleep(0.3)
 
     def wait_for_response(self, message_type: str) -> simplefix.FixMessage:
         logging.debug(f"waiting for 35={message_type} response")
@@ -194,6 +194,7 @@ class FixEngine:
         # Send a logout message
         m = self.create_message('5')
         try:
+            # TODO: Instead of awaiting the blocking read to complete, invoke this directly on the session loop.
             self.write_queue.put(m)
             self.last_msg_sent = None  # Prevent heartbeat during logout
             while not self.write_queue.empty():
