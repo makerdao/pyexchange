@@ -24,4 +24,23 @@ bitso = BitsoApi('https://api.bitso.com', sys.argv[1],  sys.argv[2], 9.5)
 print("Starting BitsoApi with the following parameters: ", sys.argv)
 
 # GET "/v3/balance/"
-print(bitso.get_balances())
+# print(bitso.get_balances())
+
+#print(bitso.get_markets())
+# print(bitso.get_pair('ETH/USDC'))
+
+# GET "/api/v1/orders"
+print(bitso.get_orders('eth_mxn'))
+
+# POST /api/v1/orders
+# print(bitso.place_order('eth_mxn', 'sell', 4400.000, .01))
+
+# DELETE /api/v1/orders/{order_id}
+# print(bitso.cancel_order('MCFChw1RyAStLVnM'))
+
+# GET /api/v1/trades
+# print(bitso.get_trades("eth_mxn"))
+# print(bitso.get_trades('ethusdc', '1578959828'))
+
+# GET /api​/v1​/funds​/deposits​/{coin}​/address
+# print(bitso.get_deposit_address('eth'))

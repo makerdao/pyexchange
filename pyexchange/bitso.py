@@ -43,15 +43,13 @@ class Order:
                  book: str,
                  is_sell: bool,
                  price: Wad,
-                 amount: Wad,
-                 remaining_amount: Wad):
+                 amount: Wad):
 
         assert(isinstance(book, str))
         assert(isinstance(timestamp, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        assert(isinstance(remaining_amount, Wad))
 
         self.order_id = order_id
         self.timestamp = timestamp
@@ -59,7 +57,6 @@ class Order:
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
-        self.remaining_amount = remaining_amount
 
     @property
     def sell_to_buy_price(self) -> Wad:
@@ -71,11 +68,11 @@ class Order:
 
     @property
     def remaining_buy_amount(self) -> Wad:
-        return self.remaining_amount*self.price if self.is_sell else self.remaining_amount
+        return self.amount*self.price if self.is_sell else self.amount
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        return self.remaining_amount if self.is_sell else self.remaining_amount*self.price
+        return self.amount if self.is_sell else self.amount*self.price
 
     def __hash__(self):
         return hash((self.order_id,
@@ -88,33 +85,31 @@ class Order:
 
     @staticmethod
     def from_message(item):
-        return Order(order_id=item['id'],
-                     timestamp=datetime.now(tz=timezone.utc).isoformat(), # No timestamp or created_at information is returned as part of get_orders()
+        return Order(order_id=item['oid'],
+                     timestamp=item['created_at'],
                      book=item['book'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['volume']),
-                     remaining_amount=Wad.from_number(float(item['origin_volume']) - float(item['volume'])))
-
+                     amount=Wad.from_number(item['original_amount']))
 
 class Trade:
     def __init__(self,
                  trade_id: str,
                  timestamp: int,
-                 book: Optional[str],
+                 pair: Optional[str],
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
         assert(isinstance(trade_id, str))
         assert(isinstance(timestamp, int))
-        assert(isinstance(book, str) or (book is None))
+        assert(isinstance(pair, str) or (pair is None))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
-        self.book = book
+        self.pair = pair
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
@@ -123,7 +118,7 @@ class Trade:
         assert(isinstance(other, Trade))
         return self.trade_id == other.trade_id and \
                self.timestamp == other.timestamp and \
-               self.book == other.book and \
+               self.pair == other.pair and \
                self.is_sell == other.is_sell and \
                self.price == other.price and \
                self.amount == other.amount
@@ -131,7 +126,7 @@ class Trade:
     def __hash__(self):
         return hash((self.trade_id,
                      self.timestamp,
-                     self.book,
+                     self.pair,
                      self.is_sell,
                      self.price,
                      self.amount))
@@ -152,33 +147,28 @@ class BitsoApi(PyexAPI):
 
     def __init__(self, api_server: str, api_key: str, secret_key: str, timeout: float):
         assert(isinstance(api_server, str))
-        assert(isinstance(account, str))
         assert(isinstance(api_key, str))
         assert(isinstance(secret_key, str))
         assert(isinstance(timeout, float))
 
         self.api_server = api_server
-        self.timeout = timeout
         self.api_key = api_key
         self.secret_key = secret_key
+        self.timeout = timeout
 
     # This endpoint returns a list of existing exchange order books and their respective order placement limits.
     def get_markets(self):
-        return self._http_request("GET", "/v3/available_books", {})
+        return self._http_request("GET", "/v3/available_books", {})["payload"]
 
     def get_pair(self, book: str):
         assert(isinstance(book, str))
         return list(filter(lambda market: market['book'] == book, self.get_markets()))
 
     def get_balances(self):
-        return self._http_authenticated_request("GET", "/v3/balance", {})
-
-    def get_order(self, order_id: str):
-        assert(isinstance(order_id, str))
-        return self._http_authenticated_request("GET", f"/v3/orders/{order_id}", {})
+        return self._http_authenticated_request("GET", "/v3/balance", {})["payload"]["balances"]
 
     # Trading: Retrieves a list of user's open orders
-    def get_orders(self, book: str = "all", marker: str = "", sort: str = "", limit: int = 25) -> List[Order]:
+    def get_orders(self, book: str = "all", marker: str = "", sort: str = "", limit: int = 100) -> List[Order]:
         assert(isinstance(book, str))
         assert(isinstance(marker, str))
         assert(isinstance(sort, str))
@@ -186,32 +176,32 @@ class BitsoApi(PyexAPI):
 
         # Params for filtering orders
         params = {
-            "book": book, # OPTIONAL: pair being traded
+            "book": book, # REQUIRED: pair being traded
             "marker": marker, # OPTIONAL: order id to compare placement time against when used with sort
             "sort": sort, # OPTIONAL: sort direction of returned orders
             "limit": limit # OPtional: number or orders to return, max 100
         }
 
         orders = self._http_authenticated_request("GET", "/v3/open_orders", params)
-        return list(map(lambda item: Order.from_message(item), orders))
+        return list(map(lambda item: Order.from_message(item), orders["payload"]))
 
     # Trading: Submits and awaits acknowledgement of an (exclusively) limit order,
     # returning the order id.
-    def place_order(self, book: str, side: str, price: Wad, amount: Wad) -> str:
+    def place_order(self, book: str, side: str, price: float, amount: float) -> str:
         assert(isinstance(book, str))
         assert(isinstance(side, str))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
+        assert(isinstance(price, float))
+        assert(isinstance(amount, float))
 
-        # Used to help lookup and cancel orders
         client_id = str(uuid.uuid4())
 
+        
         request_body = {
             "book": book, # REQUIRED
             "side": side, # REQUIRED
             "type": "limit", # REQUIRED: we exclusively trade limit orders
             "major": str(amount), # Amount of major currency being ordered
-            "price": str(price),
+            "price": str(price), # max precision is 8 decimals
             "time_in_force": "goodtillcancelled",
             "client_id": client_id
         }
@@ -221,11 +211,10 @@ class BitsoApi(PyexAPI):
         self.logger.info(f"Placing order ({order_type}, amount {amount} of {book},"
                          f" price {price}), and client_id: {client_id}")
 
-        response = self._http_authenticated_request("POST", f"/v3/orders", {}, request_body)
+        response = self._http_authenticated_request("POST", f"/v3/orders", {}, request_body)["payload"]
         order_id = response['oid']
 
         self.logger.info(f"Placed order type {order_type}, order_id #{order_id}, and client_id: {client_id}")
-
         return order_id
 
     def cancel_order(self, order_id: str) -> bool:
@@ -234,33 +223,39 @@ class BitsoApi(PyexAPI):
         self.logger.info(f"Cancelling order #{order_id}...")
 
         result = self._http_authenticated_request("DELETE", f"/v3/orders/{order_id}", {})
-        return result
-
-    def cancel_all_orders(self) -> List:
-        self.logger.info(f"Cancelling all orders ...")
-
-        result = self._http_authenticated("DELETE", "/v3/orders/all", {})
-        success = len(result) > 0
-
-        if success:
-            self.logger.info(f"Cancelled orders : #{result}")
-        else:
-            self.logger.info(f"No order canceled ")
-
-        return result
+        return result["success"]
 
     # Trading: Retrieves most recent trades for a given order_id or client_id.
-    def get_trades(self, book: str, page_number: int = 1, params: dict = {}) -> List[Trade]:
+    def get_trades(self, book: str = "", page_number: int = 1) -> List[Trade]:
         assert(isinstance(book, str))
         assert(isinstance(page_number, int))
 
-        result = self._http_authenticated_request("GET", f"/v3/order_trades/{params['oid']}", params)
-        return list(map(lambda item: Trade(trade_id=item['trade_id'],
-                                           timestamp=int(dateutil.parser.parse(item['created_at']).timestamp()),
-                                           book=item['book'],
+        params = {
+            "book": self._format_pair_string(book), # REQUIRED: pair being traded
+            "limit": 100 # OPtional: number or orders to return, max 100
+        }
+
+        result = self._http_authenticated_request("GET", f"/v3/user_trades", params)
+        return list(map(lambda item: Trade(trade_id=item['tid'],
+                                           timestamp=self._iso8601_to_unix(item['created_at']),
+                                           pair=item['book'],
                                            is_sell=item['side'] == 'bid',
                                            price=Wad.from_number(item['price']),
-                                           amount=Wad.from_number(item['volume'])), result))
+                                           amount=Wad.from_number(abs(float(item['major'])))), result["payload"]))
+
+    def get_all_trades(self, book: str, page_number: int = 1) -> List[Trade]:
+        # Params for filtering orders
+        params = {
+            "book": self._format_pair_string(book), # REQUIRED: pair being traded
+            "limit": 100 # OPtional: number or orders to return, max 100
+        }
+        result = self._http_request("GET", "/v3/trades", params)["payload"]
+        return list(map(lambda item: Trade(trade_id=str(item['tid']),
+                                    timestamp=self._iso8601_to_unix(item['created_at']),
+                                    pair=item['book'],
+                                    is_sell=item['maker_side'] == 'buy',
+                                    price=Wad.from_number(item['price']),
+                                    amount=Wad.from_number(abs(float(item['amount'])))), result))
 
     def _http_request(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
@@ -274,7 +269,7 @@ class BitsoApi(PyexAPI):
         return self._result(requests.request(method=method,
                                              url=url,
                                              timeout=self.timeout))
-        
+
     # Interprets the response to an HTTP GET, POST or DELETE request
     def _http_authenticated_request(self, method: str, resource: str, params: dict, req_body: dict = {}):
         assert(isinstance(method, str))
@@ -283,9 +278,9 @@ class BitsoApi(PyexAPI):
         assert(isinstance(req_body, dict))
 
         nonce = str(int(round(time.time() * 1000)))
-        message = f'{nonce}{method}{resource}'
+        message = f'{nonce}{method}{resource}?{urlencode(params)}'
 
-        if (http_method == "POST"):
+        if (method == "POST"):
             message += json.dumps(req_body)
 
         signature = hmac.new(self.secret_key.encode('utf-8'),
@@ -300,7 +295,6 @@ class BitsoApi(PyexAPI):
         }
 
         url = f"{self.api_server}{resource}?{urlencode(params)}"
-
         if method != "POST":
             return self._result(requests.request(method=method,
                                              url=url,
@@ -326,3 +320,15 @@ class BitsoApi(PyexAPI):
 
         return data
 
+    # Sync trades expects pair to be structured as <Major>-<Minor>, but Bitso expects <Major>_<Minor>
+    def _format_pair_string(self, pair: str) -> str:
+        assert(isinstance(pair, str))
+        if '-' in pair:
+            return "_".join(pair.split('-')).lower()
+        else:
+            return pair.lower()
+
+    def _iso8601_to_unix(self, timestamp) -> int:
+        assert(isinstance(timestamp, str))
+        int_timestamp = int(dateutil.parser.isoparse(timestamp).timestamp())
+        return int_timestamp
