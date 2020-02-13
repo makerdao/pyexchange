@@ -156,7 +156,9 @@ class ErisxApi(PyexAPI):
 class ErisxFix(FixEngine):
     def __init__(self, endpoint: str, sender_comp_id: str, username: str, password: str):
         super(ErisxFix, self).__init__(endpoint=endpoint, sender_comp_id=sender_comp_id, target_comp_id="ERISX",
-                                       username=username, password=password, fix_version="FIX.4.4", heartbeat_interval=10)
+                                       username=username, password=password,
+                                       fix_version="FIX.4.4", heartbeat_interval=10)
+
     @staticmethod
     def parse_security_list(m: simplefix.FixMessage) -> dict:
         security_count = int(m.get(146))

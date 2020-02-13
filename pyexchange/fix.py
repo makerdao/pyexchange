@@ -69,6 +69,7 @@ class FixEngine:
         self.writer = None
         self.parser = simplefix.FixParser()
 
+        # This lock probably isn't needed because `reader.read` blocks.
         self.lock = asyncio.Lock()
         self.caller_loop = asyncio.get_event_loop()
         self.session_loop = None
@@ -80,7 +81,7 @@ class FixEngine:
 
     async def _read_message(self):
         """Reads the next message from the server"""
-        await self.lock.acquire()
+        # await self.lock.acquire()
         try:
             message = None
             # logging.debug("reading")
@@ -103,7 +104,7 @@ class FixEngine:
             logging.error("client read timed out")
             assert False
         finally:
-            self.lock.release()
+            # self.lock.release()
             pass
 
     def _handle_session_message(self, message: simplefix.FixMessage) -> bool:
@@ -127,7 +128,7 @@ class FixEngine:
 
     async def _write_message(self, message: simplefix.FixMessage):
         """Sends a message to the server"""
-        await self.lock.acquire()
+        # await self.lock.acquire()
         try:
             # logging.debug(f"client sending message {message}")
             self._append_sequence_number(message)
@@ -136,7 +137,7 @@ class FixEngine:
             await self.writer.drain()
             self.last_msg_sent = datetime.now()
         finally:
-            self.lock.release()
+            # self.lock.release()
             pass
 
     def write(self, message: simplefix.FixMessage):
@@ -194,8 +195,7 @@ class FixEngine:
         # Send a logout message
         m = self.create_message('5')
         try:
-            # TODO: Instead of awaiting the blocking read to complete, invoke this directly on the session loop.
-            self.write_queue.put(m)
+            self.caller_loop.run_until_complete(self._write_message(m))
             self.last_msg_sent = None  # Prevent heartbeat during logout
             while not self.write_queue.empty():
                 logging.debug("waiting to logout")
