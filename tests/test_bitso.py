@@ -173,7 +173,7 @@ class TestBitso:
         assert(isinstance(order_id, str))
         assert(order_id is not None)
         cancel_result = self.bitso.cancel_order(order_id)
-        assert(bool(cancel_result == "True")
+        assert(bool(cancel_result == "True"))
 
     @staticmethod
     def check_trades(trades):
