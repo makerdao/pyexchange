@@ -271,22 +271,28 @@ class BitsoApi(PyexAPI):
                                              timeout=self.timeout))
 
     # Interprets the response to an HTTP GET, POST or DELETE request
-    def _http_authenticated_request(self, method: str, resource: str, params: dict, req_body: dict = {}):
+    def _http_authenticated_request(self, method: str, resource: str, params: dict, data: dict = {}):
         assert(isinstance(method, str))
         assert(isinstance(resource, str))
         assert(isinstance(params, dict) or (params is None))
-        assert(isinstance(req_body, dict))
+        assert(isinstance(data, dict))
 
         nonce = str(int(round(time.time() * 1000)))
-        message = f'{nonce}{method}{resource}?{urlencode(params)}'
+
+        # if has params, else strip out query params, otherwise call fails
+        if not params and not data:
+            message = f'{nonce}{method}{resource}'
+            url = f"{self.api_server}{resource}"
+        else:
+            message = f'{nonce}{method}{resource}?{urlencode(params)}'
+            url = f"{self.api_server}{resource}?{urlencode(params)}"
 
         if (method == "POST"):
-            message += json.dumps(req_body)
+            message += json.dumps(data)
 
         signature = hmac.new(self.secret_key.encode('utf-8'),
                                             message.encode('utf-8'),
                                             hashlib.sha256).hexdigest()
-
         # Build the auth header
         auth_header = 'Bitso %s:%s:%s' % (self.api_key, nonce, signature)
 
@@ -294,7 +300,6 @@ class BitsoApi(PyexAPI):
             "Authorization": auth_header
         }
 
-        url = f"{self.api_server}{resource}?{urlencode(params)}"
         if method != "POST":
             return self._result(requests.request(method=method,
                                              url=url,
@@ -305,7 +310,7 @@ class BitsoApi(PyexAPI):
             return self._result(requests.request(method=method,
                                              url=url,
                                              headers=headers,
-                                             json=req_body,
+                                             data=data,
                                              timeout=self.timeout))
     @staticmethod
     def _result(result) -> dict:

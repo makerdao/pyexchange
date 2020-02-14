@@ -64,13 +64,13 @@ class BitsoMockServer:
     @staticmethod
     def handle_get(url: str):
         # Parse the URL to determine which piece of canned data to return
-        if re.search(r"api\/v1\/instruments", url):
+        if re.search(r"v3\/available_books", url):
             return MockedResponse(text=BitsoMockServer.responses["markets"])
-        elif re.search(r"api\/v1\/balances", url):
+        elif re.search(r"v3\/balance", url):
             return MockedResponse(text=BitsoMockServer.responses["balances"])
-        elif re.search(r"api\/v1\/orders", url):
+        elif re.search(r"v3\/open_orders", url):
             return MockedResponse(text=BitsoMockServer.responses["orders"])
-        elif re.search(r"\/api\/v1\/trades", url):
+        elif re.search(r"v3\/user_trades", url):
             return MockedResponse(text=BitsoMockServer.responses["trades"])
         else:
             raise ValueError("Unable to match HTTP GET request to canned response", url)
@@ -78,17 +78,15 @@ class BitsoMockServer:
     @staticmethod
     def handle_post(url: str, data):
         assert(data is not None)
-        if re.search(r"\/api\/v1\/orders", url):
-            return MockedResponse(text=BitsoMockServer.responses["single_order"])
-        # elif re.search(r"\/api\/v1\/orders", url):
-        #     return MockedResponse(text=BitsoMockServer.responses["place_order_failure"])
+        if re.search(r"v3\/orders", url):
+            return MockedResponse(text=BitsoMockServer.responses["place_order"])
         else:
             raise ValueError("Unable to match HTTP POST request to canned response", url, data)
 
     
     @staticmethod
     def handle_delete(url: str):
-        if re.search(r"\/api\/v1\/orders\/[\w\-_]+", url):
+        if re.search(r"v3\/orders\/[\w\-_]+", url):
             return MockedResponse(text=BitsoMockServer.responses["cancel_order"])
         else:
             raise ValueError("Unable to match HTTP DELETE request to canned response", url)
@@ -106,7 +104,7 @@ class TestBitso:
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
         response = self.bitso.get_markets()
         assert(len(response) > 0)
-        assert(any(x["id"] == "eth_btc" for x in response))
+        assert(any(x["book"] == "eth_mxn" for x in response))
 
     def test_order(self):
         price = Wad.from_number(4.8765)
@@ -115,23 +113,21 @@ class TestBitso:
         order = Order(
             order_id="153153",
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
-            book="eth_btc",
+            book="eth_mxn",
             is_sell=False,
             price=price,
-            amount=amount,
-            remaining_amount=remaining_amount
+            amount=amount
         )
         assert(order.price == order.sell_to_buy_price)
         assert(order.price == order.buy_to_sell_price)
-        assert(order.remaining_amount == remaining_amount)
 
     def test_get_balances(self, mocker):
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
         response = self.bitso.get_balances()
         assert(len(response) > 0)
         for balance in response:
-            if "eth" in balance["book"]:
-                assert(float(balance["balance"]) > 0)
+            if "eth" in balance["currency"]:
+                assert(float(balance["total"]) > 0)
 
     @staticmethod
     def check_orders(orders):
@@ -160,7 +156,7 @@ class TestBitso:
         assert(duplicate_count == 0)
         
     def test_get_orders(self, mocker):
-        instrument_id = "eth_btc"
+        instrument_id = "eth_mxn"
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
         response = self.bitso.get_orders(instrument_id)
         assert (len(response) > 0)
@@ -170,10 +166,10 @@ class TestBitso:
         TestBitso.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        instrument_id = "eth_btc"
-        side = "ask"
+        instrument_id = "eth_mxn"
+        side = "sell"
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
-        order_id = self.bitso.place_order(instrument_id, side, Wad.from_number(639.3), Wad.from_number(0.15))
+        order_id = self.bitso.place_order(instrument_id, side, 4400.000, .01)
         assert(isinstance(order_id, str))
         assert(order_id is not None)
         cancel_result = self.bitso.cancel_order(order_id)
@@ -209,7 +205,7 @@ class TestBitso:
         assert(missorted_found is False)
 
     def test_get_trades(self, mocker):
-        instrument_id = "eth_btc"
+        instrument_id = "eth_mxn"
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
         response = self.bitso.get_trades(instrument_id)
         assert (len(response) > 0)
