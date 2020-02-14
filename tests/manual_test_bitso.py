@@ -33,10 +33,10 @@ print("Starting BitsoApi with the following parameters: ", sys.argv)
 # print(bitso.get_orders('eth_mxn'))
 
 # POST /api/v1/orders
-print(bitso.place_order('eth_mxn', 'sell', 5000.000, .01))
+# print(bitso.place_order('eth_mxn', 'buy', 5200.000, .01))
 
 # DELETE /api/v1/orders/{order_id}
-# print(bitso.cancel_order('MCFChw1RyAStLVnM'))
+print(bitso.cancel_order('w0Z3B1MmmcytBFu0'))
 
 # GET /api/v1/trades
 # print(bitso.get_trades("eth_mxn"))

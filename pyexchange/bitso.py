@@ -280,7 +280,7 @@ class BitsoApi(PyexAPI):
         nonce = str(int(round(time.time() * 1000)))
 
         # if has params, else strip out query params, otherwise call fails
-        if not params and not data:
+        if not params:
             message = f'{nonce}{method}{resource}'
             url = f"{self.api_server}{resource}"
         else:
@@ -310,7 +310,7 @@ class BitsoApi(PyexAPI):
             return self._result(requests.request(method=method,
                                              url=url,
                                              headers=headers,
-                                             data=data,
+                                             json=data,
                                              timeout=self.timeout))
     @staticmethod
     def _result(result) -> dict:

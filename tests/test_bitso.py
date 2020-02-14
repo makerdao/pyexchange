@@ -57,7 +57,7 @@ class BitsoMockServer:
         if method == "GET":
             return BitsoMockServer.handle_get(url)
         elif method == "POST":
-            return BitsoMockServer.handle_post(url, kwargs["data"])
+            return BitsoMockServer.handle_post(url, kwargs["json"])
         else:
             return BitsoMockServer.handle_delete(url)
 
@@ -173,7 +173,7 @@ class TestBitso:
         assert(isinstance(order_id, str))
         assert(order_id is not None)
         cancel_result = self.bitso.cancel_order(order_id)
-        assert(cancel_result["state"] == "pending cancellation")
+        assert(bool(cancel_result == "True")
 
     @staticmethod
     def check_trades(trades):
