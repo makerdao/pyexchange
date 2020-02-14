@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017-2018 reverendus
+# Copyright (C) 2020 MikeHathaway
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -17,31 +17,29 @@
 
 import sys
 
-from pyexchange.etoro import EToroApi
+from pyexchange.korbit import KorbitApi
 from pymaker.numeric import Wad
 
-etoro = EToroApi(sys.argv[1], 'test_account', sys.argv[2], open(sys.argv[3], 'r'), 9.5)
-print("Starting eToroAPI with the following parameters: ", sys.argv)
+korbit = KorbitApi('https://api.korbit.co.kr', sys.argv[1], sys.argv[2], 9.5)
+print("Starting KorbitAPI with the following parameters: ", sys.argv)
 
 # GET "/api/v1/instruments"
-# print(etoro.get_markets())
-# print(etoro.get_pair('ETH/USDC'))
+# print(korbit.get_markets())
+# print(korbit.get_pair('ETH/USDC'))
 
 # GET "/api/v1/balances"
-# print(etoro.get_balances())
+# print(korbit.get_balances())
 
 # GET "/api/v1/orders"
-print(etoro.get_orders('ethusdc', 'open'))
+# print(korbit.get_orders('dai_krw'))
 
 # POST /api/v1/orders
-# print(etoro.place_order('ethusdc', 'buy', Wad.from_number(144.94033), Wad.from_number(.005)))
+# print(korbit.place_order('dai_krw', False, Wad.from_number(1500), Wad.from_number(5)))
 
 # DELETE /api/v1/orders/{order_id}
-# print(etoro.cancel_order('c8e579b0-cfb8-4297-9983-7deb5c454761'))
+# print(korbit.cancel_order(249334, 'dai_krw'))
 
 # GET /api/v1/trades
-print(etoro.get_trades('ethusdc'))
-# print(etoro.get_trades('ethusdc', '1578959828'))
+# print(korbit.get_trades('dai_krw'))
 
-# GET /api​/v1​/funds​/deposits​/{coin}​/address
-# print(etoro.get_deposit_address('eth'))
+print(korbit.get_all_trades("bat_krw"))
