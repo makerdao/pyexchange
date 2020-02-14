@@ -315,12 +315,12 @@ class BitsoApi(PyexAPI):
     def _result(result) -> dict:
 
         if not result.ok:
-            raise Exception(f"Bitso API invalid HTTP response: {http_response_summary(result)}")
+            raise ValueError(f"Bitso API invalid HTTP response: {http_response_summary(result)}")
 
         try:
             data = result.json()
-        except Exception:
-            raise Exception(f"Bitso API invalid JSON response: {http_response_summary(result)}")
+        except ValueError:
+            raise ValueError(f"Bitso API invalid JSON response: {http_response_summary(result)}")
 
         return data
 
