@@ -22,7 +22,6 @@ from typing import Optional, List
 import dateutil.parser
 import requests
 import time
-from datetime import datetime, timezone
 
 import uuid
 import hmac
