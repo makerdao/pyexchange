@@ -20,21 +20,19 @@ import sys
 from pyexchange.okcoin import OkcoinApi
 from pymaker.numeric import Wad
 
-okcoin = OkcoinApi('https://www.okcoin.com', sys.argv[1], sys.argv[2], 9.5)
+okcoin = OkcoinApi('https://www.okcoin.com', sys.argv[1], sys.argv[2], sys.argv[3], 9.5)
 print("Starting OkcoinAPI with the following parameters: ", sys.argv)
 
-# GET "/api/v1/instruments"
-# print(okcoin.get_markets())
-# print(okcoin.get_pair('ETH/USDC'))
+# print(okcoin.get_markets("eth_dai"))
 
-# GET "/api/v1/balances"
 # print(okcoin.get_balances())
 
-# GET "/api/v1/orders"
-# print(okcoin.get_orders('dai_krw'))
+# print(okcoin.get_orders('eth_dai'))
+
+print(okcoin.get_deposit_address('eth'))
 
 # POST /api/v1/orders
-# print(okcoin.place_order('dai_krw', False, Wad.from_number(1500), Wad.from_number(5)))
+# print(okcoin.place_order('eth_dai', False, Wad.from_number(1500), Wad.from_number(5)))
 
 # DELETE /api/v1/orders/{order_id}
 # print(okcoin.cancel_order(249334, 'dai_krw'))
@@ -42,4 +40,4 @@ print("Starting OkcoinAPI with the following parameters: ", sys.argv)
 # GET /api/v1/trades
 # print(okcoin.get_trades('dai_krw'))
 
-print(okcoin.get_all_trades("bat_krw"))
+# print(okcoin.get_all_trades("bat_krw"))
