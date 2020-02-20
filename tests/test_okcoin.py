@@ -22,11 +22,11 @@ import time
 
 from pymaker import Wad
 from pyexchange.model import Candle
-from pyexchange.okcoin import Order
-from pyexchange.okcoin import Trade
+from pyexchange.okex import Order
+from pyexchange.okex import Trade
 from pyexchange.okcoin import OkcoinApi
 
-# Models HTTP response, produced by OkexMockServer
+# Models HTTP response, produced by OkcoinMockServer
 class MockedResponse:
     def __init__(self, text: str, status_code=200):
         assert (isinstance(text, str))
@@ -40,7 +40,7 @@ class MockedResponse:
         return json.loads(self.text)
 
 # Determines response to provide based on the requested URL
-class OkexMockServer:
+class OkcoinMockServer:
     # Read JSON responses from a pipe-delimited file, avoiding JSON-inside-JSON parsing complexities
     responses = {}
     cwd = os.path.dirname(os.path.realpath(__file__))
@@ -56,31 +56,31 @@ class OkexMockServer:
         assert("url" in kwargs)
         url = kwargs["url"]
         if "data" not in kwargs:
-            return OkexMockServer.handle_get(url)
+            return OkcoinMockServer.handle_get(url)
         else:
-            return OkexMockServer.handle_post(url, kwargs["data"])
+            return OkcoinMockServer.handle_post(url, kwargs["data"])
 
     @staticmethod
     def handle_get(url: str):
         # Parse the URL to determine which piece of canned data to return
         if re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/ticker", url):
-            return MockedResponse(text=OkexMockServer.responses["ticker1"])
+            return MockedResponse(text=OkcoinMockServer.responses["ticker1"])
         elif re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/book", url):
-            return MockedResponse(text=OkexMockServer.responses["book1"])
+            return MockedResponse(text=OkcoinMockServer.responses["book1"])
         elif re.search(r"api\/spot\/v3\/instruments\/[\w\-_]+\/candles", url):
-            return MockedResponse(text=OkexMockServer.responses["candles1"])
+            return MockedResponse(text=OkcoinMockServer.responses["candles1"])
         elif "/api/spot/v3/accounts" in url:
-            return MockedResponse(text=OkexMockServer.responses["accounts1"])
+            return MockedResponse(text=OkcoinMockServer.responses["accounts1"])
         elif "/api/spot/v3/orders_pending" in url:
-            return MockedResponse(text=OkexMockServer.responses["orders1"])
+            return MockedResponse(text=OkcoinMockServer.responses["orders1"])
         elif re.search(r"\/api\/spot\/v3\/orders\?state=[\w_%]+&instrument_id=[\w\-_]+&limit=\d+", url):
-            return MockedResponse(text=OkexMockServer.responses["orders2"])
+            return MockedResponse(text=OkcoinMockServer.responses["orders2"])
         elif re.search(r"\/api\/spot\/v3\/orders\?state=1&instrument_id=[\w\-_]+", url):
             return MockedResponse(text="[]")  # assume no partial fills
         elif re.search(r"\/api\/spot\/v3\/orders\?state=2&instrument_id=[\w\-_]+", url):
-            return MockedResponse(text=OkexMockServer.responses["trades1"])
+            return MockedResponse(text=OkcoinMockServer.responses["trades1"])
         elif re.search(r"\/api\/spot\/v3\/instruments\/[\w\-_]+\/trades", url):
-            return MockedResponse(text=OkexMockServer.responses["trades2"])
+            return MockedResponse(text=OkcoinMockServer.responses["trades2"])
         else:
             raise Exception("Unable to match HTTP GET request to canned response")
 
@@ -88,9 +88,9 @@ class OkexMockServer:
     def handle_post(url: str, data):
         assert(data is not None)
         if "/api/spot/v3/orders" in url:
-            return MockedResponse(text=OkexMockServer.responses["place_order1"])
+            return MockedResponse(text=OkcoinMockServer.responses["place_order1"])
         elif "/api/spot/v3/cancel_orders" in url:
-            return MockedResponse(text=OkexMockServer.responses["cancel_order1"])
+            return MockedResponse(text=OkcoinMockServer.responses["cancel_order1"])
         else:
             raise Exception("Unable to match HTTP POST request to canned response")
 
@@ -125,7 +125,7 @@ class TestOKCOIN:
 
     def test_ticker(self, mocker):
         pair = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        mocker.patch("requests.get", side_effect=OkcoinMockServer.handle_request)
         response = self.okcoin.ticker(pair)
         assert(str(response["instrument_id"]).lower().replace('-', '_') == pair)
         assert(float(response["best_ask"]) > 0)
@@ -133,7 +133,7 @@ class TestOKCOIN:
 
     def test_depth(self, mocker):
         pair = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        mocker.patch("requests.get", side_effect=OkcoinMockServer.handle_request)
         response = self.okcoin.depth(pair)
         assert("bids" in response)
         assert("asks" in response)
@@ -142,7 +142,7 @@ class TestOKCOIN:
 
     def test_candles(self, mocker):
         pair = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        mocker.patch("requests.get", side_effect=OkcoinMockServer.handle_request)
         response = self.okcoin.candles(pair, "1min")
         assert(len(response) > 0)
         for item in response:
@@ -154,7 +154,7 @@ class TestOKCOIN:
             assert(float(item.close) > 0)
 
     def test_get_balances(self, mocker):
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        mocker.patch("requests.get", side_effect=OkcoinMockServer.handle_request)
         response = self.okcoin.get_balances()
         assert(len(response) > 0)
         assert("MKR" in response)
@@ -197,7 +197,7 @@ class TestOKCOIN:
 
     def test_get_orders(self, mocker):
         pair = "mkr_eth"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        mocker.patch("requests.get", side_effect=OkcoinMockServer.handle_request)
         response = self.okcoin.get_orders(pair)
         assert (len(response) > 0)
         for order in response:
@@ -209,7 +209,7 @@ class TestOKCOIN:
 
     def test_get_all_orders(self, mocker):
         pair = "mkr_eth"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        mocker.patch("requests.get", side_effect=OkcoinMockServer.handle_request)
         response = self.okcoin.get_orders_history(pair, 99)
         assert (len(response) > 0)
         for order in response:
@@ -219,7 +219,7 @@ class TestOKCOIN:
 
     def test_order_placement_and_cancellation(self, mocker):
         pair = "mkr_usdt"
-        mocker.patch("requests.post", side_effect=OkexMockServer.handle_request)
+        mocker.patch("requests.post", side_effect=OkcoinMockServer.handle_request)
         order_id = self.okcoin.place_order(pair, True, Wad.from_number(639.3), Wad.from_number(0.15))
         assert(isinstance(order_id, str))
         assert(order_id is not None)
@@ -257,14 +257,14 @@ class TestOKCOIN:
 
     def test_get_trades(self, mocker):
         pair = "mkr_eth"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        mocker.patch("requests.get", side_effect=OkcoinMockServer.handle_request)
         response = self.okcoin.get_trades(pair)
         assert (len(response) > 0)
         TestOKCOIN.check_trades(response)
 
     def test_get_all_trades(self, mocker):
         pair = "mkr_usdt"
-        mocker.patch("requests.get", side_effect=OkexMockServer.handle_request)
+        mocker.patch("requests.get", side_effect=OkcoinMockServer.handle_request)
         response = self.okcoin.get_all_trades(pair)
         assert (len(response) > 0)
         TestOKCOIN.check_trades(response)

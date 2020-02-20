@@ -26,52 +26,6 @@ from pymaker import Address, Wad
 from pymaker.util import http_response_summary
 from typing import Optional, List
 
-
-class Order:
-    def __init__(self, order_id: str, timestamp: int, pair: str,
-                 is_sell: bool, price: Wad, amount: Wad, filled_amount: Wad):
-        assert(isinstance(order_id, str))
-        assert(isinstance(timestamp, int))
-        assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
-        assert(isinstance(filled_amount, Wad))
-
-        super().__init__(
-            order_id,
-            timestamp,
-            pair,
-            is_sell,
-            price, 
-            amount,
-            filled_amount
-        )
-
-class Trade:
-    def __init__(self,
-                 trade_id: str,
-                 timestamp: int,
-                 is_sell: bool,
-                 price: Wad,
-                 amount: Wad,
-                 amount_symbol: str):
-        assert(isinstance(trade_id, str))
-        assert(isinstance(timestamp, int))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
-        assert(isinstance(amount_symbol, str))
-
-        super().__init__(
-            trade_id, 
-            timestamp, 
-            is_sell, 
-            price, 
-            amount,
-            amount_symbol
-        )
-
 class OkcoinApi(OKEXApi):
     """Okcoin API interface.
 

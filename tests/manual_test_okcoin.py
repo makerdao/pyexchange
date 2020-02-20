@@ -23,21 +23,22 @@ from pymaker.numeric import Wad
 okcoin = OkcoinApi('https://www.okcoin.com', sys.argv[1], sys.argv[2], sys.argv[3], 9.5)
 print("Starting OkcoinAPI with the following parameters: ", sys.argv)
 
-# print(okcoin.get_markets("eth_dai"))
+# print(okcoin.get_markets())
 
-# print(okcoin.get_balances())
+print(okcoin.get_balances())
 
-# print(okcoin.get_orders('eth_dai'))
+# print(okcoin.get_orders('eth_usd'))
 
-print(okcoin.get_deposit_address('eth'))
+# TODO: figure out why deposit address is fucked
+# print(okcoin.get_deposit_address('eth'))
 
 # POST /api/v1/orders
-# print(okcoin.place_order('eth_dai', False, Wad.from_number(1500), Wad.from_number(5)))
+# print(okcoin.place_order('eth_USD', False, Wad.from_number(263.00), Wad.from_number(.05)))
 
 # DELETE /api/v1/orders/{order_id}
-# print(okcoin.cancel_order(249334, 'dai_krw'))
+# print(okcoin.cancel_order('eth_usd', '4418069365663744'))
 
 # GET /api/v1/trades
-# print(okcoin.get_trades('dai_krw'))
+# print(okcoin.get_trades('eth_usd'))
 
-# print(okcoin.get_all_trades("bat_krw"))
+# print(okcoin.get_all_trades("bat_krw"))'''
