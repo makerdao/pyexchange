@@ -29,16 +29,12 @@ print(okcoin.get_balances())
 
 # print(okcoin.get_orders('eth_usd'))
 
-# TODO: figure out why deposit address is fucked
 # print(okcoin.get_deposit_address('eth'))
 
-# POST /api/v1/orders
 # print(okcoin.place_order('eth_USD', False, Wad.from_number(263.00), Wad.from_number(.05)))
 
-# DELETE /api/v1/orders/{order_id}
 # print(okcoin.cancel_order('eth_usd', '4418069365663744'))
 
-# GET /api/v1/trades
 # print(okcoin.get_trades('eth_usd'))
 
 # print(okcoin.get_all_trades("bat_krw"))'''
