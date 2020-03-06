@@ -31,7 +31,7 @@ class TestIDEX:
         self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
         self.our_address = Address(self.web3.eth.defaultAccount)
         self.idex = IDEX.deploy(self.web3, self.our_address)
-        self.idex._contract.transact().setInactivityReleasePeriod(0)
+        self.idex._contract.functions.setInactivityReleasePeriod(0).transact()
 
         self.token = DSToken.deploy(self.web3, 'AAA')
         self.token.mint(Wad.from_number(100)).transact()
