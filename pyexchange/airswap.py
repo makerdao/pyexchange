@@ -23,6 +23,7 @@ from typing import Optional, List
 
 import requests
 from web3 import Web3
+from web3._utils.events import get_event_data
 
 from pymaker import Contract, Address
 from pymaker.numeric import Wad
