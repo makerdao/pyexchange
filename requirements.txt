@@ -6,4 +6,4 @@ websockets == 8.1.0
 kucoin-python == 2.0.5
 pyjwt == 1.7.1
 leverj_ordersigner == 0.8
-
+dydx-python == 0.7.0

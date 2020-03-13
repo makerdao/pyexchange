@@ -19,6 +19,9 @@ import logging
 from pprint import pformat
 
 from dydx.client import Client
+import dydx.constants as consts
+import dydx.util as utils
+
 from pyexchange.api import PyexAPI
 from pymaker import Wad
 from typing import List, Optional
@@ -132,19 +135,27 @@ class Trade:
 
 class DydxApi(PyexAPI):
     """Dydx API interface.
+
+        Documentation available here: https://docs.dydx.exchange/#/
+
+        Startup guide here: https://medium.com/dydxderivatives/programatic-trading-on-dydx-4c74b8e86d88
     """
 
     logger = logging.getLogger()
 
-    def __init__(self, node: str, private_key: str, timeout: float):
+    def __init__(self, node: str, private_key: str):
         assert(isinstance(node, str))
         assert(isinstance(private_key, str))
-        assert(isinstance(timeout, float))
 
+        # self.address = web3.eth.accounts.privateKeyToAccount(privateKey)['address']
         self.client = Client(private_key=private_key, node=node)
 
-    def get_symbols(self):
-        return self.client.get_pairs()
+    def get_markets(self):
+        return self.client.get_pairs()['pairs']
+
+    def get_pair(self, pair: str):
+        assert(isinstance(pair, str))
+        return next(filter(lambda symbol: symbol['name'] == pair, self.get_markets()))
 
     def get_balances(self):
         return self.client.get_my_balances()
@@ -156,22 +167,44 @@ class DydxApi(PyexAPI):
 
         return list(map(lambda item: Order.to_order(item, pair), orders['items']))
 
-    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
+    def _get_market_const(token):
+        # TODO: state machine to retrieve const based upon token
+        pass
+
+    def deposit_funds(self, token, amount: Wad):
+        market = consts.MARKET_ETH
+
+        tx_hash = self.client.eth.deposit(
+            market=market,
+            wei=utils.token_to_wei(.1, consts.MARKET_WETH)
+        )
+
+        receipt = self.client.eth.get_receipt(tx_hash)
+
+    def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
+        assert(isinstance(price, float))
+        assert(isinstance(amount, float))
 
-        # side = self.client.SIDE_SELL if is_sell else self.client.SIDE_BUY
-        #
-        # self.logger.info(f"Placing order ({side}, amount {amount} of {pair},"
-        #                  f" price {price})...")
-        #
-        # result = self.client.create_limit_order(pair, side, str(price), str(amount))
-        # order_id = result['orderId']
-        #
-        # self.logger.info(f"Placed order as #{order_id}")
-        # return order_id
+        side = 'SELL' if is_sell else 'BUY'
+
+        self.logger.info(f"Placing order ({side}, amount {amount} of {pair},"
+                         f" price {price})...")
+        
+        created_order = self.client.place_order(
+            market=pair, #structured as <MAJOR>-<Minor>
+            side=side, 
+            amount=utils.token_to_wei(amount, consts.MARKET_ETH),
+            price=price,
+            fillOrKill=False,
+            postOnly=False
+        )
+
+        order_id = created_order['id']
+        
+        self.logger.info(f"Placed order as #{order_id}")
+        return order_id
 
     def cancel_order(self, order_id: str):
         assert(isinstance(order_id, str))
@@ -197,3 +230,4 @@ class DydxApi(PyexAPI):
         trades = filter(lambda item: item['status'] == 'CONFIRMED' and item['order']['status'] == 'FILLED', result)
 
         return list(map(lambda item: Trade.from_list(item), trades))
+        
