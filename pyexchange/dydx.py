@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2019 grandizzy
+# Copyright (C) 2020 MikeHathaway
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -35,17 +35,20 @@ import dydx.util as utils
 class Order:
     def __init__(self,
                  order_id: str,
+                 timestamp: int,
                  pair: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
 
+        assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
         self.order_id = order_id
+        self.timestamp = timestamp
         self.pair = pair
         self.is_sell = is_sell
         self.price = price
@@ -73,10 +76,11 @@ class Order:
     @staticmethod
     def to_order(item: list, pair: str):
         return Order(order_id=item['id'],
+                     timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
                      pair=pair,
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['size']))
+                     amount=Wad.from_number(item['baseAmount']))
 
 
 class Trade:
@@ -85,22 +89,19 @@ class Trade:
                  timestamp: int,
                  pair: str,
                  price: Wad,
-                 amount: Wad,
-                 created_at: int):
+                 amount: Wad):
 
         assert(isinstance(trade_id, str) or (trade_id is None))
         assert(isinstance(timestamp, int))
         assert(isinstance(pair, str))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        assert(isinstance(created_at, int))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
         self.pair = pair
         self.price = price
         self.amount = amount
-        self.created_at = created_at
 
     def __eq__(self, other):
         assert(isinstance(other, Trade))
@@ -108,29 +109,25 @@ class Trade:
                self.timestamp == other.timestamp and \
                self.pair == other.pair and \
                self.price == other.price and \
-               self.amount == other.amount and \
-               self.created_at == other.created_at
+               self.amount == other.amount
 
     def __hash__(self):
         return hash((self.trade_id,
                      self.timestamp,
                      self.pair,
                      self.price,
-                     self.amount,
-                     self.created_at))
+                     self.amount))
 
     def __repr__(self):
         return pformat(vars(self))
 
     @staticmethod
     def from_list(trade):
-        print(trade)
         return Trade(trade_id=trade['uuid'],
                      timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
-                     pair=trade['order']['pair']['name'],
+                     pair=trade["market"],
                      price=Wad.from_number(trade['price']),
-                     amount=Wad(int(trade['fillAmount'])),
-                     created_at=int(dateutil.parser.parse(trade['createdAt']).timestamp()))
+                     amount=Wad(int(trade['amount'])))
 
 
 class DydxApi(PyexAPI):
@@ -157,19 +154,32 @@ class DydxApi(PyexAPI):
         assert(isinstance(pair, str))
         return next(filter(lambda symbol: symbol['name'] == pair, self.get_markets()))
 
+    def _balances_to_list(self, balances) -> List:
+        balance_list = []
+
+        for token, balance in enumerate(balances):
+            if token == 0:
+                balances[str(token)]['currency'] = 'ETH'
+            elif token == 1:
+                balances[str(token)]['currency'] = 'SAI'
+            elif token == 2:
+                balances[str(token)]['currency'] = 'USDC'
+            elif token == 3:
+                balances[str(token)]['currency'] = 'DAI'
+
+            balance_list.append(balances[str(token)])
+
+        return balance_list
+
     def get_balances(self):
-        return self.client.get_my_balances()
+        return self._balances_to_list(self.client.get_my_balances()['balances'])
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders = self.client.get_my_orders(pairs=[pair], limit=None, startingBefore=None)
+        orders = self.client.get_my_orders(market=[pair], limit=None, startingBefore=None)
 
-        return list(map(lambda item: Order.to_order(item, pair), orders['items']))
-
-    def _get_market_const(token):
-        # TODO: state machine to retrieve const based upon token
-        pass
+        return list(map(lambda item: Order.to_order(item, pair), orders['orders']))
 
     def deposit_funds(self, token, amount: Wad):
         market = consts.MARKET_ETH
@@ -199,7 +209,7 @@ class DydxApi(PyexAPI):
             price=price,
             fillOrKill=False,
             postOnly=False
-        )
+        )['order']
 
         order_id = created_order['id']
         
@@ -212,22 +222,20 @@ class DydxApi(PyexAPI):
         self.logger.info(f"Cancelling order #{order_id}...")
 
         canceled_order = self.client.cancel_order(hash=order_id)
-        return canceled_order['order']['uuid'] == order_id
+        return canceled_order['order']['id'] == order_id
 
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
 
-        result = self.client.get_my_fills(pairs=[pair])
-
-        return list(map(lambda item: Trade.from_list(item), result['fills']))
+        result = self.client.get_my_fills(market=[pair])
+        return list(map(lambda item: Trade.from_list(item), list(result['fills'])))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(page_number == 1)
 
-        result = self.client.get_fills(pairs=[pair], limit=10)['fills']
+        result = self.client.get_fills(market=[pair], limit=10)['fills']
         trades = filter(lambda item: item['status'] == 'CONFIRMED' and item['order']['status'] == 'FILLED', result)
 
         return list(map(lambda item: Trade.from_list(item), trades))
-        
