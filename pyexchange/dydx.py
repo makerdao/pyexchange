@@ -16,6 +16,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
+from decimal import Decimal
+
 from pprint import pformat
 
 from dydx.client import Client
@@ -210,21 +212,21 @@ class DydxApi(PyexAPI):
                          f" price {price})...")
 
         ## Need to retrieve the market_id used by a given token as all trades in DyDx use Wei as standard unit.
-        ## Currently orders, even involving usdc, utilize 18 decimals so can hardcode consts.MARKET_ETH
-
-        # market_id = 0
-        # if 'ETH' in pair:
-        #     market_id = consts.MARKET_ETH
-        # elif pair == 'DAI-USDC' and is_sell is True:
-        #     market_id = consts.MARKET_USDC
-        # elif pair == 'DAI-USDC' and is_sell is False:
-        #     market_id = consts.MARKET_DAI
+        market_id = 0
+        if 'ETH' in pair:
+            market_id = consts.MARKET_ETH
+        elif pair == 'DAI-USDC' and is_sell is True:
+            ## Currently orders, even involving usdc, utilize 18 decimals so can hardcode consts.MARKET_DAI
+            market_id = consts.MARKET_DAI
+            price = Decimal(f"{price}e-12")
+        elif pair == 'DAI-USDC' and is_sell is False:
+            market_id = consts.MARKET_DAI
 
         created_order = self.client.place_order(
             market=pair,  # structured as <MAJOR>-<Minor>
             side=side,
             price=price,
-            amount=utils.token_to_wei(amount, consts.MARKET_ETH),
+            amount=utils.token_to_wei(amount, market_id),
             fillOrKill=False,
             postOnly=False
         )['order']
