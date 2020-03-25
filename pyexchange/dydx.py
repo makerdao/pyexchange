@@ -40,12 +40,11 @@ class Order:
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
-
-        assert(isinstance(timestamp, int))
-        assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
+        assert (isinstance(timestamp, int))
+        assert (isinstance(pair, str))
+        assert (isinstance(is_sell, bool))
+        assert (isinstance(price, Wad))
+        assert (isinstance(amount, Wad))
 
         self.order_id = order_id
         self.timestamp = timestamp
@@ -64,11 +63,11 @@ class Order:
 
     @property
     def remaining_buy_amount(self) -> Wad:
-        return self.amount*self.price if self.is_sell else self.amount
+        return self.amount * self.price if self.is_sell else self.amount
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        return self.amount if self.is_sell else self.amount*self.price
+        return self.amount if self.is_sell else self.amount * self.price
 
     def __repr__(self):
         return pformat(vars(self))
@@ -90,12 +89,11 @@ class Trade:
                  pair: str,
                  price: Wad,
                  amount: Wad):
-
-        assert(isinstance(trade_id, str) or (trade_id is None))
-        assert(isinstance(timestamp, int))
-        assert(isinstance(pair, str))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
+        assert (isinstance(trade_id, str) or (trade_id is None))
+        assert (isinstance(timestamp, int))
+        assert (isinstance(pair, str))
+        assert (isinstance(price, Wad))
+        assert (isinstance(amount, Wad))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
@@ -104,7 +102,7 @@ class Trade:
         self.amount = amount
 
     def __eq__(self, other):
-        assert(isinstance(other, Trade))
+        assert (isinstance(other, Trade))
         return self.trade_id == other.trade_id and \
                self.timestamp == other.timestamp and \
                self.pair == other.pair and \
@@ -141,8 +139,8 @@ class DydxApi(PyexAPI):
     logger = logging.getLogger()
 
     def __init__(self, node: str, private_key: str):
-        assert(isinstance(node, str))
-        assert(isinstance(private_key, str))
+        assert (isinstance(node, str))
+        assert (isinstance(private_key, str))
 
         # self.address = web3.eth.accounts.privateKeyToAccount(privateKey)['address']
         self.client = Client(private_key=private_key, node=node)
@@ -151,7 +149,7 @@ class DydxApi(PyexAPI):
         return self.client.get_pairs()['pairs']
 
     def get_pair(self, pair: str):
-        assert(isinstance(pair, str))
+        assert (isinstance(pair, str))
         return next(filter(lambda symbol: symbol['name'] == pair, self.get_markets()))
 
     def _balances_to_list(self, balances) -> List:
@@ -175,49 +173,69 @@ class DydxApi(PyexAPI):
         return self._balances_to_list(self.client.get_my_balances()['balances'])
 
     def get_orders(self, pair: str) -> List[Order]:
-        assert(isinstance(pair, str))
+        assert (isinstance(pair, str))
 
         orders = self.client.get_my_orders(market=[pair], limit=None, startingBefore=None)
 
         return list(map(lambda item: Order.to_order(item, pair), orders['orders']))
 
-    def deposit_funds(self, token, amount: Wad):
+    def deposit_funds(self, token, amount: float):
+        assert (isinstance(amount, float))
+
         market = consts.MARKET_ETH
+
+        # determine if 6 or 18 decimals are needed for wei conversion
+        if token == 'USDC':
+            market = consts.MARKET_USDC
+        else:
+            market = consts.MARKET_ETH
 
         tx_hash = self.client.eth.deposit(
             market=market,
-            wei=utils.token_to_wei(.1, consts.MARKET_WETH)
+            wei=utils.token_to_wei(amount, market)
         )
 
         receipt = self.client.eth.get_receipt(tx_hash)
+        return receipt
 
     def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:
-        assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, float))
-        assert(isinstance(amount, float))
+        assert (isinstance(pair, str))
+        assert (isinstance(is_sell, bool))
+        assert (isinstance(price, float))
+        assert (isinstance(amount, float))
 
         side = 'SELL' if is_sell else 'BUY'
 
         self.logger.info(f"Placing order ({side}, amount {amount} of {pair},"
                          f" price {price})...")
-        
+
+        ## Need to retrieve the market_id used by a given token as all trades in DyDx use Wei as standard unit.
+        ## Currently orders, even involving usdc, utilize 18 decimals so can hardcode consts.MARKET_ETH
+
+        # market_id = 0
+        # if 'ETH' in pair:
+        #     market_id = consts.MARKET_ETH
+        # elif pair == 'DAI-USDC' and is_sell is True:
+        #     market_id = consts.MARKET_USDC
+        # elif pair == 'DAI-USDC' and is_sell is False:
+        #     market_id = consts.MARKET_DAI
+
         created_order = self.client.place_order(
-            market=pair, #structured as <MAJOR>-<Minor>
-            side=side, 
-            amount=utils.token_to_wei(amount, consts.MARKET_ETH),
+            market=pair,  # structured as <MAJOR>-<Minor>
+            side=side,
             price=price,
+            amount=utils.token_to_wei(amount, consts.MARKET_ETH),
             fillOrKill=False,
             postOnly=False
         )['order']
 
         order_id = created_order['id']
-        
+
         self.logger.info(f"Placed order as #{order_id}")
         return order_id
 
-    def cancel_order(self, order_id: str):
-        assert(isinstance(order_id, str))
+    def cancel_order(self, order_id: str) -> bool:
+        assert (isinstance(order_id, str))
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
@@ -225,15 +243,15 @@ class DydxApi(PyexAPI):
         return canceled_order['order']['id'] == order_id
 
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(pair, str))
-        assert(isinstance(page_number, int))
+        assert (isinstance(pair, str))
+        assert (isinstance(page_number, int))
 
         result = self.client.get_my_fills(market=[pair])
         return list(map(lambda item: Trade.from_list(item), list(result['fills'])))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(pair, str))
-        assert(page_number == 1)
+        assert (isinstance(pair, str))
+        assert (page_number == 1)
 
         result = self.client.get_fills(market=[pair], limit=10)['fills']
         trades = filter(lambda item: item['status'] == 'CONFIRMED' and item['order']['status'] == 'FILLED', result)

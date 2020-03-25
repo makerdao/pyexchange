@@ -17,10 +17,8 @@
 
 import json
 import os
-import re
 import time
 
-from datetime import datetime, timezone
 
 from pymaker import Wad
 from pyexchange.dydx import DydxApi, Order, Trade
@@ -42,7 +40,7 @@ class MockedResponse:
     def json(self, **kwargs):
         return json.loads(self.text)
 
-# Determines response to provide based on the requested URL
+# Determines response based upon the DyDx Client method used
 class DydxMockServer:
     # Read JSON responses from a pipe-delimited file, avoiding JSON-inside-JSON parsing complexities
     responses = {}
