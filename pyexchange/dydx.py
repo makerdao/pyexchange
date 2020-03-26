@@ -16,9 +16,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-from decimal import Decimal
+import dateutil.parser
 
+from decimal import Decimal
 from pprint import pformat
+from typing import List, Optional
 
 from dydx.client import Client
 import dydx.constants as consts
@@ -26,12 +28,7 @@ import dydx.util as utils
 
 from pyexchange.api import PyexAPI
 from pymaker import Wad
-from typing import List, Optional
 
-import dateutil.parser
-
-import dydx.constants as consts
-import dydx.util as utils
 
 
 class Order:
@@ -158,13 +155,13 @@ class DydxApi(PyexAPI):
         balance_list = []
 
         for token, balance in enumerate(balances):
-            if token == 0:
+            if token == consts.MARKET_ETH:
                 balances[str(token)]['currency'] = 'ETH'
-            elif token == 1:
+            elif token == consts.MARKET_SAI:
                 balances[str(token)]['currency'] = 'SAI'
-            elif token == 2:
+            elif token == consts.MARKET_USDC:
                 balances[str(token)]['currency'] = 'USDC'
-            elif token == 3:
+            elif token == consts.MARKET_DAI:
                 balances[str(token)]['currency'] = 'DAI'
 
             balance_list.append(balances[str(token)])
@@ -191,7 +188,6 @@ class DydxApi(PyexAPI):
             market = consts.MARKET_USDC
         else:
             market = consts.MARKET_ETH
-
         tx_hash = self.client.eth.deposit(
             market=market,
             wei=utils.token_to_wei(amount, market)
@@ -225,12 +221,11 @@ class DydxApi(PyexAPI):
         created_order = self.client.place_order(
             market=pair,  # structured as <MAJOR>-<Minor>
             side=side,
-            price=price,
+            price=Decimal(price),
             amount=utils.token_to_wei(amount, market_id),
             fillOrKill=False,
             postOnly=False
         )['order']
-
         order_id = created_order['id']
 
         self.logger.info(f"Placed order as #{order_id}")
