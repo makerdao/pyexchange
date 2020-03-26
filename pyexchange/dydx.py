@@ -176,7 +176,8 @@ class DydxApi(PyexAPI):
 
         orders = self.client.get_my_orders(market=[pair], limit=None, startingBefore=None)
 
-        return list(map(lambda item: Order.to_order(item, pair), orders['orders']))
+        open_orders = filter(lambda order: order['status'] == 'OPEN', orders['orders'])
+        return list(map(lambda item: Order.to_order(item, pair), open_orders))
 
     def deposit_funds(self, token, amount: float):
         assert (isinstance(amount, float))
