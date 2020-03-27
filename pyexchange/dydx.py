@@ -22,6 +22,8 @@ from decimal import Decimal
 from pprint import pformat
 from typing import List, Optional
 
+from eth_utils import from_wei
+
 from dydx.client import Client
 import dydx.constants as consts
 import dydx.util as utils
@@ -62,14 +64,12 @@ class Order:
 
     @property
     def remaining_buy_amount(self) -> Wad:
-        amount = Wad.from_number(from_wei(abs(int(float(self.amount))), 'ether'))
-        return amount * self.price if self.is_sell else amount
+        return self.amount * self.price if self.is_sell else self.amount
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        amount = Wad.from_number(from_wei(abs(int(float(self.amount))), 'ether'))
-        return amount if self.is_sell else amount * self.price
-        
+        return self.amount if self.is_sell else self.amount * self.price
+
     def __repr__(self):
         return pformat(vars(self))
 
@@ -80,7 +80,7 @@ class Order:
                      pair=pair,
                      is_sell=True if item['side'] == 'SELL' else False,
                      price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['baseAmount']))
+                     amount=Wad.from_number(from_wei(abs(int(float(item['baseAmount']))), 'ether')))
 
 
 class Trade:
