@@ -62,12 +62,14 @@ class Order:
 
     @property
     def remaining_buy_amount(self) -> Wad:
-        return self.amount * self.price if self.is_sell else self.amount
+        amount = Wad.from_number(from_wei(abs(int(float(self.amount))), 'ether'))
+        return amount * self.price if self.is_sell else amount
 
     @property
     def remaining_sell_amount(self) -> Wad:
-        return self.amount if self.is_sell else self.amount * self.price
-
+        amount = Wad.from_number(from_wei(abs(int(float(self.amount))), 'ether'))
+        return amount if self.is_sell else amount * self.price
+        
     def __repr__(self):
         return pformat(vars(self))
 
@@ -76,7 +78,7 @@ class Order:
         return Order(order_id=item['id'],
                      timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
                      pair=pair,
-                     is_sell=True if item['side'] == 'sell' else False,
+                     is_sell=True if item['side'] == 'SELL' else False,
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['baseAmount']))
 
