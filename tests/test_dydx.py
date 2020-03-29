@@ -19,7 +19,6 @@ import json
 import os
 import time
 
-
 from pymaker import Wad
 from pyexchange.dydx import DydxApi, Order, Trade
 
@@ -79,7 +78,7 @@ class DydxMockServer:
 class TestDydx:
     def setup_method(self):
         self.dydx = DydxApi(
-            "https://mainnet.infura.io/v3/cde88afeb2d9475aa8a7b3813e7386cf",
+            "http://localhost:8889",
             "dcba44978751342a68e81b0e487de87e52720f6f94792cc237045bce0f9d05fc"
         )
 
