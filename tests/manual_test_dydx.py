@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2019 grandizzy
+# Copyright (C) 2020 MikeHathaway
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -19,7 +19,21 @@ import sys
 
 from pyexchange.dydx import DydxApi
 
-dydx = DydxApi(sys.argv[1], sys.argv[2], 9.5)
+dydx = DydxApi(sys.argv[1], sys.argv[2])
 
-print(dydx.get_symbols())
-print(dydx.get_balances())
+# print(dydx.get_markets())
+# print(dydx.get_pair("WETH-DAI"))
+
+# print(dydx.deposit_funds("ETH", Wad.from_number(0.5)))
+
+# print(dydx.get_balances())
+# print(dydx.place_order("WETH-DAI", True, 136.0, 0.1))
+# print(dydx.place_order("DAI-USDC", False, 1.0303, 25.0))
+
+print(dydx.get_orders("WETH-DAI"))
+
+# print(dydx.get_trades("WETH-DAI"))
+
+# print(dydx.cancel_order("0x2619bd0ddaeb4a984bab6c134c132d75d7ec640f026404116ef58ab89c00be77"))
+
+
