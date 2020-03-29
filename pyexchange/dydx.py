@@ -126,8 +126,7 @@ class Trade:
                      timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
                      pair=trade["market"],
                      price=Wad.from_number(trade['price']),
-                     amount=Wad(int(trade['amount'])))
-
+                     amount=Wad.from_number(from_wei(abs(int(float(trade['amount']))), 'ether')))
 
 class DydxApi(PyexAPI):
     """Dydx API interface.
