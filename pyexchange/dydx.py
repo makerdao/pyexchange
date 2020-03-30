@@ -88,17 +88,20 @@ class Trade:
                  trade_id: str,
                  timestamp: int,
                  pair: str,
+                 is_sell: bool,
                  price: Wad,
                  amount: Wad):
         assert (isinstance(trade_id, str) or (trade_id is None))
         assert (isinstance(timestamp, int))
         assert (isinstance(pair, str))
+        assert (isinstance(is_sell, bool))
         assert (isinstance(price, Wad))
         assert (isinstance(amount, Wad))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
         self.pair = pair
+        self.is_sell = is_sell
         self.price = price
         self.amount = amount
 
@@ -107,6 +110,7 @@ class Trade:
         return self.trade_id == other.trade_id and \
                self.timestamp == other.timestamp and \
                self.pair == other.pair and \
+               self.is_sell == other.is_sell and \
                self.price == other.price and \
                self.amount == other.amount
 
@@ -114,6 +118,7 @@ class Trade:
         return hash((self.trade_id,
                      self.timestamp,
                      self.pair,
+                     self.is_sell,
                      self.price,
                      self.amount))
 
@@ -125,6 +130,7 @@ class Trade:
         return Trade(trade_id=trade['uuid'],
                      timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
                      pair=trade["market"],
+                     is_sell=True if trade['side'] == 'SELL' else False,
                      price=Wad.from_number(trade['price']),
                      amount=Wad.from_number(from_wei(abs(int(float(trade['amount']))), 'ether')))
 
@@ -251,8 +257,10 @@ class DydxApi(PyexAPI):
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert (isinstance(pair, str))
         assert (page_number == 1)
-
-        result = self.client.get_fills(market=[pair], limit=10)['fills']
-        trades = filter(lambda item: item['status'] == 'CONFIRMED' and item['order']['status'] == 'FILLED', result)
+        
+        ## Specify which side of the order book to retrieve with pair
+        # E.g WETH-DAI will not retrieve DAI-WETH
+        result = self.client.get_fills(market=[pair], limit=100)['fills']
+        trades = filter(lambda item: item['status'] == 'CONFIRMED', result)
 
         return list(map(lambda item: Trade.from_list(item), trades))
