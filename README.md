@@ -12,9 +12,9 @@ Python API wrappers for some cryptocurrency exchanges.
 Run the following commands:
 ```
 git submodule update --init --recursive
+source _virtualenv/bin/activate
 bash ./install.sh
 export PYTHONPATH=$PYTHONPATH:$PWD:$PWD/lib/pymaker
-source _virtualenv/bin/activate
 ```
 
 ## Key facts

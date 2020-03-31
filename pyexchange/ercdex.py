@@ -15,19 +15,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import logging
 import requests
 
-from pprint import pformat
-from typing import List
-
-import pymaker
-from pyexchange.zrxv2 import Order, Pair, ZrxApiV2
-from pymaker import Wad, Address
-from pymaker.util import bytes_to_hexstring, http_response_summary
+from pyexchange.zrxv2 import Order, ZrxApiV2
 from pymaker.sign import eth_sign, to_vrs
-from pymaker.token import ERC20Token
-from pymaker.zrxv2 import ZrxExchangeV2, ZrxRelayerApiV2, ERC20Asset
+from pymaker.util import bytes_to_hexstring, http_response_summary
 
 
 class ErcdexApi(ZrxApiV2):
