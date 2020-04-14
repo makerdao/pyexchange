@@ -161,17 +161,17 @@ class DydxApi(PyexAPI):
     def _balances_to_list(self, balances) -> List:
         balance_list = []
 
-        for token, balance in enumerate(balances):
-            if token == consts.MARKET_ETH:
-                balances[str(token)]['currency'] = 'ETH'
-            elif token == consts.MARKET_SAI:
-                balances[str(token)]['currency'] = 'SAI'
-            elif token == consts.MARKET_USDC:
-                balances[str(token)]['currency'] = 'USDC'
-            elif token == consts.MARKET_DAI:
-                balances[str(token)]['currency'] = 'DAI'
+        for market_id, balance in enumerate(balances):
+            if market_id == consts.MARKET_ETH:
+                balances[str(market_id)]['currency'] = 'ETH'
+            elif market_id == consts.MARKET_SAI:
+                balances[str(market_id)]['currency'] = 'SAI'
+            elif market_id == consts.MARKET_USDC:
+                balances[str(market_id)]['currency'] = 'USDC'
+            elif market_id == consts.MARKET_DAI:
+                balances[str(market_id)]['currency'] = 'DAI'
 
-            balance_list.append(balances[str(token)])
+            balance_list.append(balances[str(market_id)])
 
         return balance_list
 
@@ -189,16 +189,15 @@ class DydxApi(PyexAPI):
     def deposit_funds(self, token, amount: float):
         assert (isinstance(amount, float))
 
-        market = consts.MARKET_ETH
+        market_id = consts.MARKET_ETH
 
         # determine if 6 or 18 decimals are needed for wei conversion
         if token == 'USDC':
-            market = consts.MARKET_USDC
-        else:
-            market = consts.MARKET_ETH
+            market_id = consts.MARKET_USDC
+
         tx_hash = self.client.eth.deposit(
-            market=market,
-            wei=utils.token_to_wei(amount, market)
+            market=market_id,
+            wei=utils.token_to_wei(amount, market_id)
         )
 
         receipt = self.client.eth.get_receipt(tx_hash)
