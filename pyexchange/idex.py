@@ -124,7 +124,7 @@ class IDEX(Contract):
         Returns:
             The address of the fee account.
         """
-        return Address(self._contract.call().feeAccount())
+        return Address(self._contract.functions.feeAccount().call())
 
     def approve(self, tokens: List[ERC20Token], approval_function):
         """Approve the IDEX Exchange contract to fully access balances of specified tokens.
@@ -179,7 +179,7 @@ class IDEX(Contract):
             The raw ETH balance kept in the IDEX Exchange contract by the specified user.
         """
         assert(isinstance(user, Address))
-        return Wad(self._contract.call().balanceOf(self.ETH_TOKEN.address, user.address))
+        return Wad(self._contract.functions.balanceOf(self.ETH_TOKEN.address, user.address).call())
 
     def deposit_token(self, token: Address, amount: Wad) -> Transact:
         """Deposits `amount` of ERC20 token `token` to IDEX.
@@ -229,7 +229,7 @@ class IDEX(Contract):
         """
         assert(isinstance(token, Address))
         assert(isinstance(user, Address))
-        return Wad(self._contract.call().balanceOf(token.address, user.address))
+        return Wad(self._contract.functions.balanceOf(token.address, user.address).call())
 
     def __repr__(self):
         return f"IDEX('{self.address}')"
