@@ -21,15 +21,36 @@ import logging
 import requests
 import simplefix
 import time
+import uuid
+
+from typing import List
 
 from pyexchange.api import PyexAPI
 from pyexchange.fix import FixEngine
+from pyexchange.model import Order, Trade
 from pymaker.util import http_response_summary
+from pymaker.numeric import Wad
 
+
+class ErisxOrder(Order):
+
+    @staticmethod
+    def from_message(item):
+        return Order(order_id=item['oid'],
+                     timestamp=item['created_at'],
+                     book=item['book'],
+                     is_sell=True if item['side'] == 'sell' else False,
+                     price=Wad.from_number(item['price']),
+                     amount=Wad.from_number(item['amount']))
 
 class ErisxApi(PyexAPI):
-    """Implementation logic for interacting with the ErisX exchange, which uses FIX for order management and
-    market data, and a WebAPI for retrieving account balances."""
+    """
+    Implementation logic for interacting with the ErisX exchange, which uses FIX for order management and
+    market data, and a WebAPI for retrieving account balances.
+
+    ErisX documentation available here: https://www.erisx.com/wp-content/uploads/2020/03/ErisX-FIX-4.4-Spec-V3.3.pdf
+    """
+
 
     logger = logging.getLogger()
     timeout = 5
@@ -48,9 +69,12 @@ class ErisxApi(PyexAPI):
         assert isinstance(api_secret, str)
 
         self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password)
-        # self.fix_trading.logon()
+        self.fix_trading.logon()
+        self.fix_trading_user = fix_marketdata_user
+
         self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password)
         self.fix_marketdata.logon()
+        self.fix_marketdata_user = fix_marketdata_user
 
         self.clearing_url = clearing_url
         self.api_secret = api_secret
@@ -58,6 +82,7 @@ class ErisxApi(PyexAPI):
 
     def __del__(self):
         self.fix_marketdata.logout()
+        self.fix_trading.logout()
 
     def ticker(self, pair):
         # TODO: Subscribe to L1 data, await receipt, and then unsubscribe and return the data.
@@ -74,36 +99,105 @@ class ErisxApi(PyexAPI):
         message = self.fix_marketdata.wait_for_response('y')
         return ErisxFix.parse_security_list(message)
 
+    # filter out the response from get markets
     def get_pair(self, pair):
         # TODO: receive a 35=f (not sure how to request it)
         raise NotImplementedError()
 
+    # def get_balances(self):
+    #     # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
+    #     # They also offer a detailed /balances API, which I don't believe we need at this time.
+    #     response = self._http_post("accounts", {})
+    #     if "accounts" in response:
+    #         return response["accounts"]
+    #     else:
+    #         raise RuntimeError("Couldn't interpret response")
+
     def get_balances(self):
         # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
         # They also offer a detailed /balances API, which I don't believe we need at this time.
-        response = self._http_post("accounts", {})
-        if "accounts" in response:
-            return response["accounts"]
+        response = self._http_post("balances", {"account_id": "637abe14-6fe2-495f-9ddb-277610a2ef26"})
+        if "balances" in response:
+            return response["balances"]
         else:
             raise RuntimeError("Couldn't interpret response")
 
-    def get_orders(self, pair):
-        # TODO: Send 35=MA, await 35=8, map the executions by tag 37 (OrderID) to build order state
-        raise NotImplementedError()
+    def get_orders(self, pair: str) -> List[Order]:
+        assert(isinstance(pair, str))
 
-    def place_order(self, pair, is_sell, price, amount):
-        # TODO: Send 35=D; await the execution report confirming order is placed
-        raise NotImplementedError()
+        message = self.fix_trading.create_message('AF')
+        message.append_pair(584, uuid.uuid4())
+        message.append_pair(585, 8)
 
-    def cancel_order(self, order_id):
-        # TODO: Send 35=F
-        raise NotImplementedError()
+        message.append_pair(1, self.fix_trading_user)
+        self.fix_trading.write(message)
+        unfiltered_orders = self.fix_trading.wait_for_orders_response()
 
-    def get_trades(self, pair, page_number):
-        # TODO: like get_orders, send a 35=MA, filter out any open orders (not partially filled)
-        raise NotImplementedError()
+        return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(unfiltered_orders, 'orders')))
 
-    def get_all_trades(self, pair, page_number):
+    def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> dict:
+        assert(isinstance(pair, str))
+        message = self.fix_trading.create_message('D')
+
+        client_order_id = uuid.uuid4()
+        side = 1 if is_sell is False else 2
+
+        message.append_pair(11, client_order_id)
+        message.append_pair(21, 1)
+        message.append_pair(15, 'ETH')  # Use BTC as base currency
+        message.append_pair(54, side)
+        message.append_pair(55, pair)
+        message.append_pair(460, 2)
+        message.append_utc_timestamp(60)
+        message.append_pair(38, amount)
+        message.append_pair(40, 2)  # always place limit orders
+        message.append_pair(44, price)
+        message.append_pair(59, 1)
+
+        #  Optional
+        message.append_pair(448, self.fix_trading_user)
+
+        self.fix_trading.write(message)
+        new_order = self.fix_trading.wait_for_response('8')
+
+        order_id = {
+            'erisx': new_order.get(37).decode('utf-8'),
+            'client': new_order.get(41).decode('utf-8')
+        }
+        return order_id
+
+    def cancel_order(self, order_id: dict, symbol: str, is_sell: bool):
+        assert(isinstance(order_id, dict))
+
+        side = 1 if is_sell is False else 2
+
+        message = self.fix_trading.create_message('F')
+
+        message.append_pair(11, uuid.uuid4())
+        message.append_pair(37, order_id['erisx'])  # ErisX assigned order id
+        message.append_pair(41, order_id['client'])  # Client assigned order id
+        message.append_pair(55, symbol)
+        message.append_pair(54, side)
+        message.append_utc_timestamp(60)
+
+        self.fix_trading.write(message)
+        return self.fix_trading.wait_for_response('8')
+
+    # TODO: like get_orders, send a 35=MA, filter out any open orders (not partially filled)
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+        assert(isinstance(pair, str))
+
+        message = self.fix_trading.create_message('AF')
+        message.append_pair(584, uuid.uuid4())
+        message.append_pair(585, 8)
+        # message.append_pair(1, self.fix_trading_user)
+
+        self.fix_trading.write(message)
+        unfiltered_trades = self.fix_trading.wait_for_orders_response()
+
+        return list(map(lambda item: Trade.from_message(item), ErisxFix.parse_orders_list(unfiltered_trades, 'trades')))
+
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         raise NotImplementedError()
 
     def _http_get(self, resource: str, params=""):
@@ -124,10 +218,9 @@ class ErisxApi(PyexAPI):
         assert(isinstance(resource, str))
         assert(isinstance(params, dict))
         # Auth headers are required for all requests
-
         return self._result(
             requests.post(url=f"{self.clearing_url}{resource}",
-                          data=json.dumps(params),
+                          data=params,
                           headers=self._create_http_headers("POST", resource),
                           timeout=self.timeout))
 
@@ -186,3 +279,30 @@ class ErisxFix(FixEngine):
                 securities[symbol]["RoundLot"] = float(round_lot.decode('utf-8'))
 
         return securities
+
+    # TODO: curry this method to take switch for retrieving orders or trades
+    @staticmethod
+    def parse_orders_list(messages: List[simplefix.FixMessage], order_status: str) -> List:
+        orders = []
+        # order_count = int(m.get(911))
+
+        for message in messages:
+
+            # TODO: account for tag 15, currency the order is denominated in
+            # TODO: account for partial order fills
+            # TODO: convert from bytes back to string
+            side = 'buy' if message.get(54).decode('utf-8') == 1 else 'sell'
+            oid = message.get(37).decode('utf-8')
+            # status = 0 if m.get(39)
+
+            order = {
+                'side': side,
+                'book': message.get(55).decode('utf-8'),
+                'oid': oid,
+                'amount': message.get(38).decode('utf-8'),
+                'price': message.get(44).decode('utf-8'),
+                'created_at': message.get(60).decode('utf-8')
+            }
+            orders.append(order)
+
+        return orders

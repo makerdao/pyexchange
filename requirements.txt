@@ -8,3 +8,5 @@ pyjwt == 1.7.1
 leverj_ordersigner == 0.8
 simplefix == 1.0.12
 dydx-python == 0.7.0
+jwt == 1.0.0
+urllib3 == 1.25.7

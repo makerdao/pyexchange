@@ -21,8 +21,11 @@ import simplefix
 import time
 import queue
 import threading
+
 from datetime import datetime, timedelta
 from enum import Enum
+from typing import List
+from concurrent.futures import ProcessPoolExecutor
 
 
 class FixConnectionState(Enum):
@@ -105,6 +108,7 @@ class FixEngine:
             assert False
         finally:
             # self.lock.release()
+            await asyncio.sleep(0.3)
             pass
 
     def _handle_session_message(self, message: simplefix.FixMessage) -> bool:
@@ -162,10 +166,43 @@ class FixEngine:
         message = self.caller_loop.run_until_complete(self._wait_for_response(message_type))
         return message
 
+    # TODO: figure out how to make sure 35=0 heartbeart responses are read
+    # TODO: wait for response is blocking on the thread,
+    #  so will need to setup a read queue that can continuously pull from the queue,
+    #  until a message with 912=Y is received.
+    # Assumes always waiting for message type 8
+    async def _wait_for_orders_response(self) -> List[simplefix.FixMessage]:
+        order_messages = []
+        while True:
+            if not self.application_messages.empty():
+                message = self.application_messages.get()
+                assert isinstance(message, simplefix.FixMessage)
+
+                # for retrieving order information, check if response type is 8, that 912 = y for last message
+                if message.get(35) == b'8':
+                    if message.get(912) == 'Y'.encode('utf-8'):
+                        logging.debug(f"received final message")
+                        order_messages.append(message)
+                        return order_messages
+                    else:
+                        order_messages.append(message)
+                        logging.debug(f"order_messages: {order_messages}")
+
+            await asyncio.sleep(0.3)
+
+    # TODO: kick off a thread from within the event loop, so that the heartbeat can still be read
+    # https://stackoverflow.com/questions/28492103/how-to-combine-python-asyncio-with-threads
+    # @asyncio.coroutine
+    def wait_for_orders_response(self) -> List[simplefix.FixMessage]:
+        logging.debug(f"waiting for 35={8} Order Mass Status Request response")
+        # messages = yield from self.caller_loop.run_in_executor(ProcessPoolExecutor(4), self._wait_for_orders_response(), 5)
+        messages = self.caller_loop.run_until_complete(self._wait_for_orders_response())
+        return messages
+
     def create_message(self, message_type: str) -> simplefix.FixMessage:
         """Boilerplates a new message which the caller may populate as desired."""
         assert isinstance(message_type, str)
-        assert len(message_type) == 1
+        assert len(message_type) == 1 or len(message_type) == 2
 
         m = simplefix.FixMessage()
         m.append_pair(8, self.fix_version)

@@ -74,3 +74,6 @@ class TestErisx:
         assert ("account_id" in response[0])
         assert ("account_number" in response[0])
         assert ("balances" in response[0])
+
+    def test_place_order(self):
+        assert(1 == 1)
