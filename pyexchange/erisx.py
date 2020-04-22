@@ -133,7 +133,7 @@ class ErisxApi(PyexAPI):
         self.fix_trading.write(message)
         unfiltered_orders = self.fix_trading.wait_for_orders_response()
 
-        return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(unfiltered_orders, 'orders')))
+        return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(unfiltered_orders)))
 
     def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> dict:
         assert(isinstance(pair, str))
@@ -195,7 +195,7 @@ class ErisxApi(PyexAPI):
         self.fix_trading.write(message)
         unfiltered_trades = self.fix_trading.wait_for_orders_response()
 
-        return list(map(lambda item: Trade.from_message(item), ErisxFix.parse_orders_list(unfiltered_trades, 'trades')))
+        return list(map(lambda item: Trade.from_message(item), ErisxFix.parse_trades_list(unfiltered_trades)))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         raise NotImplementedError()
@@ -280,26 +280,70 @@ class ErisxFix(FixEngine):
 
         return securities
 
-    # TODO: curry this method to take switch for retrieving orders or trades
     @staticmethod
     def parse_orders_list(messages: List[simplefix.FixMessage], order_status: str) -> List:
         orders = []
         # order_count = int(m.get(911))
 
         for message in messages:
+            is_trade = False
+
+            order_quantity = message.get(38).decode('utf-8')
+            amount_left = message.get(151).decode('utf-8')
+
+            if order_quantity == amount_left:
+                is_trade = True
 
             # TODO: account for tag 15, currency the order is denominated in
             # TODO: account for partial order fills
             # TODO: convert from bytes back to string
             side = 'buy' if message.get(54).decode('utf-8') == 1 else 'sell'
             oid = message.get(37).decode('utf-8')
+
+            amount = order_quantity if order_status is 'order' else amount_left
             # status = 0 if m.get(39)
 
             order = {
                 'side': side,
                 'book': message.get(55).decode('utf-8'),
                 'oid': oid,
-                'amount': message.get(38).decode('utf-8'),
+                'amount': order_quantity,
+                'price': message.get(44).decode('utf-8'),
+                'created_at': message.get(60).decode('utf-8')
+            }
+            orders.append(order)
+
+        return orders
+
+
+    @staticmethod
+    def parse_trades_list(messages: List[simplefix.FixMessage]) -> List:
+        orders = []
+        # order_count = int(m.get(911))
+
+        for message in messages:
+            is_trade = False
+
+            order_quantity = message.get(38).decode('utf-8')
+            amount_left = message.get(151).decode('utf-8')
+
+            if order_quantity == amount_left:
+                is_trade = True
+
+            # TODO: account for tag 15, currency the order is denominated in
+            # TODO: account for partial order fills
+            # TODO: convert from bytes back to string
+            side = 'buy' if message.get(54).decode('utf-8') == 1 else 'sell'
+            oid = message.get(37).decode('utf-8')
+
+            amount = order_quantity if order_status is 'order' else amount_left
+            # status = 0 if m.get(39)
+
+            order = {
+                'side': side,
+                'book': message.get(55).decode('utf-8'),
+                'oid': oid,
+                'amount': amount,
                 'price': message.get(44).decode('utf-8'),
                 'created_at': message.get(60).decode('utf-8')
             }

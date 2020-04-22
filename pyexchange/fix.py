@@ -49,7 +49,7 @@ class FixEngine:
     logger = logging.getLogger()
     read_timeout = 30
     write_timeout = 10
-    read_buffer = 4096
+    read_buffer = 128
 
     def __init__(self, endpoint: str, sender_comp_id: str, target_comp_id: str, username: str, password: str,
                  fix_version="FIX.4.4", heartbeat_interval=3):
@@ -90,6 +90,7 @@ class FixEngine:
             # logging.debug("reading")
             buf = await self.reader.read(self.read_buffer)
             if not buf:
+                # logging.debug(f"empty buffer: {buf}")
                 raise ConnectionError
             self.parser.append_buffer(buf)
             message = self.parser.get_message()
@@ -153,10 +154,17 @@ class FixEngine:
         assert isinstance(message_type, str)
         assert len(message_type) == 1
 
+        reject_message_types = [b'j', b'9']
+
         while True:
             if not self.application_messages.empty():
                 message = self.application_messages.get()
                 assert isinstance(message, simplefix.FixMessage)
+
+                # handle message rejection
+                if message.get(35) in reject_message_types:
+                    return message
+
                 if message.get(35) == message_type.encode('UTF-8'):
                     return message
             await asyncio.sleep(0.3)
@@ -197,6 +205,7 @@ class FixEngine:
         logging.debug(f"waiting for 35={8} Order Mass Status Request response")
         # messages = yield from self.caller_loop.run_in_executor(ProcessPoolExecutor(4), self._wait_for_orders_response(), 5)
         messages = self.caller_loop.run_until_complete(self._wait_for_orders_response())
+        # messages = self.caller_loop.create_task(self._wait_for_orders_response())
         return messages
 
     def create_message(self, message_type: str) -> simplefix.FixMessage:
