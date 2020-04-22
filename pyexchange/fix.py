@@ -49,7 +49,7 @@ class FixEngine:
     logger = logging.getLogger()
     read_timeout = 30
     write_timeout = 10
-    read_buffer = 4096
+    read_buffer = 128
 
     def __init__(self, endpoint: str, sender_comp_id: str, target_comp_id: str, username: str, password: str,
                  fix_version="FIX.4.4", heartbeat_interval=3):
@@ -88,13 +88,13 @@ class FixEngine:
         try:
             message = None
             # logging.debug("reading")
-            buf = await self.reader.read(self.read_buffer)
-            if not buf:
-                raise ConnectionError
-            self.parser.append_buffer(buf)
-            message = self.parser.get_message()
-            if message is None:
-                return
+            while message is None:
+                buf = await self.reader.read(self.read_buffer)
+                if not buf:
+                    break
+                self.parser.append_buffer(buf)
+                message = self.parser.get_message()
+
             logging.debug(f"client received message {message}")
             assert isinstance(message, simplefix.FixMessage)
 
