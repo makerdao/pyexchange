@@ -103,21 +103,21 @@ class ErisxApi(PyexAPI):
     def get_pair(self, pair):
         return self.get_markets()[pair]
 
-    # def get_balances(self):
-    #     # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
-    #     # They also offer a detailed /balances API, which I don't believe we need at this time.
-    #     response = self._http_post("accounts", {})
-    #     if "accounts" in response:
-    #         return response["accounts"]
-    #     else:
-    #         raise RuntimeError("Couldn't interpret response")
-
     def get_balances(self):
-        response = self._http_post("balances", {"account_id": "637abe14-6fe2-495f-9ddb-277610a2ef26"})
-        if "balances" in response:
-            return response["balances"]
+        # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
+        # They also offer a detailed /balances API, which I don't believe we need at this time.
+        response = self._http_post("accounts", {})
+        if "accounts" in response:
+            return response["accounts"]
         else:
             raise RuntimeError("Couldn't interpret response")
+
+    # def get_balances(self):
+    #     response = self._http_post("balances", {"account_id": "637abe14-6fe2-495f-9ddb-277610a2ef26"})
+    #     if "balances" in response:
+    #         return response["balances"]
+    #     else:
+    #         raise RuntimeError("Couldn't interpret response")
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
