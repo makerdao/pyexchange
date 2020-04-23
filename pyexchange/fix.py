@@ -115,16 +115,16 @@ class FixEngine:
         assert isinstance(message, simplefix.FixMessage)
         is_session_message = False
 
-        if message.get(35) == b'A':  # logon response
+        if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_LOGON:
             is_session_message = True
             self.connection_state = FixConnectionState.LOGGED_IN
-        elif message.get(35) == b'1':  # send heartbeat in response to test request
+        elif message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_TEST_REQUEST:
             is_session_message = True
-            m = self.create_message('0')
-            m.append_pair(112, message.get(112))
+            m = self.create_message(simplefix.MSGTYPE_HEARTBEAT)
+            m.append_pair(simplefix.TAG_TESTREQID, message.get(simplefix.TAG_TESTREQID))
             self.write(m)
 
-        if message.get(141) == b'Y':  # handle request to reset sequence number
+        if message.get(simplefix.TAG_RESETSEQNUMFLAG) == simplefix.RESETSEQNUMFLAG_YES:
             logging.debug("resetting sequence number to 1")
             self.sequenceNum = 1
 
@@ -153,7 +153,7 @@ class FixEngine:
         assert isinstance(message_type, str)
         assert len(message_type) == 1
 
-        reject_message_types = [b'j', b'9']
+        reject_message_types = [simplefix.MSGTYPE_BUSINESS_MESSAGE_REJECT, simplefix.MSGTYPE_ORDER_CANCEL_REJECT]
 
         while True:
             if not self.application_messages.empty():
@@ -161,10 +161,10 @@ class FixEngine:
                 assert isinstance(message, simplefix.FixMessage)
 
                 # handle message rejection
-                if message.get(35) in reject_message_types:
+                if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
                     return message
 
-                if message.get(35) == message_type.encode('UTF-8'):
+                if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
                     return message
             await asyncio.sleep(0.3)
 
@@ -182,7 +182,7 @@ class FixEngine:
                 assert isinstance(message, simplefix.FixMessage)
 
                 # for retrieving order information, check if response type is 8, that 912 = y for last message
-                if message.get(35) == b'8':
+                if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
                     if message.get(912) == 'Y'.encode('utf-8'):
                         # logging.debug(f"received final message: {message}")
                         order_messages.append(message)
@@ -197,17 +197,17 @@ class FixEngine:
         messages = self.caller_loop.run_until_complete(self._wait_for_orders_response())
         return messages
 
-    def create_message(self, message_type: str) -> simplefix.FixMessage:
+    def create_message(self, message_type: bytes) -> simplefix.FixMessage:
         """Boilerplates a new message which the caller may populate as desired."""
-        assert isinstance(message_type, str)
-        assert len(message_type) == 1 or len(message_type) == 2
+        assert isinstance(message_type, bytes)
+        assert 1 <= len(message_type) <= 2
 
         m = simplefix.FixMessage()
-        m.append_pair(8, self.fix_version)
-        m.append_pair(35, message_type)
-        m.append_pair(49, self.senderCompId, header=True)
-        m.append_pair(56, self.targetCompId, header=True)
-        m.append_utc_timestamp(52, header=True)
+        m.append_pair(simplefix.TAG_BEGINSTRING, self.fix_version)
+        m.append_pair(simplefix.TAG_MSGTYPE, message_type)
+        m.append_pair(simplefix.TAG_SENDER_COMPID, self.senderCompId, header=True)
+        m.append_pair(simplefix.TAG_TARGET_COMPID, self.targetCompId, header=True)
+        m.append_utc_timestamp(simplefix.TAG_SENDING_TIME, header=True)
         return m
 
     def logon(self):
@@ -217,10 +217,10 @@ class FixEngine:
         session_thread = threading.Thread(target=self.run_session, daemon=True, name=thread_name)
         session_thread.start()
 
-        m = self.create_message('A')
-        m.append_pair(98, '0')
-        m.append_pair(108, self.heartbeat_interval)
-        m.append_pair(141, 'Y')
+        m = self.create_message(simplefix.MSGTYPE_LOGON)
+        m.append_pair(simplefix.TAG_ENCRYPTMETHOD, '0')
+        m.append_pair(simplefix.TAG_HEARTBTINT, self.heartbeat_interval)
+        m.append_pair(simplefix.TAG_RESETSEQNUMFLAG, 'Y')
         m.append_pair(553, self.username)
         m.append_pair(554, self.password)
         self.write(m)
@@ -228,7 +228,7 @@ class FixEngine:
     def logout(self):
         self.logging_out = True
         # Send a logout message
-        m = self.create_message('5')
+        m = self.create_message(simplefix.MSGTYPE_LOGOUT)
         try:
             self.caller_loop.run_until_complete(self._write_message(m))
             self.last_msg_sent = None  # Prevent heartbeat during logout
@@ -268,7 +268,7 @@ class FixEngine:
 
         if datetime.now() - self.last_msg_sent > timedelta(seconds=self.heartbeat_interval):
             try:
-                m = self.create_message('0')
+                m = self.create_message(simplefix.MSGTYPE_HEARTBEAT)
                 await self._write_message(m)
             except ConnectionError as ex:
                 logging.warning(f"Unable to send heartbeat: {ex}")
