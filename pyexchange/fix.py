@@ -153,7 +153,7 @@ class FixEngine:
         assert isinstance(message_type, str)
         assert len(message_type) == 1
 
-        reject_message_types = [b'j', b'9']
+        reject_message_types = [simplefix.MSGTYPE_BUSINESS_MESSAGE_REJECT, simplefix.MSGTYPE_ORDER_CANCEL_REJECT]
 
         while True:
             if not self.application_messages.empty():
@@ -161,10 +161,10 @@ class FixEngine:
                 assert isinstance(message, simplefix.FixMessage)
 
                 # handle message rejection
-                if message.get(35) in reject_message_types:
+                if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
                     return message
 
-                if message.get(35) == message_type.encode('UTF-8'):
+                if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
                     return message
             await asyncio.sleep(0.3)
 
@@ -182,7 +182,7 @@ class FixEngine:
                 assert isinstance(message, simplefix.FixMessage)
 
                 # for retrieving order information, check if response type is 8, that 912 = y for last message
-                if message.get(35) == b'8':
+                if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
                     if message.get(912) == 'Y'.encode('utf-8'):
                         # logging.debug(f"received final message: {message}")
                         order_messages.append(message)
@@ -203,11 +203,11 @@ class FixEngine:
         assert 1 <= len(message_type) <= 2
 
         m = simplefix.FixMessage()
-        m.append_pair(8, self.fix_version)
-        m.append_pair(35, message_type)
-        m.append_pair(49, self.senderCompId, header=True)
-        m.append_pair(56, self.targetCompId, header=True)
-        m.append_utc_timestamp(52, header=True)
+        m.append_pair(simplefix.TAG_BEGINSTRING, self.fix_version)
+        m.append_pair(simplefix.TAG_MSGTYPE, message_type)
+        m.append_pair(simplefix.TAG_SENDER_COMPID, self.senderCompId, header=True)
+        m.append_pair(simplefix.TAG_TARGET_COMPID, self.targetCompId, header=True)
+        m.append_utc_timestamp(simplefix.TAG_SENDING_TIME, header=True)
         return m
 
     def logon(self):
@@ -218,9 +218,9 @@ class FixEngine:
         session_thread.start()
 
         m = self.create_message(simplefix.MSGTYPE_LOGON)
-        m.append_pair(98, '0')
-        m.append_pair(108, self.heartbeat_interval)
-        m.append_pair(141, 'Y')
+        m.append_pair(simplefix.TAG_ENCRYPTMETHOD, '0')
+        m.append_pair(simplefix.TAG_HEARTBTINT, self.heartbeat_interval)
+        m.append_pair(simplefix.TAG_RESETSEQNUMFLAG, 'Y')
         m.append_pair(553, self.username)
         m.append_pair(554, self.password)
         self.write(m)
