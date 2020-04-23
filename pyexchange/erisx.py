@@ -101,8 +101,7 @@ class ErisxApi(PyexAPI):
 
     # filter out the response from get markets
     def get_pair(self, pair):
-        # TODO: receive a 35=f (not sure how to request it)
-        raise NotImplementedError()
+        return self.get_markets()[pair]
 
     # def get_balances(self):
     #     # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
@@ -114,8 +113,6 @@ class ErisxApi(PyexAPI):
     #         raise RuntimeError("Couldn't interpret response")
 
     def get_balances(self):
-        # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
-        # They also offer a detailed /balances API, which I don't believe we need at this time.
         response = self._http_post("balances", {"account_id": "637abe14-6fe2-495f-9ddb-277610a2ef26"})
         if "balances" in response:
             return response["balances"]
@@ -141,10 +138,11 @@ class ErisxApi(PyexAPI):
 
         client_order_id = uuid.uuid4()
         side = 1 if is_sell is False else 2
+        base_currency = pair.split('/')[0]
 
         message.append_pair(11, client_order_id)
         message.append_pair(21, 1)
-        message.append_pair(15, 'ETH')  # Use BTC as base currency
+        message.append_pair(15, base_currency)
         message.append_pair(54, side)
         message.append_pair(55, pair)
         message.append_pair(460, 2)
@@ -183,7 +181,6 @@ class ErisxApi(PyexAPI):
         self.fix_trading.write(message)
         return self.fix_trading.wait_for_response('8')
 
-    # TODO: like get_orders, send a 35=MA, filter out any open orders (not partially filled)
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
 
@@ -281,37 +278,31 @@ class ErisxFix(FixEngine):
         return securities
 
     @staticmethod
-    def parse_orders_list(messages: List[simplefix.FixMessage], order_status: str) -> List:
+    def parse_orders_list(messages: List[simplefix.FixMessage]) -> List:
         orders = []
-        # order_count = int(m.get(911))
 
         for message in messages:
-            is_trade = False
 
             order_quantity = message.get(38).decode('utf-8')
             amount_left = message.get(151).decode('utf-8')
 
-            if order_quantity == amount_left:
-                is_trade = True
+            logging.debug(f"amount left: {amount_left}")
+            if amount_left is not 0:
 
-            # TODO: account for tag 15, currency the order is denominated in
-            # TODO: account for partial order fills
-            # TODO: convert from bytes back to string
-            side = 'buy' if message.get(54).decode('utf-8') == 1 else 'sell'
-            oid = message.get(37).decode('utf-8')
+                # TODO: account for tag 15, currency the order is denominated in
+                # TODO: account for partial order fills
+                side = 'buy' if message.get(54).decode('utf-8') == 1 else 'sell'
+                oid = message.get(37).decode('utf-8')
 
-            amount = order_quantity if order_status is 'order' else amount_left
-            # status = 0 if m.get(39)
-
-            order = {
-                'side': side,
-                'book': message.get(55).decode('utf-8'),
-                'oid': oid,
-                'amount': order_quantity,
-                'price': message.get(44).decode('utf-8'),
-                'created_at': message.get(60).decode('utf-8')
-            }
-            orders.append(order)
+                order = {
+                    'side': side,
+                    'book': message.get(55).decode('utf-8'),
+                    'oid': oid,
+                    'amount': order_quantity,
+                    'price': message.get(44).decode('utf-8'),
+                    'created_at': message.get(60).decode('utf-8')
+                }
+                orders.append(order)
 
         return orders
 
@@ -319,34 +310,29 @@ class ErisxFix(FixEngine):
     @staticmethod
     def parse_trades_list(messages: List[simplefix.FixMessage]) -> List:
         orders = []
-        # order_count = int(m.get(911))
 
         for message in messages:
-            is_trade = False
 
-            order_quantity = message.get(38).decode('utf-8')
             amount_left = message.get(151).decode('utf-8')
+            filled_amount = message.get(14).decode('utf-8')
 
-            if order_quantity == amount_left:
-                is_trade = True
+            logging.debug(f"amount left: {amount_left}")
+            logging.debug(f"filled amount: {filled_amount}")
+            if amount_left is 0:
 
-            # TODO: account for tag 15, currency the order is denominated in
-            # TODO: account for partial order fills
-            # TODO: convert from bytes back to string
-            side = 'buy' if message.get(54).decode('utf-8') == 1 else 'sell'
-            oid = message.get(37).decode('utf-8')
+                # TODO: account for tag 15, currency the order is denominated in
+                # TODO: account for partial order fills
+                side = 'buy' if message.get(54).decode('utf-8') == 1 else 'sell'
+                oid = message.get(37).decode('utf-8')
 
-            amount = order_quantity if order_status is 'order' else amount_left
-            # status = 0 if m.get(39)
-
-            order = {
-                'side': side,
-                'book': message.get(55).decode('utf-8'),
-                'oid': oid,
-                'amount': amount,
-                'price': message.get(44).decode('utf-8'),
-                'created_at': message.get(60).decode('utf-8')
-            }
-            orders.append(order)
+                order = {
+                    'side': side,
+                    'book': message.get(55).decode('utf-8'),
+                    'oid': oid,
+                    'amount': filled_amount,
+                    'price': message.get(44).decode('utf-8'),
+                    'created_at': message.get(60).decode('utf-8')
+                }
+                orders.append(order)
 
         return orders

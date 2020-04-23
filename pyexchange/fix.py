@@ -88,14 +88,13 @@ class FixEngine:
         try:
             message = None
             # logging.debug("reading")
-            buf = await self.reader.read(self.read_buffer)
-            if not buf:
-                # logging.debug(f"empty buffer: {buf}")
-                raise ConnectionError
-            self.parser.append_buffer(buf)
-            message = self.parser.get_message()
-            if message is None:
-                return
+            while message is None:
+                buf = await self.reader.read(self.read_buffer)
+                if not buf:
+                    break
+                self.parser.append_buffer(buf)
+                message = self.parser.get_message()
+
             logging.debug(f"client received message {message}")
             assert isinstance(message, simplefix.FixMessage)
 
@@ -174,10 +173,6 @@ class FixEngine:
         message = self.caller_loop.run_until_complete(self._wait_for_response(message_type))
         return message
 
-    # TODO: figure out how to make sure 35=0 heartbeart responses are read
-    # TODO: wait for response is blocking on the thread,
-    #  so will need to setup a read queue that can continuously pull from the queue,
-    #  until a message with 912=Y is received.
     # Assumes always waiting for message type 8
     async def _wait_for_orders_response(self) -> List[simplefix.FixMessage]:
         order_messages = []
@@ -189,23 +184,17 @@ class FixEngine:
                 # for retrieving order information, check if response type is 8, that 912 = y for last message
                 if message.get(35) == b'8':
                     if message.get(912) == 'Y'.encode('utf-8'):
-                        logging.debug(f"received final message")
+                        # logging.debug(f"received final message: {message}")
                         order_messages.append(message)
                         return order_messages
                     else:
                         order_messages.append(message)
-                        logging.debug(f"order_messages: {order_messages}")
 
             await asyncio.sleep(0.3)
 
-    # TODO: kick off a thread from within the event loop, so that the heartbeat can still be read
-    # https://stackoverflow.com/questions/28492103/how-to-combine-python-asyncio-with-threads
-    # @asyncio.coroutine
     def wait_for_orders_response(self) -> List[simplefix.FixMessage]:
         logging.debug(f"waiting for 35={8} Order Mass Status Request response")
-        # messages = yield from self.caller_loop.run_in_executor(ProcessPoolExecutor(4), self._wait_for_orders_response(), 5)
         messages = self.caller_loop.run_until_complete(self._wait_for_orders_response())
-        # messages = self.caller_loop.create_task(self._wait_for_orders_response())
         return messages
 
     def create_message(self, message_type: str) -> simplefix.FixMessage:
