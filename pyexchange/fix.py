@@ -115,16 +115,16 @@ class FixEngine:
         assert isinstance(message, simplefix.FixMessage)
         is_session_message = False
 
-        if message.get(35) == b'A':  # logon response
+        if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_LOGON:
             is_session_message = True
             self.connection_state = FixConnectionState.LOGGED_IN
-        elif message.get(35) == b'1':  # send heartbeat in response to test request
+        elif message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_TEST_REQUEST:
             is_session_message = True
-            m = self.create_message('0')
-            m.append_pair(112, message.get(112))
+            m = self.create_message(simplefix.MSGTYPE_HEARTBEAT)
+            m.append_pair(simplefix.TAG_TESTREQID, message.get(simplefix.TAG_TESTREQID))
             self.write(m)
 
-        if message.get(141) == b'Y':  # handle request to reset sequence number
+        if message.get(simplefix.TAG_RESETSEQNUMFLAG) == simplefix.RESETSEQNUMFLAG_YES:
             logging.debug("resetting sequence number to 1")
             self.sequenceNum = 1
 
@@ -197,10 +197,10 @@ class FixEngine:
         messages = self.caller_loop.run_until_complete(self._wait_for_orders_response())
         return messages
 
-    def create_message(self, message_type: str) -> simplefix.FixMessage:
+    def create_message(self, message_type: bytes) -> simplefix.FixMessage:
         """Boilerplates a new message which the caller may populate as desired."""
-        assert isinstance(message_type, str)
-        assert len(message_type) == 1 or len(message_type) == 2
+        assert isinstance(message_type, bytes)
+        assert 1 <= len(message_type) <= 2
 
         m = simplefix.FixMessage()
         m.append_pair(8, self.fix_version)
@@ -217,7 +217,7 @@ class FixEngine:
         session_thread = threading.Thread(target=self.run_session, daemon=True, name=thread_name)
         session_thread.start()
 
-        m = self.create_message('A')
+        m = self.create_message(simplefix.MSGTYPE_LOGON)
         m.append_pair(98, '0')
         m.append_pair(108, self.heartbeat_interval)
         m.append_pair(141, 'Y')
@@ -228,7 +228,7 @@ class FixEngine:
     def logout(self):
         self.logging_out = True
         # Send a logout message
-        m = self.create_message('5')
+        m = self.create_message(simplefix.MSGTYPE_LOGOUT)
         try:
             self.caller_loop.run_until_complete(self._write_message(m))
             self.last_msg_sent = None  # Prevent heartbeat during logout
@@ -268,7 +268,7 @@ class FixEngine:
 
         if datetime.now() - self.last_msg_sent > timedelta(seconds=self.heartbeat_interval):
             try:
-                m = self.create_message('0')
+                m = self.create_message(simplefix.MSGTYPE_HEARTBEAT)
                 await self._write_message(m)
             except ConnectionError as ex:
                 logging.warning(f"Unable to send heartbeat: {ex}")

@@ -90,7 +90,7 @@ class ErisxApi(PyexAPI):
 
     def get_markets(self):
         # Send 35=x, await 35=y
-        message = self.fix_marketdata.create_message('x')
+        message = self.fix_marketdata.create_message(simplefix.MSGTYPE_SECURITY_LIST_REQUEST)
         message.append_pair(320, 0)
         message.append_pair(559, 0)
         message.append_pair(55, 'NA')
@@ -122,7 +122,7 @@ class ErisxApi(PyexAPI):
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        message = self.fix_trading.create_message('AF')
+        message = self.fix_trading.create_message(simplefix.MSGTYPE_ORDER_MASS_STATUS_REQUEST)
         message.append_pair(584, uuid.uuid4())
         message.append_pair(585, 8)
 
@@ -134,7 +134,7 @@ class ErisxApi(PyexAPI):
 
     def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> dict:
         assert(isinstance(pair, str))
-        message = self.fix_trading.create_message('D')
+        message = self.fix_trading.create_message(simplefix.MSGTYPE_NEW_ORDER_SINGLE)
 
         client_order_id = uuid.uuid4()
         side = 1 if is_sell is False else 2
@@ -169,7 +169,7 @@ class ErisxApi(PyexAPI):
 
         side = 1 if is_sell is False else 2
 
-        message = self.fix_trading.create_message('F')
+        message = self.fix_trading.create_message(simplefix.MSGTYPE_ORDER_CANCEL_REQUEST)
 
         message.append_pair(11, uuid.uuid4())
         message.append_pair(37, order_id['erisx'])  # ErisX assigned order id
@@ -184,7 +184,7 @@ class ErisxApi(PyexAPI):
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
 
-        message = self.fix_trading.create_message('AF')
+        message = self.fix_trading.create_message(simplefix.MSGTYPE_ORDER_MASS_STATUS_REQUEST)
         message.append_pair(584, uuid.uuid4())
         message.append_pair(585, 8)
         # message.append_pair(1, self.fix_trading_user)
