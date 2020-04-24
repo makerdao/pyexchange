@@ -38,7 +38,7 @@ class ErisxOrder(Order):
     def from_message(item):
         return Order(order_id=item['oid'],
                      timestamp=item['created_at'],
-                     book=item['book'],
+                     pair=item['book'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['amount']))
@@ -93,7 +93,7 @@ class ErisxApi(PyexAPI):
         message = self.fix_marketdata.create_message(simplefix.MSGTYPE_SECURITY_LIST_REQUEST)
         message.append_pair(320, 0)
         message.append_pair(559, 0)
-        message.append_pair(55, 'NA')
+        message.append_pair(simplefix.TAG_SYMBOL, 'NA')
         message.append_pair(460, 2)
         self.fix_marketdata.write(message)
         message = self.fix_marketdata.wait_for_response('y')
@@ -103,21 +103,21 @@ class ErisxApi(PyexAPI):
     def get_pair(self, pair):
         return self.get_markets()[pair]
 
-    def get_balances(self):
-        # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
-        # They also offer a detailed /balances API, which I don't believe we need at this time.
-        response = self._http_post("accounts", {})
-        if "accounts" in response:
-            return response["accounts"]
-        else:
-            raise RuntimeError("Couldn't interpret response")
-
     # def get_balances(self):
-    #     response = self._http_post("balances", {"account_id": "637abe14-6fe2-495f-9ddb-277610a2ef26"})
-    #     if "balances" in response:
-    #         return response["balances"]
+    #     # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
+    #     # They also offer a detailed /balances API, which I don't believe we need at this time.
+    #     response = self._http_post("accounts", {})
+    #     if "accounts" in response:
+    #         return response["accounts"][0]['balances']
     #     else:
     #         raise RuntimeError("Couldn't interpret response")
+
+    def get_balances(self):
+        response = self._http_post("balances", {"account_id": "637abe14-6fe2-495f-9ddb-277610a2ef26"})
+        if "balances" in response:
+            return response["balances"]
+        else:
+            raise RuntimeError("Couldn't interpret response")
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
@@ -126,6 +126,7 @@ class ErisxApi(PyexAPI):
         message.append_pair(584, uuid.uuid4())
         message.append_pair(585, 8)
 
+        # OPTIONAL
         message.append_pair(1, self.fix_trading_user)
         self.fix_trading.write(message)
         unfiltered_orders = self.fix_trading.wait_for_orders_response()
@@ -140,17 +141,17 @@ class ErisxApi(PyexAPI):
         side = 1 if is_sell is False else 2
         base_currency = pair.split('/')[0]
 
-        message.append_pair(11, client_order_id)
-        message.append_pair(21, 1)
-        message.append_pair(15, base_currency)
-        message.append_pair(54, side)
-        message.append_pair(55, pair)
+        message.append_pair(simplefix.TAG_CLORDID, client_order_id)
+        message.append_pair(simplefix.TAG_HANDLINST, simplefix.HANDLINST_AUTO_PRIVATE)
+        message.append_pair(simplefix.TAG_CURRENCY, base_currency)
+        message.append_pair(simplefix.TAG_SIDE, side)
+        message.append_pair(simplefix.TAG_SYMBOL, pair)
         message.append_pair(460, 2)
-        message.append_utc_timestamp(60)
-        message.append_pair(38, amount)
-        message.append_pair(40, 2)  # always place limit orders
-        message.append_pair(44, price)
-        message.append_pair(59, 1)
+        message.append_utc_timestamp(simplefix.TAG_TRANSACTTIME)
+        message.append_pair(simplefix.TAG_ORDERQTY, amount)
+        message.append_pair(simplefix.TAG_ORDTYPE, simplefix.ORDTYPE_LIMIT)  # always place limit orders
+        message.append_pair(simplefix.TAG_PRICE, price)
+        message.append_pair(simplefix.TAG_TIMEINFORCE, simplefix.TIMEINFORCE_GOOD_TILL_CANCEL)
 
         #  Optional
         message.append_pair(448, self.fix_trading_user)
@@ -159,24 +160,24 @@ class ErisxApi(PyexAPI):
         new_order = self.fix_trading.wait_for_response('8')
 
         order_id = {
-            'erisx': new_order.get(37).decode('utf-8'),
-            'client': new_order.get(41).decode('utf-8')
+            'erisx': new_order.get(simplefix.TAG_ORDERID).decode('utf-8'),
+            'client': new_order.get(simplefix.TAG_ORIGCLORDID).decode('utf-8')
         }
         return order_id
 
-    def cancel_order(self, order_id: dict, symbol: str, is_sell: bool):
+    def cancel_order(self, order_id: dict, pair: str, is_sell: bool):
         assert(isinstance(order_id, dict))
 
         side = 1 if is_sell is False else 2
 
         message = self.fix_trading.create_message(simplefix.MSGTYPE_ORDER_CANCEL_REQUEST)
 
-        message.append_pair(11, uuid.uuid4())
-        message.append_pair(37, order_id['erisx'])  # ErisX assigned order id
-        message.append_pair(41, order_id['client'])  # Client assigned order id
-        message.append_pair(55, symbol)
-        message.append_pair(54, side)
-        message.append_utc_timestamp(60)
+        message.append_pair(simplefix.TAG_CLORDID, uuid.uuid4())
+        message.append_pair(simplefix.TAG_ORDERID, order_id['erisx'])  # ErisX assigned order id
+        message.append_pair(simplefix.TAG_ORIGCLORDID, order_id['client'])  # Client assigned order id
+        message.append_pair(simplefix.TAG_SYMBOL, pair)
+        message.append_pair(simplefix.TAG_SIDE, side)
+        message.append_utc_timestamp(simplefix.TAG_TRANSACTTIME)
 
         self.fix_trading.write(message)
         return self.fix_trading.wait_for_response('8')
@@ -256,12 +257,12 @@ class ErisxFix(FixEngine):
         for i in range(1, security_count):
 
             # Required fields
-            symbol = m.get(55, i).decode('utf-8')
+            symbol = m.get(simplefix.TAG_SYMBOL, i).decode('utf-8')
             securities[symbol] = {
                 "Product": m.get(460, i).decode('utf-8'),
                 "MinPriceIncrement": float(m.get(969, i).decode('utf-8')),
-                "SecurityDesc": m.get(107, i).decode('utf-8'),
-                "Currency": m.get(15, i).decode('utf-8')
+                "SecurityDesc": m.get(simplefix.TAG_SECURITYDESC, i).decode('utf-8'),
+                "Currency": m.get(simplefix.TAG_CURRENCY, i).decode('utf-8')
             }
 
             # Optional fields
@@ -283,7 +284,7 @@ class ErisxFix(FixEngine):
 
         for message in messages:
 
-            order_quantity = message.get(38).decode('utf-8')
+            order_quantity = message.get(simplefix.TAG_ORDERQTY).decode('utf-8')
             amount_left = message.get(151).decode('utf-8')
 
             logging.debug(f"amount left: {amount_left}")
@@ -291,16 +292,16 @@ class ErisxFix(FixEngine):
 
                 # TODO: account for tag 15, currency the order is denominated in
                 # TODO: account for partial order fills
-                side = 'buy' if message.get(54).decode('utf-8') == 1 else 'sell'
-                oid = message.get(37).decode('utf-8')
+                side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == 1 else 'sell'
+                oid = message.get(simplefix.TAG_ORDERID).decode('utf-8')
 
                 order = {
                     'side': side,
-                    'book': message.get(55).decode('utf-8'),
+                    'book': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
                     'oid': oid,
                     'amount': order_quantity,
-                    'price': message.get(44).decode('utf-8'),
-                    'created_at': message.get(60).decode('utf-8')
+                    'price': message.get(simplefix.TAG_PRICE).decode('utf-8'),
+                    'created_at': message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')
                 }
                 orders.append(order)
 
@@ -314,7 +315,7 @@ class ErisxFix(FixEngine):
         for message in messages:
 
             amount_left = message.get(151).decode('utf-8')
-            filled_amount = message.get(14).decode('utf-8')
+            filled_amount = message.get(simplefix.TAG_CUMQTY).decode('utf-8')
 
             logging.debug(f"amount left: {amount_left}")
             logging.debug(f"filled amount: {filled_amount}")
@@ -322,16 +323,16 @@ class ErisxFix(FixEngine):
 
                 # TODO: account for tag 15, currency the order is denominated in
                 # TODO: account for partial order fills
-                side = 'buy' if message.get(54).decode('utf-8') == 1 else 'sell'
-                oid = message.get(37).decode('utf-8')
+                side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == 1 else 'sell'
+                oid = message.get(simplefix.TAG_ORDERID).decode('utf-8')
 
                 order = {
                     'side': side,
-                    'book': message.get(55).decode('utf-8'),
+                    'book': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
                     'oid': oid,
                     'amount': filled_amount,
-                    'price': message.get(44).decode('utf-8'),
-                    'created_at': message.get(60).decode('utf-8')
+                    'price': message.get(simplefix.TAG_PRICE).decode('utf-8'),
+                    'created_at': message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')
                 }
                 orders.append(order)
 

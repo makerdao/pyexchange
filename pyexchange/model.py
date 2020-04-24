@@ -45,11 +45,11 @@ class Order:
     def __init__(self,
                  order_id: str,
                  timestamp: str,
-                 book: str,
+                 pair: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
-        assert (isinstance(book, str))
+        assert (isinstance(pair, str))
         assert (isinstance(timestamp, str))
         assert (isinstance(is_sell, bool))
         assert (isinstance(price, Wad))
@@ -57,7 +57,7 @@ class Order:
 
         self.order_id = order_id
         self.timestamp = timestamp
-        self.book = book
+        self.pair = pair
         self.is_sell = is_sell
         self.price = price
         self.amount = amount
