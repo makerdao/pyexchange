@@ -44,13 +44,13 @@ class Candle:
 class Order:
     def __init__(self,
                  order_id: str,
-                 timestamp: str,
+                 timestamp: int,
                  pair: str,
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
         assert (isinstance(pair, str))
-        assert (isinstance(timestamp, str))
+        assert (isinstance(timestamp, int))
         assert (isinstance(is_sell, bool))
         assert (isinstance(price, Wad))
         assert (isinstance(amount, Wad))
@@ -100,13 +100,13 @@ class Order:
 class Trade:
     def __init__(self,
                  trade_id: str,
-                 timestamp: str,
+                 timestamp: int,
                  pair: Optional[str],
                  is_sell: bool,
                  price: Wad,
                  amount: Wad):
         assert(isinstance(trade_id, str))
-        assert(isinstance(timestamp, str))
+        assert(isinstance(timestamp, int))
         assert(isinstance(pair, str) or (pair is None))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))

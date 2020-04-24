@@ -22,6 +22,7 @@ import requests
 import simplefix
 import time
 import uuid
+import datetime
 
 from typing import List
 
@@ -295,13 +296,19 @@ class ErisxFix(FixEngine):
                 side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == 1 else 'sell'
                 oid = message.get(simplefix.TAG_ORDERID).decode('utf-8')
 
+                # Retrieve datetime and strip off nanoseconds
+                created_at = message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')[:-3]
+                timestamp = datetime.datetime.timestamp(datetime.datetime.strptime(created_at, '%Y%m%d-%H:%M:%S.%f'))
+                # make timestamp an int with microseconds
+                formatted_timestamp = int(timestamp * 1000000)
+
                 order = {
                     'side': side,
                     'book': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
                     'oid': oid,
                     'amount': order_quantity,
                     'price': message.get(simplefix.TAG_PRICE).decode('utf-8'),
-                    'created_at': message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')
+                    'created_at': formatted_timestamp
                 }
                 orders.append(order)
 
@@ -326,13 +333,19 @@ class ErisxFix(FixEngine):
                 side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == 1 else 'sell'
                 oid = message.get(simplefix.TAG_ORDERID).decode('utf-8')
 
+                # Retrieve datetime and strip off nanoseconds
+                created_at = message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')[:-3]
+                timestamp = datetime.datetime.timestamp(datetime.datetime.strptime(created_at, '%Y%m%d-%H:%M:%S.%f'))
+                # make timestamp an int with microseconds
+                formatted_timestamp = int(timestamp * 1000000)
+
                 order = {
                     'side': side,
                     'book': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
                     'oid': oid,
                     'amount': filled_amount,
                     'price': message.get(simplefix.TAG_PRICE).decode('utf-8'),
-                    'created_at': message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')
+                    'created_at': formatted_timestamp
                 }
                 orders.append(order)
 
