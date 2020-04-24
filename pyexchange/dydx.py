@@ -29,52 +29,14 @@ import dydx.constants as consts
 import dydx.util as utils
 
 from pyexchange.api import PyexAPI
+from pyexchange.model import Order, Trade
 from pymaker import Wad
 
 
-
-class Order:
-    def __init__(self,
-                 order_id: str,
-                 timestamp: int,
-                 pair: str,
-                 is_sell: bool,
-                 price: Wad,
-                 amount: Wad):
-        assert (isinstance(timestamp, int))
-        assert (isinstance(pair, str))
-        assert (isinstance(is_sell, bool))
-        assert (isinstance(price, Wad))
-        assert (isinstance(amount, Wad))
-
-        self.order_id = order_id
-        self.timestamp = timestamp
-        self.pair = pair
-        self.is_sell = is_sell
-        self.price = price
-        self.amount = amount
-
-    @property
-    def sell_to_buy_price(self) -> Wad:
-        return self.price
-
-    @property
-    def buy_to_sell_price(self) -> Wad:
-        return self.price
-
-    @property
-    def remaining_buy_amount(self) -> Wad:
-        return self.amount * self.price if self.is_sell else self.amount
-
-    @property
-    def remaining_sell_amount(self) -> Wad:
-        return self.amount if self.is_sell else self.amount * self.price
-
-    def __repr__(self):
-        return pformat(vars(self))
+class DydxOrder(Order):
 
     @staticmethod
-    def to_order(item: list, pair: str):
+    def from_message(item: list, pair: str):
         return Order(order_id=item['id'],
                      timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
                      pair=pair,
@@ -83,56 +45,17 @@ class Order:
                      amount=Wad.from_number(from_wei(abs(int(float(item['baseAmount']))), 'ether')))
 
 
-class Trade:
-    def __init__(self,
-                 trade_id: str,
-                 timestamp: int,
-                 pair: str,
-                 is_sell: bool,
-                 price: Wad,
-                 amount: Wad):
-        assert (isinstance(trade_id, str) or (trade_id is None))
-        assert (isinstance(timestamp, int))
-        assert (isinstance(pair, str))
-        assert (isinstance(is_sell, bool))
-        assert (isinstance(price, Wad))
-        assert (isinstance(amount, Wad))
-
-        self.trade_id = trade_id
-        self.timestamp = timestamp
-        self.pair = pair
-        self.is_sell = is_sell
-        self.price = price
-        self.amount = amount
-
-    def __eq__(self, other):
-        assert (isinstance(other, Trade))
-        return self.trade_id == other.trade_id and \
-               self.timestamp == other.timestamp and \
-               self.pair == other.pair and \
-               self.is_sell == other.is_sell and \
-               self.price == other.price and \
-               self.amount == other.amount
-
-    def __hash__(self):
-        return hash((self.trade_id,
-                     self.timestamp,
-                     self.pair,
-                     self.is_sell,
-                     self.price,
-                     self.amount))
-
-    def __repr__(self):
-        return pformat(vars(self))
+class DydxTrade(Trade):
 
     @staticmethod
-    def from_list(trade):
+    def from_message(trade):
         return Trade(trade_id=trade['uuid'],
                      timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
                      pair=trade["market"],
                      is_sell=True if trade['side'] == 'SELL' else False,
                      price=Wad.from_number(trade['price']),
                      amount=Wad.from_number(from_wei(abs(int(float(trade['amount']))), 'ether')))
+
 
 class DydxApi(PyexAPI):
     """Dydx API interface.
@@ -148,7 +71,6 @@ class DydxApi(PyexAPI):
         assert (isinstance(node, str))
         assert (isinstance(private_key, str))
 
-        # self.address = web3.eth.accounts.privateKeyToAccount(privateKey)['address']
         self.client = Client(private_key=private_key, node=node)
 
     def get_markets(self):
@@ -158,20 +80,21 @@ class DydxApi(PyexAPI):
         assert (isinstance(pair, str))
         return next(filter(lambda symbol: symbol['name'] == pair, self.get_markets()))
 
+    # format balances response into a shape expected by keepers 
     def _balances_to_list(self, balances) -> List:
         balance_list = []
 
-        for market_id, balance in enumerate(balances):
-            if market_id == consts.MARKET_ETH:
-                balances[str(market_id)]['currency'] = 'ETH'
-            elif market_id == consts.MARKET_SAI:
-                balances[str(market_id)]['currency'] = 'SAI'
-            elif market_id == consts.MARKET_USDC:
-                balances[str(market_id)]['currency'] = 'USDC'
-            elif market_id == consts.MARKET_DAI:
-                balances[str(market_id)]['currency'] = 'DAI'
+        for i, (market_id, balance) in enumerate(balances.items()):
+            if int(market_id) == consts.MARKET_ETH:
+                balance['currency'] = 'ETH'
+            elif int(market_id) == consts.MARKET_SAI:
+                balance['currency'] = 'SAI'
+            elif int(market_id) == consts.MARKET_USDC:
+                balance['currency'] = 'USDC'
+            elif int(market_id) == consts.MARKET_DAI:
+                balance['currency'] = 'DAI'
 
-            balance_list.append(balances[str(market_id)])
+            balance_list.append(balance)
 
         return balance_list
 
@@ -184,7 +107,7 @@ class DydxApi(PyexAPI):
         orders = self.client.get_my_orders(market=[pair], limit=None, startingBefore=None)
 
         open_orders = filter(lambda order: order['status'] == 'OPEN', orders['orders'])
-        return list(map(lambda item: Order.to_order(item, pair), open_orders))
+        return list(map(lambda item: DydxOrder.from_message(item, pair), open_orders))
 
     def deposit_funds(self, token, amount: float):
         assert (isinstance(amount, float))
@@ -251,7 +174,7 @@ class DydxApi(PyexAPI):
         assert (isinstance(page_number, int))
 
         result = self.client.get_my_fills(market=[pair])
-        return list(map(lambda item: Trade.from_list(item), list(result['fills'])))
+        return list(map(lambda item: DydxTrade.from_message(item), list(result['fills'])))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert (isinstance(pair, str))
@@ -262,4 +185,4 @@ class DydxApi(PyexAPI):
         result = self.client.get_fills(market=[pair], limit=100)['fills']
         trades = filter(lambda item: item['status'] == 'CONFIRMED', result)
 
-        return list(map(lambda item: Trade.from_list(item), trades))
+        return list(map(lambda item: DydxTrade.from_message(item), trades))
