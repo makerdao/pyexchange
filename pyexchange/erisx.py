@@ -134,7 +134,7 @@ class ErisxApi(PyexAPI):
 
         return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(unfiltered_orders)))
 
-    def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> dict:
+    def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:
         assert(isinstance(pair, str))
         message = self.fix_trading.create_message(simplefix.MSGTYPE_NEW_ORDER_SINGLE)
 
@@ -160,22 +160,23 @@ class ErisxApi(PyexAPI):
         self.fix_trading.write(message)
         new_order = self.fix_trading.wait_for_response('8')
 
-        order_id = {
-            'erisx': new_order.get(simplefix.TAG_ORDERID).decode('utf-8'),
-            'client': new_order.get(simplefix.TAG_ORIGCLORDID).decode('utf-8')
-        }
+        erisx_oid = new_order.get(simplefix.TAG_ORDERID).decode('utf-8')
+        client_oid = new_order.get(simplefix.TAG_CLORDID).decode('utf-8')
+        order_id = f"{erisx_oid}|{client_oid}"
+
         return order_id
 
-    def cancel_order(self, order_id: dict, pair: str, is_sell: bool):
+    def cancel_order(self, order_id: str, pair: str, is_sell: bool):
         assert(isinstance(order_id, dict))
 
         side = 1 if is_sell is False else 2
-
+        erisx_oid = order_id.split('|')[0]
+        client_oid = order_id.split('|')[1]
         message = self.fix_trading.create_message(simplefix.MSGTYPE_ORDER_CANCEL_REQUEST)
 
         message.append_pair(simplefix.TAG_CLORDID, uuid.uuid4())
-        message.append_pair(simplefix.TAG_ORDERID, order_id['erisx'])  # ErisX assigned order id
-        message.append_pair(simplefix.TAG_ORIGCLORDID, order_id['client'])  # Client assigned order id
+        message.append_pair(simplefix.TAG_ORDERID, erisx_oid)
+        message.append_pair(simplefix.TAG_ORIGCLORDID, client_oid)
         message.append_pair(simplefix.TAG_SYMBOL, pair)
         message.append_pair(simplefix.TAG_SIDE, side)
         message.append_utc_timestamp(simplefix.TAG_TRANSACTTIME)
@@ -285,6 +286,12 @@ class ErisxFix(FixEngine):
 
         for message in messages:
 
+            erisx_oid = message.get(simplefix.TAG_ORDERID).decode('utf-8')
+
+            # Handle None response
+            if erisx_oid == 'UNKNOWN':
+                continue
+
             order_quantity = message.get(simplefix.TAG_ORDERQTY).decode('utf-8')
             amount_left = message.get(151).decode('utf-8')
 
@@ -293,8 +300,8 @@ class ErisxFix(FixEngine):
 
                 # TODO: account for tag 15, currency the order is denominated in
                 # TODO: account for partial order fills
-                side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == 1 else 'sell'
-                oid = message.get(simplefix.TAG_ORDERID).decode('utf-8')
+                side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == '1' else 'sell'
+                order_id = f"{erisx_oid}|{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
 
                 # Retrieve datetime and strip off nanoseconds
                 created_at = message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')[:-3]
@@ -305,7 +312,7 @@ class ErisxFix(FixEngine):
                 order = {
                     'side': side,
                     'book': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
-                    'oid': oid,
+                    'oid': order_id,
                     'amount': order_quantity,
                     'price': message.get(simplefix.TAG_PRICE).decode('utf-8'),
                     'created_at': formatted_timestamp
@@ -321,6 +328,12 @@ class ErisxFix(FixEngine):
 
         for message in messages:
 
+            erisx_oid = message.get(simplefix.TAG_ORDERID).decode('utf-8')
+
+            # Handle None response
+            if erisx_oid == 'UNKNOWN':
+                continue
+
             amount_left = message.get(151).decode('utf-8')
             filled_amount = message.get(simplefix.TAG_CUMQTY).decode('utf-8')
 
@@ -330,8 +343,8 @@ class ErisxFix(FixEngine):
 
                 # TODO: account for tag 15, currency the order is denominated in
                 # TODO: account for partial order fills
-                side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == 1 else 'sell'
-                oid = message.get(simplefix.TAG_ORDERID).decode('utf-8')
+                side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == '1' else 'sell'
+                order_id = f"{erisx_oid}|{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
 
                 # Retrieve datetime and strip off nanoseconds
                 created_at = message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')[:-3]
@@ -342,7 +355,7 @@ class ErisxFix(FixEngine):
                 order = {
                     'side': side,
                     'book': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
-                    'oid': oid,
+                    'oid': order_id,
                     'amount': filled_amount,
                     'price': message.get(simplefix.TAG_PRICE).decode('utf-8'),
                     'created_at': formatted_timestamp

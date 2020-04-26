@@ -95,6 +95,10 @@ class FixEngine:
                 self.parser.append_buffer(buf)
                 message = self.parser.get_message()
 
+            # Handle None responses from order mass status requests
+            if message is None:
+                return
+
             logging.debug(f"client received message {message}")
             assert isinstance(message, simplefix.FixMessage)
 
