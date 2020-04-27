@@ -151,7 +151,7 @@ class DydxApi(PyexAPI):
         created_order = self.client.place_order(
             market=pair,  # structured as <MAJOR>-<Minor>
             side=side,
-            price=Decimal(price),
+            price=round(Decimal(price), 2),
             amount=utils.token_to_wei(amount, market_id),
             fillOrKill=False,
             postOnly=False
