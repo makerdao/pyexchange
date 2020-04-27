@@ -74,11 +74,11 @@ class DydxApi(PyexAPI):
         self.client = Client(private_key=private_key, node=node)
 
     def get_markets(self):
-        return self.client.get_pairs()['pairs']
+        return self.client.get_markets()['markets']
 
     def get_pair(self, pair: str):
         assert (isinstance(pair, str))
-        return next(filter(lambda symbol: symbol['name'] == pair, self.get_markets()))
+        return self.get_markets()[pair]
 
     # format balances response into a shape expected by keepers 
     def _balances_to_list(self, balances) -> List:
@@ -137,21 +137,16 @@ class DydxApi(PyexAPI):
         self.logger.info(f"Placing order ({side}, amount {amount} of {pair},"
                          f" price {price})...")
 
-        ## Need to retrieve the market_id used by a given token as all trades in DyDx use Wei as standard unit.
-        market_id = 0
-        if 'ETH' in pair:
-            market_id = consts.MARKET_ETH
-        elif pair == 'DAI-USDC' and is_sell is True:
-            ## Currently orders, even involving usdc, utilize 18 decimals so can hardcode consts.MARKET_DAI
-            market_id = consts.MARKET_DAI
-            price = Decimal(f"{price}e-12")
-        elif pair == 'DAI-USDC' and is_sell is False:
-            market_id = consts.MARKET_DAI
+        ## Retrieve market information for given pair
+        market_info = self.get_pair(pair)
+        tick_size = Decimal(market_info['minimumTickSize']).as_tuple().exponent
+        # As market_id is only used for amount, use baseCurrency instead of quoteCurrency
+        market_id = market_info['baseCurrency']['soloMarketId']
 
         created_order = self.client.place_order(
             market=pair,  # structured as <MAJOR>-<Minor>
             side=side,
-            price=round(Decimal(price), 2),
+            price=round(Decimal(price), tick_size),
             amount=utils.token_to_wei(amount, market_id),
             fillOrKill=False,
             postOnly=False
