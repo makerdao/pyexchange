@@ -91,7 +91,7 @@ class Order:
     def from_message(item):
         return Order(order_id=item['oid'],
                      timestamp=item['created_at'],
-                     book=item['book'],
+                     pair=item['book'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['amount']))
