@@ -80,6 +80,25 @@ class DydxApi(PyexAPI):
         assert (isinstance(pair, str))
         return self.get_markets()[pair]
 
+    # DyDx primarily uses Wei for units
+    def _convert_balance_to_wad(self, balance) -> dict:
+        wei_balance = float(balance['wei'])
+
+        ## DyDx can have negative balances from native margin trading
+        is_negative = False
+        if wei_balance < 0:
+           is_negative = True
+
+        converted_balance = from_wei(abs(int(wei_balance)), 'ether')
+
+        # reconvert Wad to negative value if balance is negative
+        if is_negative == True:
+            converted_balance = converted_balance * -1
+
+        balance['wad'] = Wad.from_number(converted_balance)
+
+        return balance
+
     # format balances response into a shape expected by keepers 
     def _balances_to_list(self, balances) -> List:
         balance_list = []
@@ -94,7 +113,7 @@ class DydxApi(PyexAPI):
             elif int(market_id) == consts.MARKET_DAI:
                 balance['currency'] = 'DAI'
 
-            balance_list.append(balance)
+            balance_list.append(self._convert_balance_to_wad(balance))
 
         return balance_list
 
