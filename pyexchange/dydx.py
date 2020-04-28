@@ -139,7 +139,7 @@ class DydxApi(PyexAPI):
 
         ## Retrieve market information for given pair
         market_info = self.get_pair(pair)
-        tick_size = Decimal(market_info['minimumTickSize']).as_tuple().exponent
+        tick_size = abs(Decimal(market_info['minimumTickSize']).as_tuple().exponent)
         # As market_id is only used for amount, use baseCurrency instead of quoteCurrency
         market_id = market_info['baseCurrency']['soloMarketId']
 
