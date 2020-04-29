@@ -36,24 +36,32 @@ from pymaker import Wad
 class DydxOrder(Order):
 
     @staticmethod
-    def from_message(item: list, pair: str):
+    def from_message(item: list, pair: str) -> Order:
+        price = Wad.from_number(item['price'])
+        if 'USDC' in pair:
+            price = Wad.from_number(float(item['price']) * 10**12)
+
         return Order(order_id=item['id'],
                      timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
                      pair=pair,
                      is_sell=True if item['side'] == 'SELL' else False,
-                     price=Wad.from_number(item['price']),
+                     price=price,
                      amount=Wad.from_number(from_wei(abs(int(float(item['baseAmount']))), 'ether')))
 
 
 class DydxTrade(Trade):
 
     @staticmethod
-    def from_message(trade):
+    def from_message(trade, pair: str) -> Trade:
+        price = Wad.from_number(item['price'])
+        if 'USDC' in pair:
+            price = Wad.from_number(float(item['price']) * 10**12)
+
         return Trade(trade_id=trade['uuid'],
                      timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
                      pair=trade["market"],
                      is_sell=True if trade['side'] == 'SELL' else False,
-                     price=Wad.from_number(trade['price']),
+                     price=price,
                      amount=Wad.from_number(from_wei(abs(int(float(trade['amount']))), 'ether')))
 
 
@@ -80,8 +88,7 @@ class DydxApi(PyexAPI):
         assert (isinstance(pair, str))
         return self.get_markets()[pair]
 
-    # DyDx primarily uses Wei for units
-    def _convert_balance_to_wad(self, balance) -> dict:
+    def _convert_balance_to_wad(self, balance: dict, decimals: int) -> dict:
         wei_balance = float(balance['wei'])
 
         ## DyDx can have negative balances from native margin trading
@@ -90,6 +97,9 @@ class DydxApi(PyexAPI):
            is_negative = True
 
         converted_balance = from_wei(abs(int(wei_balance)), 'ether')
+
+        if decimals == 6:
+            converted_balance = from_wei(abs(int(wei_balance)), 'mwei')            
 
         # reconvert Wad to negative value if balance is negative
         if is_negative == True:
@@ -102,6 +112,7 @@ class DydxApi(PyexAPI):
     # format balances response into a shape expected by keepers 
     def _balances_to_list(self, balances) -> List:
         balance_list = []
+        decimals = 18
 
         for i, (market_id, balance) in enumerate(balances.items()):
             if int(market_id) == consts.MARKET_ETH:
@@ -110,10 +121,11 @@ class DydxApi(PyexAPI):
                 balance['currency'] = 'SAI'
             elif int(market_id) == consts.MARKET_USDC:
                 balance['currency'] = 'USDC'
+                decimals = 6
             elif int(market_id) == consts.MARKET_DAI:
                 balance['currency'] = 'DAI'
 
-            balance_list.append(self._convert_balance_to_wad(balance))
+            balance_list.append(self._convert_balance_to_wad(balance, decimals))
 
         return balance_list
 
@@ -159,13 +171,20 @@ class DydxApi(PyexAPI):
         ## Retrieve market information for given pair
         market_info = self.get_pair(pair)
         tick_size = abs(Decimal(market_info['minimumTickSize']).as_tuple().exponent)
-        # As market_id is only used for amount, use baseCurrency instead of quoteCurrency
+        # As market_id is used for amount, use baseCurrency instead of quoteCurrency
         market_id = market_info['baseCurrency']['soloMarketId']
+        quote_market_id = market_info['quoteCurrency']['soloMarketId']
+
+        # if USDC adjust price for decimals difference
+        if quote_market_id == consts.MARKET_USDC:
+            price = Decimal(f"{price}e-12")
+        else:
+            price = round(Decimal(price), tick_size)
 
         created_order = self.client.place_order(
             market=pair,  # structured as <MAJOR>-<Minor>
             side=side,
-            price=round(Decimal(price), tick_size),
+            price=price,
             amount=utils.token_to_wei(amount, market_id),
             fillOrKill=False,
             postOnly=False
@@ -188,7 +207,7 @@ class DydxApi(PyexAPI):
         assert (isinstance(page_number, int))
 
         result = self.client.get_my_fills(market=[pair])
-        return list(map(lambda item: DydxTrade.from_message(item), list(result['fills'])))
+        return list(map(lambda item: DydxTrade.from_message(item, pair), list(result['fills'])))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert (isinstance(pair, str))
@@ -199,4 +218,4 @@ class DydxApi(PyexAPI):
         result = self.client.get_fills(market=[pair], limit=100)['fills']
         trades = filter(lambda item: item['status'] == 'CONFIRMED', result)
 
-        return list(map(lambda item: DydxTrade.from_message(item), trades))
+        return list(map(lambda item: DydxTrade.from_message(item, pair), trades))
