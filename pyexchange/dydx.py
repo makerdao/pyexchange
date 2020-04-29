@@ -53,9 +53,9 @@ class DydxTrade(Trade):
 
     @staticmethod
     def from_message(trade, pair: str) -> Trade:
-        price = Wad.from_number(item['price'])
+        price = Wad.from_number(trade['price'])
         if 'USDC' in pair:
-            price = Wad.from_number(float(item['price']) * 10**12)
+            price = Wad.from_number(float(trade['price']) * 10**12)
 
         return Trade(trade_id=trade['uuid'],
                      timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
