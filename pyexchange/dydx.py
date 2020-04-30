@@ -53,7 +53,7 @@ class DydxTrade(Trade):
     @staticmethod
     def from_message(trade, pair: str, market_info: dict) -> Trade:
         decimal_exponent = 18 - int(market_info['quoteCurrency']['decimals'])
-        price = Wad.from_number(float(item['price']) * 10**decimal_exponent)
+        price = Wad.from_number(float(trade['price']) * 10**decimal_exponent)
 
         return Trade(trade_id=trade['uuid'],
                      timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
