@@ -90,8 +90,14 @@ class DydxApi(PyexAPI):
         assert (isinstance(pair, str))
         return self.get_markets()[pair]
 
+    # DyDx primarily uses Wei for units and needs to be converted to Wad
     def _convert_balance_to_wad(self, balance: dict, decimals: int) -> dict:
         wei_balance = float(balance['wei'])
+
+        ## DyDx can have negative balances from native margin trading
+        is_negative = False
+        if wei_balance < 0:
+           is_negative = True
 
         converted_balance = from_wei(abs(int(wei_balance)), 'ether')
 
