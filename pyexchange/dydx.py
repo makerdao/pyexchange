@@ -81,6 +81,8 @@ class DydxApi(PyexAPI):
 
         self.client = Client(private_key=private_key, node=node)
 
+        self.market_info = self.get_markets()
+
     def get_markets(self):
         return self.client.get_markets()['markets']
 
@@ -88,7 +90,7 @@ class DydxApi(PyexAPI):
         assert (isinstance(pair, str))
         return self.get_markets()[pair]
 
-    def _convert_balance_to_wad(self, balance: dict) -> dict:
+    def _convert_balance_to_wad(self, balance: dict, decimals: int) -> dict:
         wei_balance = float(balance['wei'])
 
         ## DyDx can have negative balances from native margin trading
@@ -97,6 +99,9 @@ class DydxApi(PyexAPI):
            is_negative = True
 
         converted_balance = from_wei(abs(int(wei_balance)), 'ether')
+
+        if decimals == 6:
+            converted_balance = from_wei(abs(int(wei_balance)), 'mwei')
 
         # reconvert Wad to negative value if balance is negative
         if is_negative == True:
@@ -111,16 +116,18 @@ class DydxApi(PyexAPI):
         balance_list = []
 
         for i, (market_id, balance) in enumerate(balances.items()):
+            decimals = 18
             if int(market_id) == consts.MARKET_ETH:
                 balance['currency'] = 'ETH'
             elif int(market_id) == consts.MARKET_SAI:
                 balance['currency'] = 'SAI'
             elif int(market_id) == consts.MARKET_USDC:
                 balance['currency'] = 'USDC'
+                decimals = 6
             elif int(market_id) == consts.MARKET_DAI:
                 balance['currency'] = 'DAI'
 
-            balance_list.append(self._convert_balance_to_wad(balance))
+            balance_list.append(self._convert_balance_to_wad(balance, decimals))
 
         return balance_list
 
@@ -168,13 +175,9 @@ class DydxApi(PyexAPI):
         tick_size = abs(Decimal(market_info['minimumTickSize']).as_tuple().exponent)
         # As market_id is used for amount, use baseCurrency instead of quoteCurrency
         market_id = market_info['baseCurrency']['soloMarketId']
-        quote_market_id = market_info['quoteCurrency']['soloMarketId']
+        decimal_exponent = (18 - int(market_info['quoteCurrency']['decimals'])) * -1
 
-        # if USDC adjust price for decimals difference
-        if quote_market_id == consts.MARKET_USDC:
-            price = Decimal(f"{price}e-12")
-        else:
-            price = round(Decimal(price), tick_size)
+        price = round(Decimal(price * (10**decimal_exponent)), tick_size)
 
         created_order = self.client.place_order(
             market=pair,  # structured as <MAJOR>-<Minor>
