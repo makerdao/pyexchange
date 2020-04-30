@@ -93,11 +93,6 @@ class DydxApi(PyexAPI):
     def _convert_balance_to_wad(self, balance: dict, decimals: int) -> dict:
         wei_balance = float(balance['wei'])
 
-        ## DyDx can have negative balances from native margin trading
-        is_negative = False
-        if wei_balance < 0:
-           is_negative = True
-
         converted_balance = from_wei(abs(int(wei_balance)), 'ether')
 
         if decimals == 6:
@@ -170,12 +165,11 @@ class DydxApi(PyexAPI):
         self.logger.info(f"Placing order ({side}, amount {amount} of {pair},"
                          f" price {price})...")
 
-        ## Retrieve market information for given pair
-        market_info = self.get_pair(pair)
-        tick_size = abs(Decimal(market_info['minimumTickSize']).as_tuple().exponent)
+        tick_size = abs(Decimal(self.market_info[pair]['minimumTickSize']).as_tuple().exponent)
         # As market_id is used for amount, use baseCurrency instead of quoteCurrency
-        market_id = market_info['baseCurrency']['soloMarketId']
-        decimal_exponent = (18 - int(market_info['quoteCurrency']['decimals'])) * -1
+        market_id = self.market_info[pair]['baseCurrency']['soloMarketId']
+        # Convert tokens with different decimals to standard wei units
+        decimal_exponent = (18 - int(self.market_info[pair]['quoteCurrency']['decimals'])) * -1
 
         price = round(Decimal(price * (10**decimal_exponent)), tick_size)
 
