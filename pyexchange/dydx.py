@@ -36,10 +36,9 @@ from pymaker import Wad
 class DydxOrder(Order):
 
     @staticmethod
-    def from_message(item: list, pair: str) -> Order:
-        price = Wad.from_number(item['price'])
-        if 'USDC' in pair:
-            price = Wad.from_number(float(item['price']) * 10**12)
+    def from_message(item: list, pair: str, market_info: dict) -> Order:
+        decimal_exponent = 18 - int(market_info['quoteCurrency']['decimals'])
+        price = Wad.from_number(float(item['price']) * 10**decimal_exponent)
 
         return Order(order_id=item['id'],
                      timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
@@ -52,10 +51,9 @@ class DydxOrder(Order):
 class DydxTrade(Trade):
 
     @staticmethod
-    def from_message(trade, pair: str) -> Trade:
-        price = Wad.from_number(trade['price'])
-        if 'USDC' in pair:
-            price = Wad.from_number(float(trade['price']) * 10**12)
+    def from_message(trade, pair: str, market_info: dict) -> Trade:
+        decimal_exponent = 18 - int(market_info['quoteCurrency']['decimals'])
+        price = Wad.from_number(float(item['price']) * 10**decimal_exponent)
 
         return Trade(trade_id=trade['uuid'],
                      timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
@@ -139,9 +137,11 @@ class DydxApi(PyexAPI):
         assert (isinstance(pair, str))
 
         orders = self.client.get_my_orders(market=[pair], limit=None, startingBefore=None)
-
         open_orders = filter(lambda order: order['status'] == 'OPEN', orders['orders'])
-        return list(map(lambda item: DydxOrder.from_message(item, pair), open_orders))
+        
+        market_info = self.market_info[pair]
+
+        return list(map(lambda item: DydxOrder.from_message(item, pair, market_info), open_orders))
 
     def deposit_funds(self, token, amount: float):
         assert (isinstance(amount, float))
@@ -205,7 +205,10 @@ class DydxApi(PyexAPI):
         assert (isinstance(page_number, int))
 
         result = self.client.get_my_fills(market=[pair])
-        return list(map(lambda item: DydxTrade.from_message(item, pair), list(result['fills'])))
+        
+        market_info = self.market_info[pair]
+
+        return list(map(lambda item: DydxTrade.from_message(item, pair, market_info), list(result['fills'])))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert (isinstance(pair, str))
@@ -216,4 +219,6 @@ class DydxApi(PyexAPI):
         result = self.client.get_fills(market=[pair], limit=100)['fills']
         trades = filter(lambda item: item['status'] == 'CONFIRMED', result)
 
-        return list(map(lambda item: DydxTrade.from_message(item, pair), trades))
+        market_info = self.market_info[pair]
+
+        return list(map(lambda item: DydxTrade.from_message(item, pair, market_info), trades))
