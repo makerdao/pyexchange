@@ -185,18 +185,19 @@ class DydxApi(PyexAPI):
         decimal_exponent = (18 - int(self.market_info[pair]['quoteCurrency']['decimals'])) * -1
 
         price = round(Decimal(price * (10**decimal_exponent)), tick_size)
+        amount = utils.token_to_wei(amount, market_id)
 
         created_order = self.client.place_order(
             market=pair,  # structured as <MAJOR>-<Minor>
             side=side,
             price=price,
-            amount=utils.token_to_wei(amount, market_id),
+            amount=amount,
             fillOrKill=False,
             postOnly=False
         )['order']
         order_id = created_order['id']
 
-        self.logger.info(f"Placed order as #{order_id}")
+        self.logger.info(f"Placed {side} order #{order_id} with amount {amount}, at price {price}")
         return order_id
 
     def cancel_order(self, order_id: str) -> bool:
