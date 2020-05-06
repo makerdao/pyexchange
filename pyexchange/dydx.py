@@ -91,6 +91,7 @@ class DydxApi(PyexAPI):
     # DyDx primarily uses Wei for units and needs to be converted to Wad
     def _convert_balance_to_wad(self, balance: dict, decimals: int) -> dict:
         wei_balance = float(balance['wei'])
+        pending_balance = float(balance['pendingWei'])
 
         ## DyDx can have negative balances from native margin trading
         is_negative = False
@@ -98,20 +99,26 @@ class DydxApi(PyexAPI):
            is_negative = True
 
         converted_balance = from_wei(abs(int(wei_balance)), 'ether')
+        converted_pending_balance = from_wei(abs(int(pending_balance)), 'ether')
 
         if decimals == 6:
             converted_balance = from_wei(abs(int(wei_balance)), 'mwei')
+            converted_pending_balance = from_wei(abs(int(pending_balance)), 'mwei')
 
         # reconvert Wad to negative value if balance is negative
         if is_negative == True:
             converted_balance = converted_balance * -1
 
-        balance['wad'] = Wad.from_number(converted_balance)
+        # Handle the edge case where orders are filled but balance change is still pending
+        if converted_balance > 0:
+            balance['wad'] = Wad.from_number(converted_balance) - Wad.from_number(converted_pending_balance)
+        else:
+            balance['wad'] = Wad.from_number(converted_balance) + Wad.from_number(converted_pending_balance)
 
         return balance
 
     # format balances response into a shape expected by keepers 
-    def _balances_to_list(self, balances) -> List:
+    def _balances_to_list(self, balances: dict) -> List:
         balance_list = []
 
         for i, (market_id, balance) in enumerate(balances.items()):
@@ -178,18 +185,19 @@ class DydxApi(PyexAPI):
         decimal_exponent = (18 - int(self.market_info[pair]['quoteCurrency']['decimals'])) * -1
 
         price = round(Decimal(price * (10**decimal_exponent)), tick_size)
+        amount = utils.token_to_wei(amount, market_id)
 
         created_order = self.client.place_order(
             market=pair,  # structured as <MAJOR>-<Minor>
             side=side,
             price=price,
-            amount=utils.token_to_wei(amount, market_id),
+            amount=amount,
             fillOrKill=False,
             postOnly=False
         )['order']
         order_id = created_order['id']
 
-        self.logger.info(f"Placed order as #{order_id}")
+        self.logger.info(f"Placed {side} order #{order_id} with amount {amount}, at price {price}")
         return order_id
 
     def cancel_order(self, order_id: str) -> bool:
