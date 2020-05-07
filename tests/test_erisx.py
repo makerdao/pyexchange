@@ -35,6 +35,10 @@ class ErisXMockClearingAPIServer(MockWebAPIServer):
     def handle_post(self, url: str, data):
         if "accounts" in url:
             return MockedResponse(text=self.responses["accounts1"])
+        elif "balances" in url:
+            return MockedResponse(text=self.responses["balances"])
+        elif "trades" in url:
+            return MockedResponse(text=self.responses["trades"])
 
 
 class TestErisx:
@@ -43,12 +47,13 @@ class TestErisx:
         # self.fix_server.run_in_another_thread()
         # time.sleep(1)
         self.clearing_server = ErisXMockClearingAPIServer()
+        self.account_id = "27ff6d34-523d-476d-9ad5-edeb373b83dc"
 
         self.client = ErisxApi(fix_trading_endpoint="127.0.0.1:1752", fix_trading_user="test",
                                fix_marketdata_endpoint="127.0.0.1:1753", fix_marketdata_user="test",
                                password="test",
                                clearing_url="https://clearing.newrelease.erisx.com/api/v1/",
-                               api_key="key", api_secret="secret")
+                               api_key="key", api_secret="secret", web_api_only=False)
         # while self.client.fix.connection_state != FixConnectionState.LOGGED_IN:
         #     print("waiting for login")
         #     time.sleep(5)
@@ -67,13 +72,57 @@ class TestErisx:
         time.sleep(self.client.fix_trading.heartbeat_interval*10)
         assert self.client.fix_trading.sequenceNum > 2
 
+    def test_get_account(self, mocker):
+        mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
+        response = self.client.get_account()
+        assert (len(response) > 0)
+        assert ("account_id" in response[0])
+        assert ("account_number" in response[0])
+        assert ("balances" in response[0])        
+
     def test_get_balances(self, mocker):
         mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
         response = self.client.get_balances()
         assert (len(response) > 0)
-        assert ("account_id" in response[0])
-        assert ("account_number" in response[0])
-        assert ("balances" in response[0])
+        for balance in response:
+            if "TETH" in balance["asset_type"]:
+                assert(float(balance["available_to_trade"]) > 0)
 
+    @staticmethod
+    def check_trades(trades):
+        by_tradeid = {}
+        duplicate_count = 0
+        duplicate_first_found = -1
+        missorted_found = False
+        last_timestamp = 0
+        for index, trade in enumerate(trades):
+            assert(isinstance(trade, Trade))
+            if trade.trade_id in by_tradeid:
+                print(f"found duplicate trade {trade.trade_id}")
+                duplicate_count += 1
+                if duplicate_first_found < 0:
+                    duplicate_first_found = index
+            else:
+                by_tradeid[trade.trade_id] = trade
+                if not missorted_found and last_timestamp > 0:
+                    if trade.timestamp > last_timestamp:
+                        print(f"missorted trade found at index {index}")
+                        missorted_found = True
+                    last_timestamp = trade.timestamp
+        if duplicate_count > 0:
+            print(f"{duplicate_count} duplicate trades were found, "
+                  f"starting at index {duplicate_first_found}")
+        else:
+            print("no duplicates were found")
+        assert(duplicate_count == 0)
+        assert(missorted_found is False)
+
+    def test_get_balances(self, mocker):
+        mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
+        response = self.client.get_trades()
+        assert (len(response) > 0)
+        TestErisx.check_trades(response)
+        
+    @pytest.mark.skip("mock FIX server remains under construction")
     def test_place_order(self):
         assert(1 == 1)
