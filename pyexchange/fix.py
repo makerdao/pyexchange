@@ -178,12 +178,19 @@ class FixEngine:
         return message
 
     # Assumes always waiting for message type 8
-    async def _wait_for_orders_response(self) -> List[simplefix.FixMessage]:
+    async def _wait_for_get_orders_response(self) -> List[simplefix.FixMessage]:
         order_messages = []
+
+        reject_message_types = [simplefix.MSGTYPE_BUSINESS_MESSAGE_REJECT, simplefix.MSGTYPE_ORDER_CANCEL_REJECT]
+
         while True:
             if not self.application_messages.empty():
                 message = self.application_messages.get()
                 assert isinstance(message, simplefix.FixMessage)
+
+                # handle message rejection
+                if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
+                    return order_messages
 
                 # for retrieving order information, check if response type is 8, that 912 = y for last message
                 if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
@@ -196,9 +203,9 @@ class FixEngine:
 
             await asyncio.sleep(0.3)
 
-    def wait_for_orders_response(self) -> List[simplefix.FixMessage]:
+    def wait_for_get_orders_response(self) -> List[simplefix.FixMessage]:
         logging.debug(f"waiting for 35={8} Order Mass Status Request response")
-        messages = self.caller_loop.run_until_complete(self._wait_for_orders_response())
+        messages = self.caller_loop.run_until_complete(self._wait_for_get_orders_response())
         return messages
 
     def create_message(self, message_type: bytes) -> simplefix.FixMessage:

@@ -36,13 +36,26 @@ from pymaker.numeric import Wad
 class ErisxOrder(Order):
 
     @staticmethod
-    def from_message(item):
+    def from_message(item: dict) -> Order:
         return Order(order_id=item['oid'],
                      timestamp=item['created_at'],
                      pair=item['book'],
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['amount']))
+
+
+class ErisxTrade(Trade):
+
+    @staticmethod
+    def from_message(trade: dict) -> Trade:
+        return Trade(trade_id=trade['oid'],
+                     timestamp=trade['created_at'],
+                     pair=trade["book"],
+                     is_sell=True if trade['side'] == 'sell' else False,
+                     price=Wad.from_number(trade['price']),
+                     amount=Wad.from_number(trade['amount']))
+
 
 class ErisxApi(PyexAPI):
     """
@@ -58,7 +71,7 @@ class ErisxApi(PyexAPI):
 
     def __init__(self, fix_trading_endpoint: str, fix_trading_user: str,
                  fix_marketdata_endpoint: str, fix_marketdata_user: str, password: str,
-                 clearing_url: str, api_key: str, api_secret: str):
+                 clearing_url: str, api_key: str, api_secret: str, api_only: bool):
         assert isinstance(fix_trading_endpoint, str)
         assert isinstance(fix_trading_user, str)
         assert isinstance(fix_marketdata_endpoint, str)
@@ -69,13 +82,16 @@ class ErisxApi(PyexAPI):
         assert isinstance(api_key, str)
         assert isinstance(api_secret, str)
 
-        self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password)
-        self.fix_trading.logon()
-        self.fix_trading_user = fix_marketdata_user
+        # enable access from sync_trades and inventory_service without overriding socket
+        if not api_only:
 
-        self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password)
-        self.fix_marketdata.logon()
-        self.fix_marketdata_user = fix_marketdata_user
+            self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password)
+            self.fix_trading.logon()
+            self.fix_trading_user = fix_marketdata_user
+
+            self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password)
+            self.fix_marketdata.logon()
+            self.fix_marketdata_user = fix_marketdata_user
 
         self.clearing_url = clearing_url
         self.api_secret = api_secret
@@ -120,6 +136,7 @@ class ErisxApi(PyexAPI):
         else:
             raise RuntimeError("Couldn't interpret response")
 
+    # Order information is only retrieved on a per session basis (Page 20 of Spec)
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
@@ -130,12 +147,16 @@ class ErisxApi(PyexAPI):
         # OPTIONAL
         message.append_pair(1, self.fix_trading_user)
         self.fix_trading.write(message)
-        unfiltered_orders = self.fix_trading.wait_for_orders_response()
+        unfiltered_orders = self.fix_trading.wait_for_get_orders_response()
 
         return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(unfiltered_orders)))
 
     def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:
         assert(isinstance(pair, str))
+        assert(isinstance(is_sell, bool))
+        assert(isinstance(price, float))
+        assert(isinstance(amount, float))
+
         message = self.fix_trading.create_message(simplefix.MSGTYPE_NEW_ORDER_SINGLE)
 
         client_order_id = uuid.uuid4()
@@ -166,8 +187,10 @@ class ErisxApi(PyexAPI):
 
         return order_id
 
-    def cancel_order(self, order_id: str, pair: str, is_sell: bool):
-        assert(isinstance(order_id, dict))
+    def cancel_order(self, order_id: str, pair: str, is_sell: bool) -> bool:
+        assert(isinstance(order_id, str))
+        assert(isinstance(pair, str))
+        assert(isinstance(is_sell, str))
 
         side = 1 if is_sell is False else 2
         erisx_oid = order_id.split('|')[0]
@@ -182,23 +205,70 @@ class ErisxApi(PyexAPI):
         message.append_utc_timestamp(simplefix.TAG_TRANSACTTIME)
 
         self.fix_trading.write(message)
-        return self.fix_trading.wait_for_response('8')
 
-    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+        response = self.fix_trading.wait_for_response('8')
+        return True if response.get(150).decode('utf-8') == '4' else False
+
+    # Trade information is only retrieved on a per session basis (Page 20 of Spec)
+    def get_trades(self, pair: str, page_number: int = 8) -> List[Trade]:
         assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
 
         message = self.fix_trading.create_message(simplefix.MSGTYPE_ORDER_MASS_STATUS_REQUEST)
         message.append_pair(584, uuid.uuid4())
         message.append_pair(585, 8)
-        # message.append_pair(1, self.fix_trading_user)
 
         self.fix_trading.write(message)
-        unfiltered_trades = self.fix_trading.wait_for_orders_response()
+        unfiltered_trades = self.fix_trading.wait_for_get_orders_response()
 
         return list(map(lambda item: Trade.from_message(item), ErisxFix.parse_trades_list(unfiltered_trades)))
 
+    # used to unsubscribe from the marketdata feed used in get_all_tradesx
+    def unsubscribe_marketdata(self, pair: str, request_id: str) -> bool:
+        assert(isinstance(request_id, str))
+
+        message = self.fix_marketdata.create_message(simplefix.MSGTYPE_MARKET_DATA_REQUEST)
+        
+        message.append_pair(262, request_id)
+        message.append_pair(263, 2)
+        message.append_pair(264, 0)
+        message.append_pair(266, 'Y')
+        message.append_pair(267, 2)
+        message.append_pair(269, 0)
+        message.append_pair(269, 1)
+        message.append_pair(146, 1)
+        message.append_pair(simplefix.TAG_SYMBOL, pair)
+        
+        self.fix_marketdata.write(message)
+        response = self.fix_marketdata.wait_for_response('8')
+        return True if response else False
+
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        raise NotImplementedError()
+        assert(isinstance(pair, str))
+        assert(isinstance(page_number, int))
+
+        client_request_id = str(uuid.uuid4())
+
+        message = self.fix_marketdata.create_message(simplefix.MSGTYPE_MARKET_DATA_REQUEST)
+
+        message.append_pair(262, client_request_id)
+        message.append_pair(263, 1)
+        message.append_pair(264, 0)
+        message.append_pair(265, 1) # only required while subscribing
+        message.append_pair(266, 'Y')
+        message.append_pair(267, 2)
+        message.append_pair(269, 0)
+        message.append_pair(269, 1)
+
+        message.append_pair(146, 1)
+        message.append_pair(simplefix.TAG_SYMBOL, pair)
+
+        self.fix_marketdata.write(message)
+        self.unsubscribe_marketdata(pair, str(client_request_id))
+
+        return []
+        # unfiltered_trades = self.fix_marketdata.wait_for_get_orders_response()
+        # return list(map(lambda item: Trade.from_message(item), ErisxFix.parse_trades_list(unfiltered_trades)))
 
     def _http_get(self, resource: str, params=""):
         assert(isinstance(resource, str))
@@ -295,7 +365,7 @@ class ErisxFix(FixEngine):
             order_quantity = message.get(simplefix.TAG_ORDERQTY).decode('utf-8')
             amount_left = message.get(151).decode('utf-8')
 
-            logging.debug(f"amount left: {amount_left}")
+            # logging.debug(f"amount left: {amount_left}")
             if amount_left is not 0:
 
                 # TODO: account for tag 15, currency the order is denominated in
@@ -327,11 +397,19 @@ class ErisxFix(FixEngine):
         orders = []
 
         for message in messages:
+            logging.debug(f"potential trade: {message.get(39)}")
 
             erisx_oid = message.get(simplefix.TAG_ORDERID).decode('utf-8')
 
             # Handle None response
             if erisx_oid == 'UNKNOWN':
+                continue
+            
+            logging.debug(f"potential trade: {message.get(39)}")
+            is_trade = message.get(simplefix.TAG_ORDSTATUS).decode('utf-8') == '2'
+            
+            # check to see order status is fully filled
+            if not is_trade:
                 continue
 
             amount_left = message.get(151).decode('utf-8')
@@ -339,27 +417,27 @@ class ErisxFix(FixEngine):
 
             logging.debug(f"amount left: {amount_left}")
             logging.debug(f"filled amount: {filled_amount}")
-            if amount_left is 0:
+            # if amount_left is 0:
 
-                # TODO: account for tag 15, currency the order is denominated in
-                # TODO: account for partial order fills
-                side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == '1' else 'sell'
-                order_id = f"{erisx_oid}|{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
+            # TODO: account for tag 15, currency the order is denominated in
+            # TODO: account for partial order fills
+            side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == '1' else 'sell'
+            order_id = f"{erisx_oid}|{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
 
-                # Retrieve datetime and strip off nanoseconds
-                created_at = message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')[:-3]
-                timestamp = datetime.datetime.timestamp(datetime.datetime.strptime(created_at, '%Y%m%d-%H:%M:%S.%f'))
-                # make timestamp an int with microseconds
-                formatted_timestamp = int(timestamp * 1000000)
+            # Retrieve datetime and strip off nanoseconds
+            created_at = message.get(simplefix.TAG_TRANSACTTIME).decode('utf-8')[:-3]
+            timestamp = datetime.datetime.timestamp(datetime.datetime.strptime(created_at, '%Y%m%d-%H:%M:%S.%f'))
+            # make timestamp an int with microseconds
+            formatted_timestamp = int(timestamp * 1000000)
 
-                order = {
-                    'side': side,
-                    'book': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
-                    'oid': order_id,
-                    'amount': filled_amount,
-                    'price': message.get(simplefix.TAG_PRICE).decode('utf-8'),
-                    'created_at': formatted_timestamp
-                }
-                orders.append(order)
+            order = {
+                'side': side,
+                'book': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
+                'oid': order_id,
+                'amount': filled_amount,
+                'price': message.get(simplefix.TAG_PRICE).decode('utf-8'),
+                'created_at': formatted_timestamp
+            }
+            orders.append(order)
 
         return orders
