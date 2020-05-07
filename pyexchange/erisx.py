@@ -24,6 +24,7 @@ import time
 import uuid
 import datetime
 
+from dateutil import parser
 from typing import List
 
 from pyexchange.api import PyexAPI
@@ -49,12 +50,12 @@ class ErisxTrade(Trade):
 
     @staticmethod
     def from_message(trade: dict) -> Trade:
-        return Trade(trade_id=trade['oid'],
-                     timestamp=trade['created_at'],
-                     pair=trade["book"],
-                     is_sell=True if trade['side'] == 'sell' else False,
-                     price=Wad.from_number(trade['price']),
-                     amount=Wad.from_number(trade['amount']))
+        return Trade(trade_id=trade['trade_id'],
+                     timestamp=int(parser.isoparse(trade['time']).timestamp()),
+                     pair=trade["contract_symbol"],
+                     is_sell=True if trade['side'] == 'SELL' else False,
+                     price=Wad.from_number(trade['px']),
+                     amount=Wad.from_number(trade['qty']))
 
 
 class ErisxApi(PyexAPI):
@@ -71,7 +72,7 @@ class ErisxApi(PyexAPI):
 
     def __init__(self, fix_trading_endpoint: str, fix_trading_user: str,
                  fix_marketdata_endpoint: str, fix_marketdata_user: str, password: str,
-                 clearing_url: str, api_key: str, api_secret: str, api_only: bool):
+                 clearing_url: str, api_key: str, api_secret: str, web_api_only: bool):
         assert isinstance(fix_trading_endpoint, str)
         assert isinstance(fix_trading_user, str)
         assert isinstance(fix_marketdata_endpoint, str)
@@ -83,7 +84,7 @@ class ErisxApi(PyexAPI):
         assert isinstance(api_secret, str)
 
         # enable access from sync_trades and inventory_service without overriding socket
-        if not api_only:
+        if not web_api_only:
 
             self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password)
             self.fix_trading.logon()
@@ -96,6 +97,9 @@ class ErisxApi(PyexAPI):
         self.clearing_url = clearing_url
         self.api_secret = api_secret
         self.api_key = api_key
+
+        # store the account id used to retrieve trades and balances
+        self.account_id = self.get_account()
 
     def __del__(self):
         self.fix_marketdata.logout()
@@ -120,17 +124,17 @@ class ErisxApi(PyexAPI):
     def get_pair(self, pair):
         return self.get_markets()[pair]
 
-    # def get_balances(self):
-    #     # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
-    #     # They also offer a detailed /balances API, which I don't believe we need at this time.
-    #     response = self._http_post("accounts", {})
-    #     if "accounts" in response:
-    #         return response["accounts"][0]['balances']
-    #     else:
-    #         raise RuntimeError("Couldn't interpret response")
+    def get_account(self):
+        # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
+        # They also offer a detailed /balances API, which I don't believe we need at this time.
+        response = self._http_post("accounts", {})
+        if "accounts" in response:
+            return response["accounts"][0]["account_id"]
+        else:
+            raise RuntimeError("Couldn't interpret response")
 
     def get_balances(self):
-        response = self._http_post("balances", {"account_id": "637abe14-6fe2-495f-9ddb-277610a2ef26"})
+        response = self._http_post("balances", {"account_id": self.account_id})
         if "balances" in response:
             return response["balances"]
         else:
@@ -209,19 +213,10 @@ class ErisxApi(PyexAPI):
         response = self.fix_trading.wait_for_response('8')
         return True if response.get(150).decode('utf-8') == '4' else False
 
-    # Trade information is only retrieved on a per session basis (Page 20 of Spec)
+    # Trade information is only retrieved on a per session basis through FIX (Page 20 of Spec)
     def get_trades(self, pair: str, page_number: int = 8) -> List[Trade]:
-        assert(isinstance(pair, str))
-        assert(isinstance(page_number, int))
-
-        message = self.fix_trading.create_message(simplefix.MSGTYPE_ORDER_MASS_STATUS_REQUEST)
-        message.append_pair(584, uuid.uuid4())
-        message.append_pair(585, 8)
-
-        self.fix_trading.write(message)
-        unfiltered_trades = self.fix_trading.wait_for_get_orders_response()
-
-        return list(map(lambda item: Trade.from_message(item), ErisxFix.parse_trades_list(unfiltered_trades)))
+        response = self._http_post("trades", {"account_id": self.account_id})
+        return list(map(lambda trade: ErisxTrade.from_message(trade), response["trades"]))
 
     # used to unsubscribe from the marketdata feed used in get_all_tradesx
     def unsubscribe_marketdata(self, pair: str, request_id: str) -> bool:
