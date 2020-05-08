@@ -184,7 +184,8 @@ class DydxApi(PyexAPI):
         # Convert tokens with different decimals to standard wei units
         decimal_exponent = (18 - int(self.market_info[pair]['quoteCurrency']['decimals'])) * -1
 
-        price = round(Decimal(price * (10**decimal_exponent)), tick_size)
+        unformatted_price = price
+        price = round(Decimal(unformatted_price * (10**decimal_exponent)), tick_size)
         amount = utils.token_to_wei(amount, market_id)
 
         created_order = self.client.place_order(
@@ -197,7 +198,7 @@ class DydxApi(PyexAPI):
         )['order']
         order_id = created_order['id']
 
-        self.logger.info(f"Placed {side} order #{order_id} with amount {amount}, at price {price}")
+        self.logger.info(f"Placed {side} order #{order_id} with amount {amount}, at price {unformatted_price}")
         return order_id
 
     def cancel_order(self, order_id: str) -> bool:
