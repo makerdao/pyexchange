@@ -141,7 +141,6 @@ class FixEngine:
             self.last_msg_sent = datetime.now()
         finally:
             self.lock.release()
-            pass
 
     def write(self, message: simplefix.FixMessage):
         """Queues a message for submission"""

@@ -19,8 +19,8 @@ import pytest
 import time
 
 from pyexchange.erisx import ErisxApi
-from pyexchange.fix import FixConnectionState
-from tests.mock_fix_server import MockFixServer
+from pyexchange.fix import FixEngine
+from pyexchange.model import Trade
 from tests.mock_webapi_server import MockedResponse, MockWebAPIServer
 
 
@@ -43,20 +43,18 @@ class ErisXMockClearingAPIServer(MockWebAPIServer):
 
 class TestErisx:
     def setup_method(self):
-        # self.fix_server = MockFixServer()
-        # self.fix_server.run_in_another_thread()
-        # time.sleep(1)
         self.clearing_server = ErisXMockClearingAPIServer()
+        do_nothing = lambda *args: None
 
+        orig_get_account = ErisxApi.get_account
+        FixEngine.logon = do_nothing
+        ErisxApi.get_account = do_nothing
         self.client = ErisxApi(fix_trading_endpoint="127.0.0.1:1752", fix_trading_user="test",
                                fix_marketdata_endpoint="127.0.0.1:1753", fix_marketdata_user="test",
                                password="test",
-                               clearing_url="https://clearing.newrelease.erisx.com/api/v1/",
-                               api_key="key", api_secret="secret", web_api_only=False)
-
-        # while self.client.fix.connection_state != FixConnectionState.LOGGED_IN:
-        #     print("waiting for login")
-        #     time.sleep(5)
+                               clearing_url="https://127.0.0.1/api/v1/",
+                               api_key="key", api_secret="secret")
+        ErisxApi.get_account = orig_get_account
 
     def test_init(self):
         assert self.client.fix_trading.senderCompId == "test"
@@ -66,7 +64,7 @@ class TestErisx:
         assert self.client.fix_marketdata.targetCompId == "ERISX"
         assert self.client.fix_marketdata.heartbeat_interval > 0
 
-    @pytest.mark.skip("mock FIX server remains under construction")
+    @pytest.mark.skip("FIX simulation engine needed")
     def test_heartbeats(self):
         # Wait past the heartbeatInterval and confirm heartbeats were received
         time.sleep(self.client.fix_trading.heartbeat_interval*10)
@@ -82,9 +80,14 @@ class TestErisx:
         mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
         response = self.client.get_balances()
         assert (len(response) > 0)
-        for balance in response:
-            if "TETH" in balance["asset_type"]:
-                assert(float(balance["available_to_trade"]) > 0)
+        assert isinstance(response, dict)
+        assert response["account_id"] == "27ff6d34-523d-476d-9ad5-edeb373b83dc"
+        balances_for_account = response["balances"]
+        print(f"balances {type(response)} {response}")
+        for balance in balances_for_account:
+            assert isinstance(balance, dict)
+            if balance["asset_type"] == "TETH":
+                assert(float(balance["available_to_trade"]) == 12.6)
 
     @staticmethod
     def check_trades(trades):
@@ -120,5 +123,5 @@ class TestErisx:
         mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
         response = self.client.get_trades(pair)
         assert (len(response) > 0)
+        print(f"trades: {response}")
         TestErisx.check_trades(response)
-        
