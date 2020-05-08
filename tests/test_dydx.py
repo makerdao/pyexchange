@@ -83,10 +83,10 @@ class TestDydx:
         )
 
     def test_get_markets(self, mocker):
-        mocker.patch("dydx.client.Client.get_pairs", side_effect=DydxMockServer.handle_get_pairs)
+        mocker.patch("dydx.client.Client.get_markets", side_effect=DydxMockServer.handle_get_pairs)
         response = self.dydx.get_markets()
         assert(len(response) > 0)
-        assert(any(x["name"] == "WETH-DAI" for x in response))
+        assert("WETH-DAI" in response)
 
     def test_order(self):
         price = Wad.from_number(4.8765)
