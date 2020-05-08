@@ -72,24 +72,23 @@ class ErisxApi(PyexAPI):
 
     def __init__(self, fix_trading_endpoint: str, fix_trading_user: str,
                  fix_marketdata_endpoint: str, fix_marketdata_user: str, password: str,
-                 clearing_url: str, api_key: str, api_secret: str, web_api_only: bool):
-        assert isinstance(fix_trading_endpoint, str)
-        assert isinstance(fix_trading_user, str)
-        assert isinstance(fix_marketdata_endpoint, str)
-        assert isinstance(fix_marketdata_user, str)
-        assert isinstance(password, str)
-
-        assert isinstance(clearing_url, str)
-        assert isinstance(api_key, str)
-        assert isinstance(api_secret, str)
+                 clearing_url: str, api_key: str, api_secret: str):
+        assert(isinstance(fix_trading_endpoint, str) or (fix_trading_endpoint is None))
+        assert(isinstance(fix_trading_user, str) or (fix_trading_user is None))
+        assert(isinstance(fix_marketdata_endpoint, str) or (fix_marketdata_endpoint is None))
+        assert(isinstance(fix_marketdata_user, str) or (fix_marketdata_user is None))
+        assert(isinstance(password, str) or (password is None))
+        assert(isinstance(clearing_url, str) or (clearing_url is None))
+        assert(isinstance(api_key, str) or (api_key is None))
+        assert(isinstance(api_secret, str) or (api_secret is None))
 
         # enable access from sync_trades and inventory_service without overriding socket
-        if not web_api_only:
-
+        if fix_trading_endpoint is not None and fix_trading_user is not None:
             self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password)
             self.fix_trading.logon()
             self.fix_trading_user = fix_marketdata_user
 
+        if fix_marketdata_endpoint is not None and fix_marketdata_user is not None:
             self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password)
             self.fix_marketdata.logon()
             self.fix_marketdata_user = fix_marketdata_user
@@ -194,7 +193,7 @@ class ErisxApi(PyexAPI):
     def cancel_order(self, order_id: str, pair: str, is_sell: bool) -> bool:
         assert(isinstance(order_id, str))
         assert(isinstance(pair, str))
-        assert(isinstance(is_sell, str))
+        assert(isinstance(is_sell, bool))
 
         side = 1 if is_sell is False else 2
         erisx_oid = order_id.split('|')[0]
