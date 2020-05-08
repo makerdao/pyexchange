@@ -25,7 +25,6 @@ import threading
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import List
-from concurrent.futures import ProcessPoolExecutor
 
 
 class FixConnectionState(Enum):
@@ -84,10 +83,8 @@ class FixEngine:
 
     async def _read_message(self):
         """Reads the next message from the server"""
-        # await self.lock.acquire()
         try:
             message = None
-            # logging.debug("reading")
             while message is None:
                 buf = await self.reader.read(self.read_buffer)
                 if not buf:
@@ -105,13 +102,11 @@ class FixEngine:
             # Handle session messages, queue application messages.
             if not self._handle_session_message(message):
                 self.application_messages.put(message)
-            # logging.debug(f"receive queue has {self.application_messages.qsize()} messages")
 
         except asyncio.CancelledError:
             logging.error("client read timed out")
             assert False
         finally:
-            # self.lock.release()
             await asyncio.sleep(0.3)
             pass
 
@@ -136,16 +131,16 @@ class FixEngine:
 
     async def _write_message(self, message: simplefix.FixMessage):
         """Sends a message to the server"""
-        # await self.lock.acquire()
+        await self.lock.acquire()
+        # This lock is needed for `logout` method, which writes synchronously rather than through write_queue
         try:
-            # logging.debug(f"client sending message {message}")
             self._append_sequence_number(message)
             self.writer.write(message.encode())
             logging.debug(f"client sending message {fprint(message.encode())}")
             await self.writer.drain()
             self.last_msg_sent = datetime.now()
         finally:
-            # self.lock.release()
+            self.lock.release()
             pass
 
     def write(self, message: simplefix.FixMessage):
@@ -195,7 +190,6 @@ class FixEngine:
                 # for retrieving order information, check if response type is 8, that 912 = y for last message
                 if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
                     if message.get(912) == 'Y'.encode('utf-8'):
-                        # logging.debug(f"received final message: {message}")
                         order_messages.append(message)
                         return order_messages
                     else:
@@ -225,7 +219,7 @@ class FixEngine:
         self.logging_out = False
         self.session_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         thread_name = f"FIX-{self.senderCompId}"
-        session_thread = threading.Thread(target=self.run_session, daemon=True, name=thread_name)
+        session_thread = threading.Thread(target=self._run_session, daemon=True, name=thread_name)
         session_thread.start()
 
         m = self.create_message(simplefix.MSGTYPE_LOGON)
@@ -252,7 +246,7 @@ class FixEngine:
             self.connection_state = FixConnectionState.LOGGED_OUT
         self.logging_out = False
 
-    def run_session(self):
+    def _run_session(self):
         self.session_loop.run_until_complete(self._session_proc())
 
     async def _session_proc(self):
@@ -267,11 +261,8 @@ class FixEngine:
                 await self._read_message()
                 await self._heartbeat()
 
-        logging.debug("exiting _session_proc")
-
     async def _heartbeat(self):
         assert self.heartbeat_interval > 0
-        # logging.debug("checking for need to heartbeat")
 
         # Either we haven't attempted logon or we're logging out
         if not self.last_msg_sent:
@@ -283,8 +274,6 @@ class FixEngine:
                 await self._write_message(m)
             except ConnectionError as ex:
                 logging.warning(f"Unable to send heartbeat: {ex}")
-        # else:
-        #     logging.debug(f"{datetime.now() - self.last_msg_sent} since last message sent; no need to heartbeat")
 
     def _append_sequence_number(self, m: simplefix.FixMessage):
         assert isinstance(m, simplefix.FixMessage)
