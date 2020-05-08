@@ -55,7 +55,7 @@ class ErisxTrade(Trade):
                      pair=trade["contract_symbol"],
                      is_sell=True if trade['side'] == 'SELL' else False,
                      price=Wad.from_number(trade['px']),
-                     amount=Wad.from_number(trade['qty']))
+                     amount=Wad.from_number(abs(float(trade['qty']))))
 
 
 class ErisxApi(PyexAPI):
@@ -232,7 +232,7 @@ class ErisxApi(PyexAPI):
         message.append_pair(269, 0)
         message.append_pair(269, 1)
         message.append_pair(146, 1)
-        message.append_pair(simplefix.TAG_SYMBOL, pair)
+        message.append_pair(simplefix.TAG_SYMBOL, self._format_pair_string(pair))
         
         self.fix_marketdata.write(message)
         response = self.fix_marketdata.wait_for_response('8')
@@ -256,10 +256,10 @@ class ErisxApi(PyexAPI):
         message.append_pair(269, 1)
 
         message.append_pair(146, 1)
-        message.append_pair(simplefix.TAG_SYMBOL, pair)
+        message.append_pair(simplefix.TAG_SYMBOL, self._format_pair_string(pair))
 
         self.fix_marketdata.write(message)
-        self.unsubscribe_marketdata(pair, str(client_request_id))
+        self.unsubscribe_marketdata(self._format_pair_string(pair), str(client_request_id))
 
         return []
         # unfiltered_trades = self.fix_marketdata.wait_for_get_orders_response()
@@ -309,6 +309,15 @@ class ErisxApi(PyexAPI):
             raise Exception(f"Error in HTTP response: {http_response_summary(response)}")
         else:
             return response.json()
+
+    # Sync trades expects pair to be structured as <MAJOR>-<MINOR>, but Erisx expects <MAJOR>/<MINOR>
+    @staticmethod
+    def _format_pair_string(self, pair: str) -> str:
+        assert(isinstance(pair, str))
+        if '-' in pair:
+            return "/".join(pair.split('-')).upper()
+        else:
+            return pair.upper()
 
 
 class ErisxFix(FixEngine):

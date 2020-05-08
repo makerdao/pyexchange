@@ -47,13 +47,13 @@ class TestErisx:
         # self.fix_server.run_in_another_thread()
         # time.sleep(1)
         self.clearing_server = ErisXMockClearingAPIServer()
-        self.account_id = "27ff6d34-523d-476d-9ad5-edeb373b83dc"
 
         self.client = ErisxApi(fix_trading_endpoint="127.0.0.1:1752", fix_trading_user="test",
                                fix_marketdata_endpoint="127.0.0.1:1753", fix_marketdata_user="test",
                                password="test",
                                clearing_url="https://clearing.newrelease.erisx.com/api/v1/",
                                api_key="key", api_secret="secret", web_api_only=False)
+
         # while self.client.fix.connection_state != FixConnectionState.LOGGED_IN:
         #     print("waiting for login")
         #     time.sleep(5)
@@ -76,9 +76,7 @@ class TestErisx:
         mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
         response = self.client.get_account()
         assert (len(response) > 0)
-        assert ("account_id" in response[0])
-        assert ("account_number" in response[0])
-        assert ("balances" in response[0])        
+        assert(response == "27ff6d34-523d-476d-9ad5-edeb373b83dc")
 
     def test_get_balances(self, mocker):
         mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
@@ -117,12 +115,10 @@ class TestErisx:
         assert(duplicate_count == 0)
         assert(missorted_found is False)
 
-    def test_get_balances(self, mocker):
+    def test_get_trades(self, mocker):
+        pair = "ETH/USD"
         mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
-        response = self.client.get_trades()
+        response = self.client.get_trades(pair)
         assert (len(response) > 0)
         TestErisx.check_trades(response)
         
-    @pytest.mark.skip("mock FIX server remains under construction")
-    def test_place_order(self):
-        assert(1 == 1)
