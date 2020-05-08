@@ -17,6 +17,8 @@
 import base64
 import hashlib
 import logging
+import threading
+
 import dateutil.parser
 import hmac
 import time
@@ -225,12 +227,22 @@ class CoinoneApi(PyexAPI):
         current_time = int(round(time.time()))
         self.token["expires_at"] = current_time + response["expires_in"]
 
+    def _choose_nonce(self) -> int:
+        with self.last_nonce_lock:
+            timed_nonce = int(time.time()*1000)
+            time.sleep(0.1)
 
-    def _get_signature(self, encoded_payload) -> HMAC:
-        return hmac.new(self.secret_key, encoded_payload, hashlib.sha512).hexdigest()
+            if self.last_nonce + 1 > timed_nonce:
+                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}', using '{self.last_nonce + 1}' instead")
+
+                self.last_nonce += 1
+            else:
+                self.last_nonce = timed_nonce
+
+            return self.last_nonce
 
     def _get_encoded_payload(self, payload) -> bytes:
-        nonce = int(round(time.time() * 1000))
+        nonce = self._choose_nonce()
 
         access_token = self._get_access_token()
 
@@ -239,6 +251,9 @@ class CoinoneApi(PyexAPI):
 
         payload = json.dumps(payload, separators=(',', ':'))
         return base64.b64encode(bytes(payload, 'utf-8'))
+
+    def _get_signature(self, encoded_payload) -> HMAC:
+        return hmac.new(self.secret_key, encoded_payload, hashlib.sha512).hexdigest()
 
     def _http_authenticated_request(self, method: str, resource: str, body: dict):
         assert(isinstance(method, str))
@@ -294,16 +309,3 @@ class CoinoneApi(PyexAPI):
         else:
             return pair.lower()
 
-    def _choose_nonce(self) -> int:
-        with self.last_nonce_lock:
-            timed_nonce = int(time.time()*1000)
-            time.sleep(0.1)
-
-            if self.last_nonce + 1 > timed_nonce:
-                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}', using '{self.last_nonce + 1}' instead")
-
-                self.last_nonce += 1
-            else:
-                self.last_nonce = timed_nonce
-
-            return self.last_nonce            
