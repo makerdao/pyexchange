@@ -125,8 +125,7 @@ class ErisxApi(PyexAPI):
         return self.get_markets()[pair]
 
     def get_account(self, account_id: int) -> str:
-        # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
-        # They also offer a detailed /balances API, which I don't believe we need at this time.
+        # Call into the /accounts method of ErisX Clearing WebAPI, and returns a string id used to identify the account.
         response = self._http_post("accounts", {})
         if "accounts" in response:
             return response["accounts"][account_id]["account_id"]
@@ -374,10 +373,7 @@ class ErisxFix(FixEngine):
                 continue
 
             order_quantity = message.get(simplefix.TAG_ORDERQTY).decode('utf-8')
-            amount_left = message.get(151).decode('utf-8')
 
-            # TODO: account for tag 15, currency the order is denominated in
-            # TODO: account for partial order fills
             side = 'buy' if message.get(simplefix.TAG_SIDE).decode('utf-8') == '1' else 'sell'
             order_id = f"{erisx_oid}|{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
 
