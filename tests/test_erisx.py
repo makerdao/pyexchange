@@ -53,7 +53,7 @@ class TestErisx:
                                fix_marketdata_endpoint="127.0.0.1:1753", fix_marketdata_user="test",
                                password="test",
                                clearing_url="https://127.0.0.1/api/v1/",
-                               api_key="key", api_secret="secret")
+                               api_key="key", api_secret="secret", account_id=0)
         ErisxApi.get_account = orig_get_account
 
     def test_init(self):

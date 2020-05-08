@@ -72,7 +72,7 @@ class ErisxApi(PyexAPI):
 
     def __init__(self, fix_trading_endpoint: str, fix_trading_user: str,
                  fix_marketdata_endpoint: str, fix_marketdata_user: str, password: str,
-                 clearing_url: str, api_key: str, api_secret: str):
+                 clearing_url: str, api_key: str, api_secret: str, account_id: int = 0):
         assert(isinstance(fix_trading_endpoint, str) or (fix_trading_endpoint is None))
         assert(isinstance(fix_trading_user, str) or (fix_trading_user is None))
         assert(isinstance(fix_marketdata_endpoint, str) or (fix_marketdata_endpoint is None))
@@ -81,6 +81,7 @@ class ErisxApi(PyexAPI):
         assert(isinstance(clearing_url, str) or (clearing_url is None))
         assert(isinstance(api_key, str) or (api_key is None))
         assert(isinstance(api_secret, str) or (api_secret is None))
+        assert(isinstance(account_id, int))
 
         # enable access from sync_trades and inventory_service without overriding socket
         if fix_trading_endpoint is not None and fix_trading_user is not None:
@@ -98,7 +99,7 @@ class ErisxApi(PyexAPI):
         self.api_key = api_key
 
         # store the account id used to retrieve trades and balances
-        self.account_id = self.get_account()
+        self.account_id = self.get_account(account_id)
 
     def __del__(self):
         self.fix_marketdata.logout()
@@ -120,15 +121,15 @@ class ErisxApi(PyexAPI):
         return ErisxFix.parse_security_list(message)
 
     # filter out the response from get markets
-    def get_pair(self, pair):
+    def get_pair(self, pair: str) -> dict:
         return self.get_markets()[pair]
 
-    def get_account(self):
+    def get_account(self, account_id: int) -> str:
         # Call into the /accounts method of ErisX Clearing WebAPI, which provides a balance of each coin.
         # They also offer a detailed /balances API, which I don't believe we need at this time.
         response = self._http_post("accounts", {})
         if "accounts" in response:
-            return response["accounts"][0]["account_id"]
+            return response["accounts"][account_id]["account_id"]
         else:
             raise RuntimeError("Couldn't interpret response")
 
