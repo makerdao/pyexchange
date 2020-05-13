@@ -115,8 +115,8 @@ class Trade:
         assert(isinstance(amount, Wad))
 
         # Ensure that pair schema matches expectations from sync-trades
-        assert(re.match('[A-Z0-9]+\-[A-Z0-9]+', pair))
-        
+        assert(re.match('[a-zA-Z0-9]+\-[a-zA-Z0-9]+', pair))
+
         self.trade_id = trade_id
         self.timestamp = timestamp
         self.pair = pair
