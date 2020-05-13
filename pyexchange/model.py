@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import re
+
 from pprint import pformat
 from typing import Optional
 
@@ -111,6 +113,9 @@ class Trade:
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
+
+        # Ensure that pair schema matches expectations from sync-trades
+        assert(re.match('[a-zA-Z0-9]+\-[a-zA-Z0-9]+', pair))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
