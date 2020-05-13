@@ -52,7 +52,7 @@ class ErisxTrade(Trade):
     def from_message(trade: dict) -> Trade:
         return Trade(trade_id=trade['trade_id'],
                      timestamp=int(parser.isoparse(trade['time']).timestamp()),
-                     pair=trade["contract_symbol"],
+                     pair=trade["contract_symbol"].replace("/", "-"),
                      is_sell=True if trade['side'] == 'SELL' else False,
                      price=Wad.from_number(trade['px']),
                      amount=Wad.from_number(abs(float(trade['qty']))))
