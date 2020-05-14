@@ -73,13 +73,14 @@ class CoinoneApi(PyexAPI):
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, app_id: str, app_secret: str, secret_key, timeout: float):
+    def __init__(self, api_server: str, app_id: str, app_secret: str, access_token: str, secret_key, timeout: float):
         assert(isinstance(app_id, str))
         assert(isinstance(secret_key, str))
 
         self.api_server = api_server
         self.app_id = app_id
         self.app_secret = app_secret
+        self.access_token = access_token
         self.secret_key = secret_key
         self.timeout = timeout
         self.token = {}
@@ -89,6 +90,7 @@ class CoinoneApi(PyexAPI):
     def get_balances(self) -> dict:
         return self._http_authenticated_request("POST", "/v2/account/balance", {})
 
+    # Doesn't retrieve precision information for the market, only orderbook info
     def get_markets(self) -> List:
         return self._http_unauthenticated_request("GET", "/orderbook", {})
 
@@ -100,7 +102,9 @@ class CoinoneApi(PyexAPI):
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders = self._http_authenticated_request("POST", f"/v2/order/limit_orders/", {"currency:" pair})
+        currency = pair.split('-')[0]
+
+        orders = self._http_authenticated_request("POST", f"/v2/order/limit_orders/", {"currency": currency})
         return list(map(lambda item: Order.from_list(item, pair), orders["limitOrders"]))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
@@ -109,19 +113,19 @@ class CoinoneApi(PyexAPI):
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
-        side = "buy" if is_sell == False else "sell"
-        
+        side = "limit_buy" if is_sell == False else "limit_sell"
+        currency = pair.split('-')[0]
+
         data = {
-            "currency_pair": pair,
-            "type": "limit",
-            "price": str(price),
-            "coin_amount": str(amount),
-            "nonce": self._choose_nonce()
+            "currency": currency,
+            "price": price, # quote token is always krw
+            "qty": str(amount
+)
         }
 
         self.logger.info(f"Placing order ({side}, amount {data['coin_amount']} of {pair},"
                          f" price {data['price']})...")
-        result = self._http_authenticated_request("POST", f"/v1/user/orders/{side}", data)
+        result = self._http_authenticated_request("POST", f"/v2/order/{side}", data)
         order_id = result['orderId']
 
         self.logger.info(f"Placed order (#{result}) as #{order_id}")
@@ -166,67 +170,6 @@ class CoinoneApi(PyexAPI):
         most_recent_trades = sorted(result, key=lambda t: t["timestamp"], reverse=True)[:100]
         return list(map(lambda item: Trade.from_all_list(pair, item), most_recent_trades))
 
-    def _get_access_token(self) -> str:
-        # check to see if enough time has elapsed since the oauth tokens were generated, with a 60 second buffer period
-        if self.token:
-            current_time = int(round(time.time()))
-            should_refresh = current_time > (self.token["expires_at"] - 120)
-        else:
-            should_refresh = False
-
-        # Generate access_token if keeper is being initalized for the first time
-        if should_refresh == False and not self.token:
-            payload = {
-                "app_id": self.app_id,
-                "app_secret": self.app_secret,
-                "grant_type": "client_credentials"
-            }
-            
-            response = self._result(requests.request(
-                method="POST",
-                url="https://api.coinone.co.kr/oauth/access_token",
-                data=payload,
-                timeout=self.timeout
-            ))
-
-            self.token["access_token"] = response["accessToken"]
-
-            # create timestamp to enable checking if should refresh by adding returned token liveness + current time
-            current_time = int(round(time.time()))
-            self.token["expires_at"] = current_time + response["expires_in"]
-
-            return self.token["access_token"]
-
-        # use existing access_token if not near expiry
-        elif should_refresh == False:
-            return self.token["access_token"]
-
-        # call refresh token to trigger access token regeneration if within above set timespan
-        # Get orders timespan is called every 30 seconds, but 60 is used to establish a buffer
-        else:
-            self._get_refresh_token()
-            return self.token["access_token"]
-
-    # Regenerates access, refresh, and time to expiry
-    def _get_refresh_token(self):
-
-        payload = {
-            "access_token": self.token["access_token"]
-        }
-
-        response = self._result(requests.request(
-            method="POST",
-            url="https://api.coinone.co.kr/oauth/refresh_token",
-            data=payload,
-            timeout=self.timeout
-        ))
-
-        self.token["access_token"] = response["accessToken"]
-
-        # create timestamp to enable checking if should refresh by adding returned token liveness + current time
-        current_time = int(round(time.time()))
-        self.token["expires_at"] = current_time + response["expires_in"]
-
     def _choose_nonce(self) -> int:
         with self.last_nonce_lock:
             timed_nonce = int(time.time()*1000)
@@ -244,16 +187,14 @@ class CoinoneApi(PyexAPI):
     def _get_encoded_payload(self, payload) -> bytes:
         nonce = self._choose_nonce()
 
-        access_token = self._get_access_token()
-
-        payload["access_token"] = access_token
+        payload["access_token"] = self.access_token
         payload["nonce"] = nonce
 
         payload = json.dumps(payload, separators=(',', ':'))
         return base64.b64encode(bytes(payload, 'utf-8'))
 
     def _get_signature(self, encoded_payload) -> HMAC:
-        return hmac.new(self.secret_key, encoded_payload, hashlib.sha512).hexdigest()
+        return hmac.new(bytes(self.secret_key, 'utf-8'), encoded_payload, hashlib.sha512).hexdigest()
 
     def _http_authenticated_request(self, method: str, resource: str, body: dict):
         assert(isinstance(method, str))
@@ -273,7 +214,7 @@ class CoinoneApi(PyexAPI):
 
         return self._result(requests.request(method=method,
                                              url=url,
-                                             body=encoded_payload,
+                                             data=encoded_payload,
                                              headers=headers,
                                              timeout=self.timeout))
 
