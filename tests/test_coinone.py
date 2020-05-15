@@ -15,43 +15,21 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import json
-import os
 import re
 import time
-from datetime import datetime, timezone
 
 from pymaker import Wad
 from pyexchange.coinone import CoinoneApi, Order, Trade
+from tests.mock_webapi_server import MockWebAPIServer, MockedResponse
 
-# Models HTTP response, produced by CoinoneMockServer
-class MockedResponse:
-    def __init__(self, text: str, status_code=200):
-        assert (isinstance(text, str))
-        assert (isinstance(status_code, int))
-        self.status_code = status_code
-        self.ok = 200 <= status_code < 400
-        self.text = text
-        self.reason = None
 
-    def json(self, **kwargs):
-        return json.loads(self.text)
+class CoinoneMockServer(MockWebAPIServer):
 
-# Determines response to provide based on the requested URL
-class CoinoneMockServer:
-    # Read JSON responses from a pipe-delimited file, avoiding JSON-inside-JSON parsing complexities
-    responses = {}
-    cwd = os.path.dirname(os.path.realpath(__file__))
-    response_file_path = os.path.join(cwd, "mock/coinone-api-responses")
-    with open(response_file_path, 'r') as file:
-        for line in file:
-            kvp = line.split("|")
-            assert(len(kvp) == 2)
-            responses[kvp[0]] = kvp[1]
+    def __init__(self):
+        super().__init__("mock/coinone-api-responses")
 
-    @staticmethod
-    def handle_request(**kwargs):
-        assert("url" in kwargs)
+    def handle_request(self, **kwargs):
+        assert ("url" in kwargs)
         url = kwargs["url"]
         method = kwargs["method"]
         if method == "GET":
@@ -59,50 +37,37 @@ class CoinoneMockServer:
         else:
             return CoinoneMockServer.handle_post(url, kwargs["data"])
 
-    @staticmethod
-    def handle_get(url: str):
+    def handle_get(self, url: str):
         # Parse the URL to determine which piece of canned data to return
-        if re.search(r"v1\/ticker\/detailed\/all", url):
-            return MockedResponse(text=CoinoneMockServer.responses["markets"])
-        elif re.search(r"v1\/user\/balances", url):
-            return MockedResponse(text=CoinoneMockServer.responses["balances"])
-        elif re.search(r"v1\/user\/orders\/open", url):
-            return MockedResponse(text=CoinoneMockServer.responses["orders"])
-        elif re.search(r"v1\/user\/transactions", url):
-            return MockedResponse(text=CoinoneMockServer.responses["user_trades"])
-        elif re.search(r"v1\/transactions", url):
-            return MockedResponse(text=CoinoneMockServer.responses["all_trades"])            
+        if re.search(r"orderbook", url):
+            return MockedResponse(text=self.responses["markets"])
         else:
             raise ValueError("Unable to match HTTP GET request to canned response", url)
 
-    @staticmethod
-    def handle_post(url: str, data):
-        assert(data is not None)
-        if re.search(r"v1\/user\/orders\/sell", url):
-            return MockedResponse(text=CoinoneMockServer.responses["single_order"])
-        elif re.search(r"v1\/user\/orders\/cancel", url):
-            return MockedResponse(text=CoinoneMockServer.responses["cancel_order"])
-        elif re.search(r"v1\/oauth2\/access_token", url):
-            return MockedResponse(text=CoinoneMockServer.responses["access_token"])
+    def handle_post(self, url: str, data):
+        assert (data is not None)
+        if re.search(r"v2\/account\/balance", url):
+            return MockedResponse(text=self.responses["balances"])
+        elif re.search(r"v2\/order\/limit_orders", url):
+            return MockedResponse(text=self.responses["orders"])
         else:
             raise ValueError("Unable to match HTTP POST request to canned response", url, data)
 
 
 class TestCoinone:
     def setup_method(self):
-        cwd = os.path.dirname(os.path.realpath(__file__))
         self.coinone = CoinoneApi(
-            api_server = "localhost",
-            api_key = "00000000-0000-0000-0000-000000000000",
-            secret_key = "secretkey",
-            timeout = 15.5
+            api_server="localhost",
+            access_token="00000000-0000-0000-0000-000000000000",
+            secret_key="secretkey",
+            timeout=15.5
         )
 
     def test_get_markets(self, mocker):
         mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
         response = self.coinone.get_markets()
-        assert(len(response) > 0)
-        assert(response["dai_krw"] is not None)
+        assert (len(response) > 0)
+        assert (response["ETH-KRW"] is not None)
 
     def test_order(self):
         price = Wad.from_number(4.8765)
@@ -110,19 +75,19 @@ class TestCoinone:
         order = Order(
             order_id="153153",
             timestamp=int(time.time()),
-            pair="dai_krw",
+            pair="ETH-KRW",
             is_sell=False,
             price=price,
             amount=amount
         )
-        assert(order.price == order.sell_to_buy_price)
-        assert(order.price == order.buy_to_sell_price)
+        assert (order.price == order.sell_to_buy_price)
+        assert (order.price == order.buy_to_sell_price)
 
     def test_get_balances(self, mocker):
         mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
         response = self.coinone.get_balances()
-        assert(len(response) > 0)
-        assert(int(response["dai"]["available"]) > 0)
+        assert (len(response) > 0)
+        assert (int(response["dai"]["available"]) > 0)
 
     @staticmethod
     def check_orders(orders):
@@ -131,9 +96,9 @@ class TestCoinone:
         duplicate_first_found = -1
         current_time = int(time.time() * 1000)
         for index, order in enumerate(orders):
-            assert(isinstance(order, Order))
-            assert(order.order_id is not None)
-            assert(order.timestamp < current_time)
+            assert (isinstance(order, Order))
+            assert (order.order_id is not None)
+            assert (order.timestamp < current_time)
 
             # Check for duplicates
             if order.order_id in by_oid:
@@ -148,27 +113,27 @@ class TestCoinone:
                   f"starting at index {duplicate_first_found}")
         else:
             print("no duplicates were found")
-        assert(duplicate_count == 0)
-        
+        assert (duplicate_count == 0)
+
     def test_get_orders(self, mocker):
-        pair = "dai_krw"
+        pair = "ETH-KRW"
         mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
         response = self.coinone.get_orders(pair)
         assert (len(response) > 0)
         for order in response:
-            assert(isinstance(order.is_sell, bool))
-            assert(Wad(order.price) > Wad(0))
+            assert (isinstance(order.is_sell, bool))
+            assert (Wad(order.price) > Wad(0))
         TestCoinone.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        pair = "dai_krw"
+        pair = "ETH-KRW"
         side = "ask"
         mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
         order_id = self.coinone.place_order(pair, True, Wad.from_number(1500), Wad.from_number(10))
-        assert(isinstance(order_id, int))
-        assert(order_id is not None)
+        assert (isinstance(order_id, int))
+        assert (order_id is not None)
         cancel_result = self.coinone.cancel_order(order_id, pair)
-        assert(cancel_result == True)
+        assert (cancel_result == True)
 
     @staticmethod
     def check_trades(trades):
@@ -178,7 +143,7 @@ class TestCoinone:
         missorted_found = False
         last_timestamp = 0
         for index, trade in enumerate(trades):
-            assert(isinstance(trade, Trade))
+            assert (isinstance(trade, Trade))
             if trade.trade_id in by_tradeid:
                 print(f"found duplicate trade {trade.trade_id}")
                 duplicate_count += 1
@@ -196,18 +161,18 @@ class TestCoinone:
                   f"starting at index {duplicate_first_found}")
         else:
             print("no duplicates were found")
-        assert(duplicate_count == 0)
-        assert(missorted_found is False)
+        assert (duplicate_count == 0)
+        assert (missorted_found is False)
 
     def test_get_trades(self, mocker):
-        pair = "dai_krw"
+        pair = "ETH-KRW"
         mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
         response = self.coinone.get_trades(pair)
         assert (len(response) > 0)
         TestCoinone.check_trades(response)
 
     def test_get_all_trades(self, mocker):
-        pair = "bat_krw"
+        pair = "ETH-KRW"
         mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
         response = self.coinone.get_all_trades(pair)
         assert (len(response) > 0)

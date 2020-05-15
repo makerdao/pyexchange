@@ -19,7 +19,6 @@ import hashlib
 import logging
 import threading
 
-import dateutil.parser
 import hmac
 import time
 import requests
@@ -67,19 +66,16 @@ class CoinoneApi(PyexAPI):
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, app_id: str, app_secret: str, access_token: str, secret_key, timeout: float):
-        assert (isinstance(app_id, str))
-        assert (isinstance(app_secret, str))
+    def __init__(self, api_server: str, access_token: str, secret_key: str, timeout: float):
+        assert (isinstance(api_server, str))
         assert (isinstance(access_token, str))
         assert (isinstance(secret_key, str))
+        assert (isinstance(timeout, float))
 
         self.api_server = api_server
-        self.app_id = app_id
-        self.app_secret = app_secret
         self.access_token = access_token
         self.secret_key = secret_key
         self.timeout = timeout
-        self.token = {}
         self.last_nonce = 0
         self.last_nonce_lock = threading.Lock()
 
