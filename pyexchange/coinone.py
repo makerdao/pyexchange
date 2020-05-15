@@ -37,31 +37,25 @@ from pymaker import Wad
 class CoinoneOrder(Order):
 
     @staticmethod
-    def from_message(item: list, pair: str, market_info: dict) -> Order:
-        decimal_exponent = 18 - int(market_info['quoteCurrency']['decimals'])
-        price = Wad.from_number(float(item['price']) * 10**decimal_exponent)
-
-        return Order(order_id=item['id'],
-                     timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
+    def from_message(item: list, pair: str) -> Order:
+        return Order(order_id=item['orderId'],
+                     timestamp=int(item['timestamp']),
                      pair=pair,
-                     is_sell=True if item['side'] == 'SELL' else False,
-                     price=price,
-                     amount=Wad.from_number(from_wei(abs(int(float(item['baseAmount']))), 'ether')))
+                     is_sell=True if item['type'] == 'ask' else False,
+                     price=Wad.from_number(float(item["price"])),
+                     amount=Wad.from_number(float(item['qty'])))
 
 
 class CoinoneTrade(Trade):
 
     @staticmethod
-    def from_message(trade, pair: str, market_info: dict) -> Trade:
-        decimal_exponent = 18 - int(market_info['quoteCurrency']['decimals'])
-        price = Wad.from_number(float(trade['price']) * 10**decimal_exponent)
-
-        return Trade(trade_id=trade['uuid'],
-                     timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
-                     pair=trade["market"],
-                     is_sell=True if trade['side'] == 'SELL' else False,
-                     price=price,
-                     amount=Wad.from_number(from_wei(abs(int(float(trade['amount']))), 'ether')))
+    def from_message(trade, pair: str) -> Trade:
+        return Trade(trade_id=trade['orderId'],
+                     timestamp=int(trade['timestamp']),
+                     pair=pair,
+                     is_sell=True if trade['type'] == 'ask' else False,
+                     price=Wad.from_number(float(trade["price"])),
+                     amount=Wad.from_number(float(trade['qty'])))
 
 
 class CoinoneApi(PyexAPI):
@@ -74,8 +68,10 @@ class CoinoneApi(PyexAPI):
     logger = logging.getLogger()
 
     def __init__(self, api_server: str, app_id: str, app_secret: str, access_token: str, secret_key, timeout: float):
-        assert(isinstance(app_id, str))
-        assert(isinstance(secret_key, str))
+        assert (isinstance(app_id, str))
+        assert (isinstance(app_secret, str))
+        assert (isinstance(access_token, str))
+        assert (isinstance(secret_key, str))
 
         self.api_server = api_server
         self.app_id = app_id
@@ -95,88 +91,101 @@ class CoinoneApi(PyexAPI):
         return self._http_unauthenticated_request("GET", "/orderbook", {})
 
     def get_pair(self, pair: str) -> List:
-        assert(isinstance(pair, str))
+        assert (isinstance(pair, str))
         return list(filter(lambda market: market['currency'] == pair, self.get_markets()))
 
     # List keepers open orders
     def get_orders(self, pair: str) -> List[Order]:
-        assert(isinstance(pair, str))
+        assert (isinstance(pair, str))
 
         currency = pair.split('-')[0]
 
         orders = self._http_authenticated_request("POST", f"/v2/order/limit_orders/", {"currency": currency})
-        return list(map(lambda item: Order.from_list(item, pair), orders["limitOrders"]))
+        print(orders)
+        return list(map(lambda item: CoinoneOrder.from_message(item, pair), orders["limitOrders"]))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
-        assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
+        assert (isinstance(pair, str))
+        assert (isinstance(is_sell, bool))
+        assert (isinstance(price, Wad))
+        assert (isinstance(amount, Wad))
 
-        side = "limit_buy" if is_sell == False else "limit_sell"
+        side = "limit_buy" if is_sell is False else "limit_sell"
         currency = pair.split('-')[0]
 
         data = {
             "currency": currency,
-            "price": price, # quote token is always krw
-            "qty": str(amount
-)
+            "price": str(round(Wad.__float__(price), 2)),  # quote token is always krw
+            "qty": str(round(Wad.__float__(amount), 2))
         }
 
-        self.logger.info(f"Placing order ({side}, amount {data['coin_amount']} of {pair},"
+        self.logger.info(f"Placing order ({side}, amount {data['qty']} of {pair},"
                          f" price {data['price']})...")
-        result = self._http_authenticated_request("POST", f"/v2/order/{side}", data)
-        order_id = result['orderId']
+        response = self._http_authenticated_request("POST", f"/v2/order/{side}", data)
 
-        self.logger.info(f"Placed order (#{result}) as #{order_id}")
+        order_id = ""
+
+        if response['result'] is 'success':
+            order_id = response['orderId']
+            self.logger.info(f"Placed order (#{order_id})")
 
         return order_id
 
-    def cancel_order(self, order_id: int, pair: str) -> bool:
-        assert(isinstance(order_id, int))
-        assert(isinstance(pair, str))
+    def cancel_order(self, order_id: str, pair: str, price: Wad, amount: Wad, is_sell: bool) -> bool:
+        assert (isinstance(order_id, str))
+        assert (isinstance(pair, str))
+        assert (isinstance(is_sell, bool))
+        assert (isinstance(price, Wad))
+        assert (isinstance(amount, Wad))
 
         self.logger.info(f"Cancelling order #{order_id}...")
-        
+
+        currency = pair.split('-')[0]
+        is_ask = 1 if is_sell is True else 0
+
         data = {
             "order_id": order_id,
-            "price": "",
-            "qty": "",
-            "is_ask": "",
-            "currency": pair
+            "currency": currency,
+            "price": str(round(Wad.__float__(price), 2)),  # quote token is always krw
+            "qty": str(round(Wad.__float__(amount), 2)),
+            "is_ask": is_ask
         }
 
         result = self._http_authenticated_request("POST", f"/v2/order/cancel", data)
         return True if result["result"] == "success" else False
 
     def get_trades(self, pair: str, offset: int = 0) -> List[Trade]:
-        assert(isinstance(pair, str))
-        assert(isinstance(offset, int))
+        assert (isinstance(pair, str))
+        assert (isinstance(offset, int))
 
-        # Limit and Offset are optional, but limit is hardcoded to the maximum available 40 as opposed to default of 10
-        result = self._http_authenticated_request("GET", f"/v1/user/transactions?currency_pair={self._format_pair_string(pair)}&offset={offset}&limit=40", {})
+        currency = pair.split('-')[0]
 
-        return list(map(lambda item: Trade.from_our_list(self._format_pair_string(pair), item), result))
+        result = self._http_authenticated_request("POST", f"/v2/order/complete_orders", {"currency": currency})
+        print(result)
+        return list(map(lambda item: CoinoneTrade.from_message(item, pair), result['completeOrders']))
 
-    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(pair, str))
-        assert(isinstance(page_number, int))
-
-        period = "day" # "day, "minute, "hour"
-
-        result = self._http_unauthenticated_request("GET", f"/v1/transactions?currency_pair={self._format_pair_string(pair)}&time={period}", {})
-
-        # Retrieve 100 most rcent trades for a given pair, sorted by timestampd
-        most_recent_trades = sorted(result, key=lambda t: t["timestamp"], reverse=True)[:100]
-        return list(map(lambda item: Trade.from_all_list(pair, item), most_recent_trades))
+    # def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+    #     assert (isinstance(pair, str))
+    #     assert (isinstance(page_number, int))
+    #
+    #     period = "day"  # "day, "minute, "hour"
+    #
+    #     result = self._http_unauthenticated_request("GET",
+    #                                                 f"/v1/transactions?currency_pair={self._format_pair_string(pair)}&time={period}",
+    #                                                 {})
+    #
+    #     # Retrieve 100 most rcent trades for a given pair, sorted by timestampd
+    #     most_recent_trades = sorted(result, key=lambda t: t["timestamp"], reverse=True)[:100]
+    #     return list(map(lambda item: Trade.from_all_list(pair, item), most_recent_trades))
 
     def _choose_nonce(self) -> int:
         with self.last_nonce_lock:
-            timed_nonce = int(time.time()*1000)
+            timed_nonce = int(time.time() * 1000)
             time.sleep(0.1)
 
             if self.last_nonce + 1 > timed_nonce:
-                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}', using '{self.last_nonce + 1}' instead")
+                self.logger.info(
+                    f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}', using '{self.last_nonce + 1}' instead")
 
                 self.last_nonce += 1
             else:
@@ -197,9 +206,9 @@ class CoinoneApi(PyexAPI):
         return hmac.new(bytes(self.secret_key, 'utf-8'), encoded_payload, hashlib.sha512).hexdigest()
 
     def _http_authenticated_request(self, method: str, resource: str, body: dict):
-        assert(isinstance(method, str))
-        assert(isinstance(resource, str))
-        assert(isinstance(body, dict) or (body is None))
+        assert (isinstance(method, str))
+        assert (isinstance(resource, str))
+        assert (isinstance(body, dict) or (body is None))
 
         url = f"{self.api_server}{resource}"
 
@@ -219,9 +228,9 @@ class CoinoneApi(PyexAPI):
                                              timeout=self.timeout))
 
     def _http_unauthenticated_request(self, method: str, resource: str, body: dict):
-        assert(isinstance(method, str))
-        assert(isinstance(resource, str))
-        assert(isinstance(body, dict) or (body is None))
+        assert (isinstance(method, str))
+        assert (isinstance(resource, str))
+        assert (isinstance(body, dict) or (body is None))
 
         data = json.dumps(body, separators=(',', ':'))
         url = f"{self.api_server}{resource}"
@@ -241,12 +250,4 @@ class CoinoneApi(PyexAPI):
             raise Exception(f"Coinone API invalid JSON response: {http_response_summary(result)}")
 
         return data
-
-    # Sync trades expects pair to be structured as <Major>-<Minor>, but Coinone expects <Major>_<Minor>
-    def _format_pair_string(self, pair: str) -> str:
-        assert(isinstance(pair, str))
-        if '-' in pair:
-            return "_".join(pair.split('-')).lower()
-        else:
-            return pair.lower()
 
