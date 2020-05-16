@@ -178,6 +178,9 @@ class ErisxApi(PyexAPI):
         message.append_pair(simplefix.TAG_PRICE, price)
         message.append_pair(simplefix.TAG_TIMEINFORCE, simplefix.TIMEINFORCE_GOOD_TILL_CANCEL)
 
+        # place post only orders
+        message.append_pair(simplefix.TAG_EXECINST, simplefix.EXECINST_PARTICIPATE_DONT_INITIATE)
+
         #  Optional
         message.append_pair(448, self.fix_trading_user)
 
@@ -210,7 +213,10 @@ class ErisxApi(PyexAPI):
         self.fix_trading.write(message)
 
         response = self.fix_trading.wait_for_response('8')
-        return True if response.get(150).decode('utf-8') == '4' else False
+        if response.get(150) is not None:
+            return True if response.get(150).decode('utf-8') == '4' else False
+
+        return False
 
     # Trade information is only retrieved on a per session basis through FIX (Page 20 of Spec)
     def get_trades(self, pair: str, page_number: int = 8) -> List[Trade]:
