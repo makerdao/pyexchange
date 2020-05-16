@@ -50,6 +50,12 @@ class CoinoneMockServer(MockWebAPIServer):
             return MockedResponse(text=self.responses["balances"])
         elif re.search(r"v2\/order\/limit_orders", url):
             return MockedResponse(text=self.responses["orders"])
+        elif re.search(r"v2\/order\/limit_sell", url):
+            return MockedResponse(text=self.responses["single_order"])
+        elif re.search(r"v2\/order\/cancel", url):
+            return MockedResponse(text=self.responses["cancel_order"])
+        elif re.search(r"v2\/order\/complete_orders", url):
+            return MockedResponse(text=self.responses["trades"])          
         else:
             raise ValueError("Unable to match HTTP POST request to canned response", url, data)
 
@@ -68,7 +74,7 @@ class TestCoinone:
         mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
         response = self.coinone.get_markets()
         assert (len(response) > 0)
-        assert (response["ETH-KRW"] is not None)
+        # assert (response["eth"] is not None)
 
     def test_order(self):
         price = Wad.from_number(4.8765)
@@ -88,7 +94,7 @@ class TestCoinone:
         mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
         response = self.coinone.get_balances()
         assert (len(response) > 0)
-        assert (int(response["dai"]["available"]) > 0)
+        assert (float(response["eth"]["avail"]) > 0)
 
     @staticmethod
     def check_orders(orders):
@@ -130,10 +136,10 @@ class TestCoinone:
         pair = "ETH-KRW"
         side = "ask"
         mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
-        order_id = self.coinone.place_order(pair, True, Wad.from_number(1500), Wad.from_number(10))
-        assert (isinstance(order_id, int))
+        order_id = self.coinone.place_order(pair, True, Wad.from_number(241700), Wad.from_number(10))
+        assert (isinstance(order_id, str))
         assert (order_id is not None)
-        cancel_result = self.coinone.cancel_order(order_id, pair)
+        cancel_result = self.coinone.cancel_order(order_id, pair,  Wad.from_number(241700), Wad.from_number(10), True)
         assert (cancel_result == True)
 
     @staticmethod
@@ -172,9 +178,3 @@ class TestCoinone:
         assert (len(response) > 0)
         TestCoinone.check_trades(response)
 
-    def test_get_all_trades(self, mocker):
-        pair = "ETH-KRW"
-        mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
-        response = self.coinone.get_all_trades(pair)
-        assert (len(response) > 0)
-        TestCoinone.check_trades(response)

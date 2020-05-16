@@ -66,7 +66,7 @@ class CoinoneApi(PyexAPI):
 
     logger = logging.getLogger()
 
-    def __init__(self, api_server: str, access_token: str, secret_key: str, timeout: float):
+    def __init__(self, api_server: str, access_token: str, secret_key: str, timeout: float = 9.5):
         assert (isinstance(api_server, str))
         assert (isinstance(access_token, str))
         assert (isinstance(secret_key, str))
@@ -97,7 +97,6 @@ class CoinoneApi(PyexAPI):
         currency = pair.split('-')[0]
 
         orders = self._http_authenticated_request("POST", f"/v2/order/limit_orders/", {"currency": currency})
-        print(orders)
         return list(map(lambda item: CoinoneOrder.from_message(item, pair), orders["limitOrders"]))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
@@ -121,7 +120,7 @@ class CoinoneApi(PyexAPI):
 
         order_id = ""
 
-        if response['result'] is 'success':
+        if response['result'] == 'success':
             order_id = response['orderId']
             self.logger.info(f"Placed order (#{order_id})")
 
@@ -157,22 +156,7 @@ class CoinoneApi(PyexAPI):
         currency = pair.split('-')[0]
 
         result = self._http_authenticated_request("POST", f"/v2/order/complete_orders", {"currency": currency})
-        print(result)
         return list(map(lambda item: CoinoneTrade.from_message(item, pair), result['completeOrders']))
-
-    # def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-    #     assert (isinstance(pair, str))
-    #     assert (isinstance(page_number, int))
-    #
-    #     period = "day"  # "day, "minute, "hour"
-    #
-    #     result = self._http_unauthenticated_request("GET",
-    #                                                 f"/v1/transactions?currency_pair={self._format_pair_string(pair)}&time={period}",
-    #                                                 {})
-    #
-    #     # Retrieve 100 most rcent trades for a given pair, sorted by timestampd
-    #     most_recent_trades = sorted(result, key=lambda t: t["timestamp"], reverse=True)[:100]
-    #     return list(map(lambda item: Trade.from_all_list(pair, item), most_recent_trades))
 
     def _choose_nonce(self) -> int:
         with self.last_nonce_lock:
