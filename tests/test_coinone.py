@@ -33,9 +33,9 @@ class CoinoneMockServer(MockWebAPIServer):
         url = kwargs["url"]
         method = kwargs["method"]
         if method == "GET":
-            return CoinoneMockServer.handle_get(url)
+            return self.handle_get(url)
         else:
-            return CoinoneMockServer.handle_post(url, kwargs["data"])
+            return self.handle_post(url, kwargs["data"])
 
     def handle_get(self, url: str):
         # Parse the URL to determine which piece of canned data to return
@@ -62,9 +62,10 @@ class TestCoinone:
             secret_key="secretkey",
             timeout=15.5
         )
+        self.coinoneMockServer = CoinoneMockServer()
 
     def test_get_markets(self, mocker):
-        mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
+        mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
         response = self.coinone.get_markets()
         assert (len(response) > 0)
         assert (response["ETH-KRW"] is not None)
@@ -84,7 +85,7 @@ class TestCoinone:
         assert (order.price == order.buy_to_sell_price)
 
     def test_get_balances(self, mocker):
-        mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
+        mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
         response = self.coinone.get_balances()
         assert (len(response) > 0)
         assert (int(response["dai"]["available"]) > 0)
@@ -117,7 +118,7 @@ class TestCoinone:
 
     def test_get_orders(self, mocker):
         pair = "ETH-KRW"
-        mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
+        mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
         response = self.coinone.get_orders(pair)
         assert (len(response) > 0)
         for order in response:
@@ -128,7 +129,7 @@ class TestCoinone:
     def test_order_placement_and_cancellation(self, mocker):
         pair = "ETH-KRW"
         side = "ask"
-        mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
+        mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
         order_id = self.coinone.place_order(pair, True, Wad.from_number(1500), Wad.from_number(10))
         assert (isinstance(order_id, int))
         assert (order_id is not None)
@@ -166,18 +167,14 @@ class TestCoinone:
 
     def test_get_trades(self, mocker):
         pair = "ETH-KRW"
-        mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
+        mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
         response = self.coinone.get_trades(pair)
         assert (len(response) > 0)
         TestCoinone.check_trades(response)
 
     def test_get_all_trades(self, mocker):
         pair = "ETH-KRW"
-        mocker.patch("requests.request", side_effect=CoinoneMockServer.handle_request)
+        mocker.patch("requests.request", side_effect=self.coinoneMockServer.handle_request)
         response = self.coinone.get_all_trades(pair)
         assert (len(response) > 0)
         TestCoinone.check_trades(response)
-
-    # TODO: add logic for testing oauth
-    def test_oauth(self, mocker):
-        pass
