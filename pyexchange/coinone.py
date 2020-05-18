@@ -108,9 +108,12 @@ class CoinoneApi(PyexAPI):
         side = "limit_buy" if is_sell is False else "limit_sell"
         currency = pair.split('-')[0]
 
+        # Coinone price precision must be specified in thousands or less
+        price = round(Wad.__float__(price) / 100, 0) * 100
+
         data = {
             "currency": currency,
-            "price": str(round(Wad.__float__(price), 2)),  # quote token is always krw
+            "price": str(price),  # quote token is always krw
             "qty": str(round(Wad.__float__(amount), 2))
         }
 
@@ -160,8 +163,8 @@ class CoinoneApi(PyexAPI):
 
     def _choose_nonce(self) -> int:
         with self.last_nonce_lock:
-            timed_nonce = int(time.time() * 1000)
             time.sleep(0.1)
+            timed_nonce = int(time.time() * 1000)
 
             if self.last_nonce + 1 > timed_nonce:
                 self.logger.info(
