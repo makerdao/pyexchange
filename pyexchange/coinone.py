@@ -62,6 +62,7 @@ class CoinoneApi(PyexAPI):
 
         Documentation available here: https://doc.coinone.co.kr/
 
+        Precision requirement information available here: https://coinone.co.kr/support/guide
     """
 
     logger = logging.getLogger()
@@ -99,6 +100,23 @@ class CoinoneApi(PyexAPI):
         orders = self._http_authenticated_request("POST", f"/v2/order/limit_orders/", {"currency": currency})
         return list(map(lambda item: CoinoneOrder.from_message(item, pair), orders["limitOrders"]))
 
+    # Calculate the asking price units for a given price range
+    def _calc_price_precision(self, price: float) -> int:
+        if 1000 <= price < 5000:
+            return 1
+        elif 5000 <= price < 10000:
+            return 5
+        elif 10000 <= price < 50000:
+            return 10
+        elif 50000 <= price < 100000:
+            return 50
+        elif 100000 <= price < 500000:
+            return 100
+        elif 500000 <= price < 1000000:
+            return 500
+        elif 1000000 <= price:
+            return 1000
+
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert (isinstance(pair, str))
         assert (isinstance(is_sell, bool))
@@ -108,12 +126,14 @@ class CoinoneApi(PyexAPI):
         side = "limit_buy" if is_sell is False else "limit_sell"
         currency = pair.split('-')[0]
 
-        # Coinone price precision must be specified in thousands or less
-        price = round(Wad.__float__(price) / 100, 0) * 100
+        # Coinone krw price precision must be specified in thousands or less
+        float_price = Wad.__float__(price)
+        price_prec = self._calc_price_precision(float_price)
+        price = round(round(float_price / price_prec, 0) * price_prec, 1)
 
         data = {
             "currency": currency,
-            "price": str(price),  # quote token is always krw
+            "price": str(price),
             "qty": str(round(Wad.__float__(amount), 2))
         }
 
