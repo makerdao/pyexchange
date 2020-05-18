@@ -55,7 +55,7 @@ class CoinoneMockServer(MockWebAPIServer):
         elif re.search(r"v2\/order\/cancel", url):
             return MockedResponse(text=self.responses["cancel_order"])
         elif re.search(r"v2\/order\/complete_orders", url):
-            return MockedResponse(text=self.responses["trades"])          
+            return MockedResponse(text=self.responses["trades"])
         else:
             raise ValueError("Unable to match HTTP POST request to canned response", url, data)
 

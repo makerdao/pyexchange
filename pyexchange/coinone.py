@@ -129,7 +129,7 @@ class CoinoneApi(PyexAPI):
         # Coinone krw price precision must be specified in thousands or less
         float_price = Wad.__float__(price)
         price_prec = self._calc_price_precision(float_price)
-        price = round(round(float_price / price_prec, 0) * price_prec, 1)
+        price = round(float_price / price_prec, 0) * price_prec
 
         data = {
             "currency": currency,
