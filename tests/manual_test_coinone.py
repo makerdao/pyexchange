@@ -27,9 +27,9 @@ print("Starting Coinone with the following parameters: ", sys.argv)
 
 # print(coinone.get_balances())
 
-print(coinone.place_order('ETH-KRW', True, Wad.from_number(256500.4), Wad.from_number(0.2)))
+# print(coinone.place_order('ETH-KRW', True, Wad.from_number(256500.4), Wad.from_number(0.2)))
 
-print(coinone.get_orders('ETH-KRW'))
+# print(coinone.get_orders('ETH-KRW'))
 
 # print(coinone.cancel_order('4db8bb7e-1e4d-11e9-9ec7-00e04c3600d7', 'ETH-KRW', Wad.from_number(238100), Wad.from_number(0.1), False))
 

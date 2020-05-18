@@ -102,7 +102,17 @@ class CoinoneApi(PyexAPI):
 
     # Calculate the asking price units for a given price range
     def _calc_price_precision(self, price: float) -> int:
-        if 1000 <= price < 5000:
+        assert (isinstance(price, float))
+
+        if price < 1:
+            return 0.0001
+        elif 1 <= price < 10:
+            return 0.001
+        elif 10 <= price < 100:
+            return 0.01
+        elif 100 <= price < 1000:
+            return 0.1
+        elif 1000 <= price < 5000:
             return 1
         elif 5000 <= price < 10000:
             return 5
@@ -126,10 +136,10 @@ class CoinoneApi(PyexAPI):
         side = "limit_buy" if is_sell is False else "limit_sell"
         currency = pair.split('-')[0]
 
-        # Coinone krw price precision must be specified in thousands or less
+        # Coinone krw price precision must be specified based upon a given range
         float_price = Wad.__float__(price)
         price_prec = self._calc_price_precision(float_price)
-        price = round(float_price / price_prec, 0) * price_prec
+        price = round(round(float_price / price_prec, 0) * price_prec, 0)
 
         data = {
             "currency": currency,
@@ -183,7 +193,6 @@ class CoinoneApi(PyexAPI):
 
     def _choose_nonce(self) -> int:
         with self.last_nonce_lock:
-            time.sleep(0.1)
             timed_nonce = int(time.time() * 1000)
 
             if self.last_nonce + 1 > timed_nonce:
@@ -245,12 +254,12 @@ class CoinoneApi(PyexAPI):
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
-            raise Exception(f"Coinone API invalid HTTP response: {http_response_summary(result)}")
+            raise RuntimeError(f"Coinone API invalid HTTP response: {http_response_summary(result)}")
 
         try:
             data = result.json()
-        except Exception:
-            raise Exception(f"Coinone API invalid JSON response: {http_response_summary(result)}")
+        except RuntimeError:
+            raise RuntimeError(f"Coinone API invalid JSON response: {http_response_summary(result)}")
 
         return data
 
