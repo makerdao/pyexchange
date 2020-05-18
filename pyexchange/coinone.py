@@ -24,6 +24,7 @@ import time
 import requests
 import json
 
+from json import JSONDecodeError
 from typing import List, Optional
 from hmac import HMAC
 
@@ -258,8 +259,8 @@ class CoinoneApi(PyexAPI):
 
         try:
             data = result.json()
-        except RuntimeError:
-            raise RuntimeError(f"Coinone API invalid JSON response: {http_response_summary(result)}")
+        except (RuntimeError, JSONDecodeError):
+            raise ValueError(f"Coinone API invalid JSON response: {http_response_summary(result)}")
 
         return data
 
