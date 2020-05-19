@@ -72,7 +72,7 @@ class ErisxApi(PyexAPI):
 
     def __init__(self, fix_trading_endpoint: str, fix_trading_user: str,
                  fix_marketdata_endpoint: str, fix_marketdata_user: str, password: str,
-                 clearing_url: str, api_key: str, api_secret: str, account_id: int = 0):
+                 clearing_url: str, api_key: str, api_secret: str, certs: dict, account_id: int = 0):
         assert(isinstance(fix_trading_endpoint, str) or (fix_trading_endpoint is None))
         assert(isinstance(fix_trading_user, str) or (fix_trading_user is None))
         assert(isinstance(fix_marketdata_endpoint, str) or (fix_marketdata_endpoint is None))
@@ -81,16 +81,25 @@ class ErisxApi(PyexAPI):
         assert(isinstance(clearing_url, str) or (clearing_url is None))
         assert(isinstance(api_key, str) or (api_key is None))
         assert(isinstance(api_secret, str) or (api_secret is None))
+        assert(isinstance(certs, str) or (certs is None))
         assert(isinstance(account_id, int))
 
         # enable access from sync_trades and inventory_service without overriding socket
         if fix_trading_endpoint is not None and fix_trading_user is not None:
-            self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password)
+            if certs is None:
+                self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password)
+            else:
+                self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password, certs)
+
             self.fix_trading.logon()
             self.fix_trading_user = fix_marketdata_user
 
         if fix_marketdata_endpoint is not None and fix_marketdata_user is not None:
-            self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password)
+            if certs is None:
+                self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password)
+            else:
+                self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password, certs)
+
             self.fix_marketdata.logon()
             self.fix_marketdata_user = fix_marketdata_user
 
@@ -327,9 +336,9 @@ class ErisxApi(PyexAPI):
 
 
 class ErisxFix(FixEngine):
-    def __init__(self, endpoint: str, sender_comp_id: str, username: str, password: str):
+    def __init__(self, endpoint: str, sender_comp_id: str, username: str, password: str, certs: dict):
         super(ErisxFix, self).__init__(endpoint=endpoint, sender_comp_id=sender_comp_id, target_comp_id="ERISX",
-                                       username=username, password=password,
+                                       username=username, password=password, certs=certs,
                                        fix_version="FIX.4.4", heartbeat_interval=10)
 
     @staticmethod
