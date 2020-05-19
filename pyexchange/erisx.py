@@ -81,7 +81,7 @@ class ErisxApi(PyexAPI):
         assert(isinstance(clearing_url, str) or (clearing_url is None))
         assert(isinstance(api_key, str) or (api_key is None))
         assert(isinstance(api_secret, str) or (api_secret is None))
-        assert(isinstance(certs, str) or (certs is None))
+        assert(isinstance(certs, dict) or (certs is None))
         assert(isinstance(account_id, int))
 
         # enable access from sync_trades and inventory_service without overriding socket
@@ -336,7 +336,7 @@ class ErisxApi(PyexAPI):
 
 
 class ErisxFix(FixEngine):
-    def __init__(self, endpoint: str, sender_comp_id: str, username: str, password: str, certs: dict):
+    def __init__(self, endpoint: str, sender_comp_id: str, username: str, password: str, certs: dict = None):
         super(ErisxFix, self).__init__(endpoint=endpoint, sender_comp_id=sender_comp_id, target_comp_id="ERISX",
                                        username=username, password=password, certs=certs,
                                        fix_version="FIX.4.4", heartbeat_interval=10)

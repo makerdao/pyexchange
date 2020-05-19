@@ -49,11 +49,12 @@ class TestErisx:
         orig_get_account = ErisxApi.get_account
         FixEngine.logon = do_nothing
         ErisxApi.get_account = do_nothing
+        self.account_id = 0
         self.client = ErisxApi(fix_trading_endpoint="127.0.0.1:1752", fix_trading_user="test",
                                fix_marketdata_endpoint="127.0.0.1:1753", fix_marketdata_user="test",
                                password="test",
                                clearing_url="https://127.0.0.1/api/v1/",
-                               api_key="key", api_secret="secret", account_id=0)
+                               api_key="key", api_secret="secret", certs={}, account_id=self.account_id)
         ErisxApi.get_account = orig_get_account
 
     def test_init(self):
@@ -72,7 +73,7 @@ class TestErisx:
 
     def test_get_account(self, mocker):
         mocker.patch("requests.post", side_effect=self.clearing_server.handle_request)
-        response = self.client.get_account()
+        response = self.client.get_account(self.account_id)
         assert (len(response) > 0)
         assert(response == "27ff6d34-523d-476d-9ad5-edeb373b83dc")
 
