@@ -265,7 +265,8 @@ class FixEngine:
             self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop, ssl=self.ssl_context)
         else:
             self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop)
-            self.connection_state = FixConnectionState.CONNECTED
+
+        self.connection_state = FixConnectionState.CONNECTED
 
         while self.connection_state != FixConnectionState.LOGGED_OUT:
             if not self.write_queue.empty():
