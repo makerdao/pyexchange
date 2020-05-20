@@ -153,8 +153,6 @@ class ErisxApi(PyexAPI):
         message.append_pair(584, uuid.uuid4())
         message.append_pair(585, 8)
 
-        # OPTIONAL
-        message.append_pair(1, self.fix_trading_user)
         self.fix_trading.write(message)
         unfiltered_orders = self.fix_trading.wait_for_get_orders_response()
 
@@ -187,8 +185,8 @@ class ErisxApi(PyexAPI):
         # place post only orders
         message.append_pair(simplefix.TAG_EXECINST, simplefix.EXECINST_PARTICIPATE_DONT_INITIATE)
 
-        #  Optional
-        message.append_pair(448, self.fix_trading_user)
+        # Not yet supported - May be included in the future
+        # message.append_pair(448, self.fix_trading_user)
 
         self.fix_trading.write(message)
         new_order = self.fix_trading.wait_for_response('8')
@@ -229,7 +227,11 @@ class ErisxApi(PyexAPI):
         response = self._http_post("trades", {"account_id": self.account_id})
         return list(map(lambda trade: ErisxTrade.from_message(trade), response["trades"]))
 
-    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+    # TODO: Not currently available
+    def get_all_trades(self, pair, page_number) -> List[Trade]:
+       pass
+
+    def get_orderbook(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert (isinstance(pair, str))
         assert (isinstance(page_number, int))
 
@@ -259,7 +261,7 @@ class ErisxApi(PyexAPI):
         session_high_price = self.fix_marketdata.wait_for_response('X')
         all_trades = self.fix_marketdata.wait_for_response('X')
 
-        return list(map(lambda trade: ErisxTrade.from_message(trade), ErisxFix.parse_all_trades_list(all_trades)))
+        return list(map(lambda trade: ErisxTrade.from_message(trade), ErisxFix.parse_order_book(all_trades)))
 
     def _http_get(self, resource: str, params=""):
         assert (isinstance(resource, str))
@@ -392,7 +394,7 @@ class ErisxFix(FixEngine):
         return orders
 
     @staticmethod
-    def parse_all_trades_list(message: simplefix.FixMessage) -> List:
+    def parse_order_book(message: simplefix.FixMessage) -> List:
         trade_count = int(message.get(268))
         trades = []
         for i in range(1, trade_count):
