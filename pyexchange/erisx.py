@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2019 EdNoepel
+# Copyright (C) 2019-2020 EdNoepel
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -50,8 +50,13 @@ class ErisxTrade(Trade):
 
     @staticmethod
     def from_message(trade: dict) -> Trade:
+        if isinstance(trade['time'], int):
+            timestamp = trade['time']
+        else:
+            timestamp = int(parser.isoparse(trade['time']).timestamp())
+
         return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(parser.isoparse(trade['time']).timestamp()),
+                     timestamp=timestamp,
                      pair=trade["contract_symbol"].replace("/", "-"),
                      is_sell=True if trade['side'] == 'SELL' else False,
                      price=Wad.from_number(trade['px']),
@@ -66,23 +71,22 @@ class ErisxApi(PyexAPI):
     ErisX documentation available here: https://www.erisx.com/wp-content/uploads/2020/03/ErisX-FIX-4.4-Spec-V3.3.pdf
     """
 
-
     logger = logging.getLogger()
     timeout = 5
 
     def __init__(self, fix_trading_endpoint: str, fix_trading_user: str,
                  fix_marketdata_endpoint: str, fix_marketdata_user: str, password: str,
                  clearing_url: str, api_key: str, api_secret: str, certs: dict = None, account_id: int = 0):
-        assert(isinstance(fix_trading_endpoint, str) or (fix_trading_endpoint is None))
-        assert(isinstance(fix_trading_user, str) or (fix_trading_user is None))
-        assert(isinstance(fix_marketdata_endpoint, str) or (fix_marketdata_endpoint is None))
-        assert(isinstance(fix_marketdata_user, str) or (fix_marketdata_user is None))
-        assert(isinstance(password, str) or (password is None))
-        assert(isinstance(clearing_url, str) or (clearing_url is None))
-        assert(isinstance(api_key, str) or (api_key is None))
-        assert(isinstance(api_secret, str) or (api_secret is None))
-        assert(isinstance(certs, dict) or (certs is None))
-        assert(isinstance(account_id, int))
+        assert (isinstance(fix_trading_endpoint, str) or (fix_trading_endpoint is None))
+        assert (isinstance(fix_trading_user, str) or (fix_trading_user is None))
+        assert (isinstance(fix_marketdata_endpoint, str) or (fix_marketdata_endpoint is None))
+        assert (isinstance(fix_marketdata_user, str) or (fix_marketdata_user is None))
+        assert (isinstance(password, str) or (password is None))
+        assert (isinstance(clearing_url, str) or (clearing_url is None))
+        assert (isinstance(api_key, str) or (api_key is None))
+        assert (isinstance(api_secret, str) or (api_secret is None))
+        assert (isinstance(certs, dict) or (certs is None))
+        assert (isinstance(account_id, int))
 
         # enable access from sync_trades and inventory_service without overriding socket
         if fix_trading_endpoint is not None and fix_trading_user is not None:
@@ -91,7 +95,8 @@ class ErisxApi(PyexAPI):
             self.fix_trading_user = fix_marketdata_user
 
         if fix_marketdata_endpoint is not None and fix_marketdata_user is not None:
-            self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password, certs)
+            self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password,
+                                           certs)
             self.fix_marketdata.logon()
             self.fix_marketdata_user = fix_marketdata_user
 
@@ -142,7 +147,7 @@ class ErisxApi(PyexAPI):
 
     # Order information is only retrieved on a per session basis (Page 20 of Spec)
     def get_orders(self, pair: str) -> List[Order]:
-        assert(isinstance(pair, str))
+        assert (isinstance(pair, str))
 
         message = self.fix_trading.create_message(simplefix.MSGTYPE_ORDER_MASS_STATUS_REQUEST)
         message.append_pair(584, uuid.uuid4())
@@ -156,10 +161,10 @@ class ErisxApi(PyexAPI):
         return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(unfiltered_orders)))
 
     def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:
-        assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, float))
-        assert(isinstance(amount, float))
+        assert (isinstance(pair, str))
+        assert (isinstance(is_sell, bool))
+        assert (isinstance(price, float))
+        assert (isinstance(amount, float))
 
         message = self.fix_trading.create_message(simplefix.MSGTYPE_NEW_ORDER_SINGLE)
 
@@ -195,9 +200,9 @@ class ErisxApi(PyexAPI):
         return order_id
 
     def cancel_order(self, order_id: str, pair: str, is_sell: bool) -> bool:
-        assert(isinstance(order_id, str))
-        assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
+        assert (isinstance(order_id, str))
+        assert (isinstance(pair, str))
+        assert (isinstance(is_sell, bool))
 
         side = 1 if is_sell is False else 2
         erisx_oid = order_id.split('|')[0]
@@ -224,30 +229,9 @@ class ErisxApi(PyexAPI):
         response = self._http_post("trades", {"account_id": self.account_id})
         return list(map(lambda trade: ErisxTrade.from_message(trade), response["trades"]))
 
-    # used to unsubscribe from the marketdata feed used in get_all_tradesx
-    def unsubscribe_marketdata(self, pair: str, request_id: str) -> bool:
-        assert(isinstance(request_id, str))
-
-        message = self.fix_marketdata.create_message(simplefix.MSGTYPE_MARKET_DATA_REQUEST)
-        
-        message.append_pair(262, request_id)
-        message.append_pair(263, 2)
-        message.append_pair(264, 0)
-        message.append_pair(266, 'Y')
-        message.append_pair(267, 2)
-        message.append_pair(269, 0)
-        message.append_pair(269, 1)
-        message.append_pair(146, 1)
-        message.append_pair(simplefix.TAG_SYMBOL, self._format_pair_string(pair))
-        
-        self.fix_marketdata.write(message)
-        response = self.fix_marketdata.wait_for_response('8')
-        return True if response else False
-
-    # TODO: finish implementing
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        assert(isinstance(pair, str))
-        assert(isinstance(page_number, int))
+        assert (isinstance(pair, str))
+        assert (isinstance(page_number, int))
 
         client_request_id = str(uuid.uuid4())
 
@@ -256,7 +240,7 @@ class ErisxApi(PyexAPI):
         message.append_pair(262, client_request_id)
         message.append_pair(263, 1)
         message.append_pair(264, 0)
-        message.append_pair(265, 1) # only required while subscribing
+        message.append_pair(265, 1)  # only required while subscribing
         message.append_pair(266, 'Y')
         message.append_pair(267, 2)
         message.append_pair(269, 0)
@@ -266,15 +250,20 @@ class ErisxApi(PyexAPI):
         message.append_pair(simplefix.TAG_SYMBOL, self._format_pair_string(pair))
 
         self.fix_marketdata.write(message)
-        self.unsubscribe_marketdata(self._format_pair_string(pair), str(client_request_id))
 
-        # unfiltered_trades = self.fix_marketdata.wait_for_get_orders_response()
-        # return list(map(lambda item: Trade.from_message(item), ErisxFix.parse_trades_list(unfiltered_trades)))
-        return []
+        # Wait for the EndOfEvent MarketDataIncrementalRefresh
+        empty_book = self.fix_marketdata.wait_for_response('X')
+        trade_vol = self.fix_marketdata.wait_for_response('X')
+        opening_price = self.fix_marketdata.wait_for_response('X')
+        session_low_price = self.fix_marketdata.wait_for_response('X')
+        session_high_price = self.fix_marketdata.wait_for_response('X')
+        all_trades = self.fix_marketdata.wait_for_response('X')
+
+        return list(map(lambda trade: ErisxTrade.from_message(trade), ErisxFix.parse_all_trades_list(all_trades)))
 
     def _http_get(self, resource: str, params=""):
-        assert(isinstance(resource, str))
-        assert(isinstance(params, str))
+        assert (isinstance(resource, str))
+        assert (isinstance(params, str))
 
         if params:
             request = f"{resource}?{params}"
@@ -287,8 +276,8 @@ class ErisxApi(PyexAPI):
                          timeout=self.timeout))
 
     def _http_post(self, resource: str, params: dict):
-        assert(isinstance(resource, str))
-        assert(isinstance(params, dict))
+        assert (isinstance(resource, str))
+        assert (isinstance(params, dict))
         # Auth headers are required for all requests
         return self._result(
             requests.post(url=f"{self.clearing_url}{resource}",
@@ -297,8 +286,8 @@ class ErisxApi(PyexAPI):
                           timeout=self.timeout))
 
     def _create_http_headers(self, method, request_path):
-        assert(method in ["GET", "POST"])
-        assert(isinstance(request_path, str))
+        assert (method in ["GET", "POST"])
+        assert (isinstance(request_path, str))
 
         unix_timestamp = int(round(time.time()))
         payload_dict = {'sub': self.api_key, 'iat': unix_timestamp}
@@ -319,8 +308,8 @@ class ErisxApi(PyexAPI):
 
     # Sync trades expects pair to be structured as <MAJOR>-<MINOR>, but Erisx expects <MAJOR>/<MINOR>
     @staticmethod
-    def _format_pair_string(self, pair: str) -> str:
-        assert(isinstance(pair, str))
+    def _format_pair_string(pair: str) -> str:
+        assert (isinstance(pair, str))
         if '-' in pair:
             return "/".join(pair.split('-')).upper()
         else:
@@ -362,7 +351,7 @@ class ErisxFix(FixEngine):
         return securities
 
     @staticmethod
-    def parse_orders_list(messages: List[simplefix.FixMessage]) -> List:
+    def parse_orders_list(messages: simplefix.FixMessage) -> List:
         orders = []
 
         for message in messages:
@@ -374,7 +363,7 @@ class ErisxFix(FixEngine):
                 continue
 
             is_trade = message.get(simplefix.TAG_ORDSTATUS).decode('utf-8') == '2'
-            
+
             # check to see order status is fully filled
             if is_trade:
                 continue
@@ -401,3 +390,23 @@ class ErisxFix(FixEngine):
             orders.append(order)
 
         return orders
+
+    @staticmethod
+    def parse_all_trades_list(message: simplefix.FixMessage) -> List:
+        trade_count = int(message.get(268))
+        trades = []
+        for i in range(1, trade_count):
+            side = 'SELL' if message.get(simplefix.TAG_SYMBOL).decode('utf-8') == '1' else 'BUY'
+
+            trade = {
+                'trade_id': 'None',  # No id available
+                'time': int(time.time()),  # No timestamp available
+                'side': side,
+                'contract_symbol': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
+                'qty': message.get(271).decode('utf-8'),
+                'px': message.get(270).decode('utf-8')
+            }
+
+            trades.append(trade)
+
+        return trades
