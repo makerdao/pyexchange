@@ -21,6 +21,7 @@ import simplefix
 import time
 import queue
 import threading
+import ssl
 
 from datetime import datetime, timedelta
 from enum import Enum
@@ -51,17 +52,19 @@ class FixEngine:
     read_buffer = 128
 
     def __init__(self, endpoint: str, sender_comp_id: str, target_comp_id: str, username: str, password: str,
-                 fix_version="FIX.4.4", heartbeat_interval=3):
+                 certs: dict, fix_version="FIX.4.4", heartbeat_interval=3):
         assert isinstance(endpoint, str)
         assert isinstance(sender_comp_id, str)
         assert isinstance(target_comp_id, str)
         assert isinstance(username, str)
         assert isinstance(password, str)
+        assert(isinstance(certs, dict) or (certs is None))
         self.endpoint = endpoint
         self.senderCompId = sender_comp_id
         self.targetCompId = target_comp_id
         self.username = username
         self.password = password
+        self.certs = certs
         self.fix_version = fix_version
         self.heartbeat_interval = heartbeat_interval
         self.sequenceNum = 0
@@ -254,7 +257,15 @@ class FixEngine:
 
     async def _session_proc(self):
         (address, port) = tuple(self.endpoint.split(':'))
-        self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop)
+
+        if self.certs is not None:
+            self.ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            self.ssl_context.load_cert_chain(certfile=self.certs['client_cert'], keyfile=self.certs['client_key'])
+            self.ssl_context.check_hostname = False
+            self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop, ssl=self.ssl_context)
+        else:
+            self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop)
+
         self.connection_state = FixConnectionState.CONNECTED
 
         while self.connection_state != FixConnectionState.LOGGED_OUT:
