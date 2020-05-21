@@ -234,7 +234,7 @@ class ErisxApi(PyexAPI):
     def get_all_trades(self, pair, page_number) -> List[Trade]:
        pass
 
-    def get_orderbook(self, pair: str, page_number: int = 1) -> List[Trade]:
+    def get_orderbook(self, pair: str, page_number: int = 1) -> dict:
         assert (isinstance(pair, str))
         assert (isinstance(page_number, int))
 
@@ -262,9 +262,9 @@ class ErisxApi(PyexAPI):
         opening_price = self.fix_marketdata.wait_for_response('X')
         session_low_price = self.fix_marketdata.wait_for_response('X')
         session_high_price = self.fix_marketdata.wait_for_response('X')
-        all_trades = self.fix_marketdata.wait_for_response('X')
+        all_orders = self.fix_marketdata.wait_for_response('X')
 
-        return list(map(lambda trade: ErisxTrade.from_message(trade), ErisxFix.parse_order_book(all_trades)))
+        return ErisxFix.parse_order_book(all_orders)
 
     def _http_get(self, resource: str, params=""):
         assert (isinstance(resource, str))
@@ -405,21 +405,30 @@ class ErisxFix(FixEngine):
         return orders
 
     @staticmethod
-    def parse_order_book(message: simplefix.FixMessage) -> List:
-        trade_count = int(message.get(268))
-        trades = []
-        for i in range(1, trade_count):
+    def parse_order_book(message: simplefix.FixMessage) -> dict:
+        order_count = int(message.get(268))
+        buy_orders = []
+        sell_orders = []
+        orders = {}
+        for i in range(1, order_count):
             side = 'SELL' if message.get(simplefix.TAG_SYMBOL).decode('utf-8') == '1' else 'BUY'
 
-            trade = {
-                'trade_id': 'None',  # No id available
+            order = {
                 'time': int(time.time()),  # No timestamp available
                 'side': side,
                 'contract_symbol': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
                 'qty': message.get(271).decode('utf-8'),
-                'px': message.get(270).decode('utf-8')
+                'price': message.get(270).decode('utf-8')
             }
 
-            trades.append(trade)
+            if side == 'SELL':
+                sell_orders.append(order)
+            else:
+                buy_orders.append(order)
 
-        return trades
+        buy_orders.sort(key=lambda o: float(o['price']))
+        sell_orders.sort(key=lambda o: float(o['price']))
+        orders['buy'] = buy_orders
+        orders['sell'] = sell_orders
+
+        return orders
