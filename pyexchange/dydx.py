@@ -21,8 +21,9 @@ import dateutil.parser
 from decimal import Decimal
 from pprint import pformat
 from typing import List, Optional
-
 from eth_utils import from_wei
+from web3.types import TxReceipt
+from web3._utils.threads import Timeout
 
 from dydx.client import Client
 import dydx.constants as consts
@@ -38,7 +39,7 @@ class DydxOrder(Order):
     @staticmethod
     def from_message(item: list, pair: str, market_info: dict) -> Order:
         decimal_exponent = 18 - int(market_info['quoteCurrency']['decimals'])
-        price = Wad.from_number(float(item['price']) * 10**decimal_exponent)
+        price = Wad.from_number(float(item['price']) * 10 ** decimal_exponent)
 
         return Order(order_id=item['id'],
                      timestamp=int(dateutil.parser.parse(item['createdAt']).timestamp()),
@@ -53,7 +54,7 @@ class DydxTrade(Trade):
     @staticmethod
     def from_message(trade, pair: str, market_info: dict) -> Trade:
         decimal_exponent = 18 - int(market_info['quoteCurrency']['decimals'])
-        price = Wad.from_number(float(trade['price']) * 10**decimal_exponent)
+        price = Wad.from_number(float(trade['price']) * 10 ** decimal_exponent)
 
         return Trade(trade_id=trade['uuid'],
                      timestamp=int(dateutil.parser.parse(trade['createdAt']).timestamp()),
@@ -61,6 +62,7 @@ class DydxTrade(Trade):
                      is_sell=True if trade['side'] == 'SELL' else False,
                      price=price,
                      amount=Wad.from_number(from_wei(abs(int(float(trade['amount']))), 'ether')))
+
 
 class DydxApi(PyexAPI):
     """Dydx API interface.
@@ -72,13 +74,17 @@ class DydxApi(PyexAPI):
 
     logger = logging.getLogger()
 
-    def __init__(self, node: str, private_key: str):
+    def __init__(self, node: str, private_key: str, is_new: bool = False):
         assert (isinstance(node, str))
         assert (isinstance(private_key, str))
 
         self.client = Client(private_key=private_key, node=node)
 
         self.market_info = self.get_markets()
+
+        # if account is being setup for the first time, set allowance for each token
+        if is_new:
+            self._set_allowances()
 
     def get_markets(self):
         return self.client.get_markets()['markets']
@@ -95,7 +101,7 @@ class DydxApi(PyexAPI):
         ## DyDx can have negative balances from native margin trading
         is_negative = False
         if wei_balance < 0:
-           is_negative = True
+            is_negative = True
 
         converted_balance = from_wei(abs(int(wei_balance)), 'ether')
         converted_pending_balance = from_wei(abs(int(pending_balance)), 'ether')
@@ -144,26 +150,68 @@ class DydxApi(PyexAPI):
 
         orders = self.client.get_my_orders(market=[pair], limit=None, startingBefore=None)
         open_orders = filter(lambda order: order['status'] == 'OPEN', orders['orders'])
-        
+
         market_info = self.market_info[pair]
 
         return list(map(lambda item: DydxOrder.from_message(item, pair, market_info), open_orders))
 
-    def deposit_funds(self, token, amount: float):
+    def _set_allowances(self) -> True:
+        # Market IDs 0,2,3 are traded
+        for market_id in range(0, 4):
+            try:
+                allowance_tx_hash = self.client.eth.solo.set_allowance(
+                    market=market_id)  # must only be called once, ever
+                receipt = self.client.eth.get_receipt(allowance_tx_hash)
+            except (Timeout, TypeError):
+                logging.error(f"Unable to set allowance for market_id: {market_id}")
+                continue
+
+        return True
+
+    def _get_market_id(self, token) -> int:
+        assert (isinstance(token, str))
+
+        if token.upper() == 'DAI':
+            market_id = consts.MARKET_DAI
+        elif token.upper() == 'USDC':
+            market_id = consts.MARKET_USDC
+        elif token.upper() == 'ETH' or token.upper() == 'WETH':
+            market_id = consts.MARKET_ETH
+        elif token.upper() == 'PBTC':
+            market_id = consts.MARKET_PBTC
+
+        return market_id
+
+    def deposit_funds(self, token: str, amount: float) -> TxReceipt:
+        assert (isinstance(token, str))
         assert (isinstance(amount, float))
 
-        market_id = consts.MARKET_ETH
+        market_id = self._get_market_id(token)
 
-        # determine if 6 or 18 decimals are needed for wei conversion
-        if token == 'USDC':
-            market_id = consts.MARKET_USDC
-
-        tx_hash = self.client.eth.deposit(
+        deposit_tx_hash = self.client.eth.solo.deposit(
             market=market_id,
             wei=utils.token_to_wei(amount, market_id)
         )
+        receipt = self.client.eth.get_receipt(deposit_tx_hash)
 
+        logging.info(f"Deposited {amount} of {token} into DYDX")
+
+        return receipt
+
+    def withdraw_funds(self, token: str, amount: float) -> TxReceipt:
+        assert (isinstance(token, str))
+        assert (isinstance(amount, float))
+
+        market_id = self._get_market_id(token)
+
+        tx_hash = self.client.eth.solo.withdraw(
+            market=market_id,
+            wei=utils.token_to_wei(amount, market_id)
+        )
         receipt = self.client.eth.get_receipt(tx_hash)
+
+        logging.info(f"Withdrew {amount} of {token} from DYDX")
+
         return receipt
 
     def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:
@@ -185,7 +233,7 @@ class DydxApi(PyexAPI):
 
         unformatted_price = price
         unformatted_amount = amount
-        price = round(Decimal(unformatted_price * (10**decimal_exponent)), tick_size)
+        price = round(Decimal(unformatted_price * (10 ** decimal_exponent)), tick_size)
         amount = utils.token_to_wei(amount, market_id)
 
         created_order = self.client.place_order(
@@ -198,7 +246,8 @@ class DydxApi(PyexAPI):
         )['order']
         order_id = created_order['id']
 
-        self.logger.info(f"Placed {side} order #{order_id} with amount {unformatted_amount}, at price {unformatted_price}")
+        self.logger.info(
+            f"Placed {side} order #{order_id} with amount {unformatted_amount}, at price {unformatted_price}")
         return order_id
 
     def cancel_order(self, order_id: str) -> bool:
@@ -214,7 +263,7 @@ class DydxApi(PyexAPI):
         assert (isinstance(page_number, int))
 
         result = self.client.get_my_fills(market=[pair])
-        
+
         market_info = self.market_info[pair]
 
         return list(map(lambda item: DydxTrade.from_message(item, pair, market_info), list(result['fills'])))
@@ -222,7 +271,7 @@ class DydxApi(PyexAPI):
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert (isinstance(pair, str))
         assert (page_number == 1)
-        
+
         ## Specify which side of the order book to retrieve with pair
         # E.g WETH-DAI will not retrieve DAI-WETH
         result = self.client.get_fills(market=[pair], limit=100)['fills']
