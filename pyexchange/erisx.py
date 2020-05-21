@@ -76,7 +76,7 @@ class ErisxApi(PyexAPI):
 
     def __init__(self, fix_trading_endpoint: str, fix_trading_user: str,
                  fix_marketdata_endpoint: str, fix_marketdata_user: str, password: str,
-                 clearing_url: str, api_key: str, api_secret: str, certs: dict = None, account_id: int = 0):
+                 clearing_url: str, api_key: str, api_secret: str, certs: str = None, account_id: int = 0):
         assert (isinstance(fix_trading_endpoint, str) or (fix_trading_endpoint is None))
         assert (isinstance(fix_trading_user, str) or (fix_trading_user is None))
         assert (isinstance(fix_marketdata_endpoint, str) or (fix_marketdata_endpoint is None))
@@ -85,8 +85,11 @@ class ErisxApi(PyexAPI):
         assert (isinstance(clearing_url, str) or (clearing_url is None))
         assert (isinstance(api_key, str) or (api_key is None))
         assert (isinstance(api_secret, str) or (api_secret is None))
-        assert (isinstance(certs, dict) or (certs is None))
+        assert (isinstance(certs, str) or (certs is None))
         assert (isinstance(account_id, int))
+
+        if certs is not None:
+            certs = self._parse_cert_string(certs)
 
         # enable access from sync_trades and inventory_service without overriding socket
         if fix_trading_endpoint is not None and fix_trading_user is not None:
@@ -317,6 +320,14 @@ class ErisxApi(PyexAPI):
         else:
             return pair.upper()
 
+    # convert key value pair into python dictionary
+    @staticmethod
+    def _parse_cert_string(certs: str) -> dict:
+        parsed = {}
+        for p in certs.split(","):
+            var, val = p.split("=")
+            parsed[var] = val
+        return parsed
 
 class ErisxFix(FixEngine):
     def __init__(self, endpoint: str, sender_comp_id: str, username: str, password: str, certs: dict = None):
