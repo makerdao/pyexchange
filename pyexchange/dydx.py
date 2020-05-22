@@ -74,17 +74,13 @@ class DydxApi(PyexAPI):
 
     logger = logging.getLogger()
 
-    def __init__(self, node: str, private_key: str, is_new: bool = False):
+    def __init__(self, node: str, private_key: str):
         assert (isinstance(node, str))
         assert (isinstance(private_key, str))
 
         self.client = Client(private_key=private_key, node=node)
 
         self.market_info = self.get_markets()
-
-        # if account is being setup for the first time, set allowance for each token
-        if is_new:
-            self._set_allowances()
 
     def get_markets(self):
         return self.client.get_markets()['markets']
@@ -155,9 +151,12 @@ class DydxApi(PyexAPI):
 
         return list(map(lambda item: DydxOrder.from_message(item, pair, market_info), open_orders))
 
-    def _set_allowances(self) -> True:
-        # Market IDs 0,2,3 are traded
-        for market_id in range(0, 4):
+    # Only sets allowances for solo market
+    def set_allowances(self) -> True:
+        # Market IDs 0 (ETH), 2(USDC), 3(DAI) are traded
+        allow_market_ids = [0, 2, 3]
+
+        for market_id in allow_market_ids:
             try:
                 allowance_tx_hash = self.client.eth.solo.set_allowance(
                     market=market_id)  # must only be called once, ever
@@ -182,21 +181,25 @@ class DydxApi(PyexAPI):
 
         return market_id
 
+    # deposit_funds requires set_allowances() to be called once per token,
+    # prior to any deposit attempt.
     def deposit_funds(self, token: str, amount: float) -> TxReceipt:
         assert (isinstance(token, str))
         assert (isinstance(amount, float))
 
         market_id = self._get_market_id(token)
 
-        deposit_tx_hash = self.client.eth.solo.deposit(
-            market=market_id,
-            wei=utils.token_to_wei(amount, market_id)
-        )
-        receipt = self.client.eth.get_receipt(deposit_tx_hash)
+        try:
+            deposit_tx_hash = self.client.eth.solo.deposit(
+                market=market_id,
+                wei=utils.token_to_wei(amount, market_id)
+            )
+            receipt = self.client.eth.get_receipt(deposit_tx_hash)
 
-        logging.info(f"Deposited {amount} of {token} into DYDX")
-
-        return receipt
+            logging.info(f"Deposited {amount} of {token} into DYDX")
+            return receipt
+        except(Timeout, TypeError):
+            raise RuntimeError('Unable to deposit funds. Try calling set_allowances() prior to deposit.')
 
     def withdraw_funds(self, token: str, amount: float) -> TxReceipt:
         assert (isinstance(token, str))
@@ -211,6 +214,19 @@ class DydxApi(PyexAPI):
         receipt = self.client.eth.get_receipt(tx_hash)
 
         logging.info(f"Withdrew {amount} of {token} from DYDX")
+
+        return receipt
+
+    def withdraw_all_funds(self, token: str) -> TxReceipt:
+        assert (isinstance(token, str))
+
+        market_id = self._get_market_id(token)
+
+        # withdraws all available amount of the token including interest
+        tx_hash = self.client.eth.solo.withdraw_to_zero(market=market_id)
+        receipt = self.client.eth.get_receipt(tx_hash)
+
+        logging.info(f"Withdrew all {token} from DYDX")
 
         return receipt
 
