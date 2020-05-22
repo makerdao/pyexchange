@@ -24,13 +24,21 @@ dydx = DydxApi(sys.argv[1], sys.argv[2])
 # print(dydx.get_markets())
 # print(dydx.get_pair("WETH-DAI"))
 
-# print(dydx.deposit_funds("ETH", Wad.from_number(0.5)))
+# print(dydx.get_balances())
+
+# print(dydx.deposit_funds("USDC", 1.0))
+
+# print(dydx.set_allowances())
 
 # print(dydx.get_balances())
+
+# print(dydx.withdraw_funds("ETH", 0.998))
+# print(dydx.withdraw_all_funds("USDC"))
+
 # print(dydx.place_order("WETH-DAI", True, 136.0, 0.1))
 # print(dydx.place_order("DAI-USDC", False, 1.0303, 25.0))
 
-print(dydx.get_orders("WETH-DAI"))
+# print(dydx.get_orders("WETH-DAI"))
 
 # print(dydx.get_trades("WETH-DAI"))
 

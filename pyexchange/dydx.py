@@ -152,7 +152,7 @@ class DydxApi(PyexAPI):
         return list(map(lambda item: DydxOrder.from_message(item, pair, market_info), open_orders))
 
     # Only sets allowances for solo market
-    def set_allowances(self) -> True:
+    def set_allowances(self) -> bool:
         # Market IDs 0 (ETH), 2(USDC), 3(DAI) are traded
         allow_market_ids = [0, 2, 3]
 
