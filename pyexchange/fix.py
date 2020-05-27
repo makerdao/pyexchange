@@ -262,6 +262,7 @@ class FixEngine:
             self.ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             self.ssl_context.load_cert_chain(certfile=self.certs['client_cert'], keyfile=self.certs['client_key'])
             self.ssl_context.check_hostname = False
+            self.ssl_context.verify_mode = ssl.CERT_NONE
             self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop, ssl=self.ssl_context)
         else:
             self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop)
