@@ -171,6 +171,7 @@ class ErisxApi(PyexAPI):
 
         client_order_id = uuid.uuid4()
         side = 1 if is_sell is False else 2
+        logging_side = 'Buy' if is_sell is False else 'Sell'
         base_currency = pair.split('/')[0]
 
         message.append_pair(simplefix.TAG_CLORDID, client_order_id)
@@ -197,6 +198,8 @@ class ErisxApi(PyexAPI):
         erisx_oid = new_order.get(simplefix.TAG_ORDERID).decode('utf-8')
         client_oid = new_order.get(simplefix.TAG_CLORDID).decode('utf-8')
         order_id = f"{erisx_oid}|{client_oid}"
+
+        self.logger.info(f"Placed {logging_side} order #{order_id} with amount {amount} at price of {price}")
 
         return order_id
 
