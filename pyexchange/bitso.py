@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2020 MikeHathaway 
+# Copyright (C) 2020 MikeHathaway
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -193,8 +193,9 @@ class BitsoApi(PyexAPI):
         assert(isinstance(amount, float))
 
         client_id = str(uuid.uuid4())
+        price = round(price, 2)
 
-        
+
         request_body = {
             "book": book, # REQUIRED
             "side": side, # REQUIRED
