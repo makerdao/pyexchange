@@ -15,72 +15,99 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import graphene
 import requests
-import json
 
-from typing import List, Optional
+from typing import Optional
 from json import JSONDecodeError
-
-from pymaker import Address
 from lib.pymaker.pymaker.util import http_response_summary
 
-get_our_trades_query = '''{
-transactions(
-    where: {
-    timeStamp_gt: 1544832000
-    timeStamp_lt: 1545696000
-    tokenSymbol: "DAI"
-    userAddress: "0x85c5c26dc2af5546341fc1988b9d178148b4838b"
-  }
-  first: 10)
-  ) {
-    id
-  exchangeAddress
-  userAddress
-  block
-  ethAmount
-  tokenAmount
-  fee
-  event
-  timeStamp
-  }
-})'''
-
-
-get_markets_query = '''
+get_balances = '''
 {
-  uniswap(id: "1") {
-    exchangeCount
-    totalVolumeInEth
-    totalLiquidityInEth
-    totalVolumeUSD
-    totalLiquidityUSD
+  user(id: "0x0000000000c90bc353314b6911180ed7e06019a9") {
+    exchangeBalances {
+      userAddress
+      exchangeAddress
+
+      ethDeposited
+      tokensDeposited
+      ethWithdrawn
+      tokensWithdrawn
+      uniTokensMinted
+      uniTokensBurned
+
+      ethBought
+      ethSold
+      tokensBought
+      tokensSold
+      ethFeesPaid
+      tokenFeesPaid
+      ethFeesInUSD
+      tokenFeesInUSD
+    }
   }
 }
 '''
 
-class Graph:
+get_market_info = '''query ($id: String!) {
+      uniswap(id: $id) {
+        exchangeCount
+        totalVolumeInEth
+        totalLiquidityInEth
+        totalVolumeUSD
+        totalLiquidityUSD
+      }
+}
+'''
+
+get_trades = '''
+{
+  transactions(
+    where: {
+      timeStamp_gt: 1544832000
+      timeStamp_lt: 1545696000
+      tokenSymbol: "DAI"
+      userAddress: "0x85c5c26dc2af5546341fc1988b9d178148b4838b"
+    }
+    first: 10
+  ) {
+    id
+    exchangeAddress
+    userAddress
+    block
+    ethAmount
+    tokenAmount
+    fee
+    event
+    timeStamp
+  }
+}
+'''
+
+class GraphClient:
 
     def __init__(self, timeout: float = 9.5):
         assert (isinstance(timeout, float))
 
         self.timeout = timeout
 
-    def http_request(self, resource: str = '', query: str = '') -> dict:
-        assert (isinstance(resource, str))
+    def graph_request(self, graph_url: str, query: str, variables: dict = None) -> dict:
+        assert (isinstance(graph_url, str))
         assert (isinstance(query, str))
 
-        # data = json.dumps({'query': query}, separators=(',', ':'))
-        data = query
-        url = resource
+        headers = {'Accept': 'application/json',
+                   'Content-Type': 'application/json'}
 
-        return self._result(requests.request(method="POST",
-                                             url=url,
-                                             data=data,
-                                             timeout=self.timeout))
+        json = {'query': query}
+        if variables:
+            json['variables'] = variables
 
-        # return self._result(requests.post(url, query))
+        result = self._result(requests.request(method="POST",
+                                               url=graph_url,
+                                               headers=headers,
+                                               json=json,
+                                               timeout=self.timeout))
+        print(result)
+        return result['data']
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
@@ -94,6 +121,10 @@ class Graph:
         return data
 
 
-graph_url = 'http://127.0.0.1:8000/subgraphs/name/davekaj/uniswap'
-uniswap_graph = Graph()
-print(uniswap_graph.http_request(graph_url, get_markets_query))
+graph_url = 'https://api.thegraph.com/subgraphs/name/graphprotocol/uniswap'
+# graph_url = 'http://127.0.0.1:8000/subgraphs/name/davekaj/uniswap'
+uniswap_graph = GraphClient()
+# print(uniswap_graph.graph_request(graph_url, get_market_info, {"id": "1"}))
+print(uniswap_graph.graph_request(graph_url, get_trades))
+
+
