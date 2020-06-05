@@ -22,6 +22,8 @@ from pymaker import Contract, Address, Transact, Wad
 from pymaker.token import ERC20Token
 
 from typing import List
+
+from pyexchange.graph import GraphClient
 from pyexchange.model import Pair, Trade
 
 
@@ -36,19 +38,20 @@ class UniswapTrade(Trade):
                      amount=Wad.from_number(item['amount']))
 
 
-class UniswapV2(Contract):
+class UniswapV2(Contract, GraphClient):
     abi = Contract._load_abi(__name__, 'abi/UNISWAP_V2.abi')
 
-    def __init__(self, web3: Web3, token: Address, exchange: Address):
-        assert(isinstance(web3, Web3))
-        assert(isinstance(token, Address))
-        assert(isinstance(exchange, Address))
+    def __init__(self, web3: Web3, token: Address, exchange: Address, graph_url: str):
+        assert (isinstance(web3, Web3))
+        assert (isinstance(token, Address))
+        assert (isinstance(exchange, Address))
 
         self.web3 = web3
         self.exchange = exchange
         self.token = ERC20Token(web3=web3, address=token)
         self._contract = self._get_contract(web3, self.abi, exchange)
         self.account_address = Address(self.web3.eth.defaultAccount)
+        self.graph_url = graph_url
 
     def get_account_token_balance(self):
         return self.token.balance_of(self.account_address)
@@ -57,8 +60,39 @@ class UniswapV2(Contract):
         return self.token.balance_of(self.exchange)
 
     # return the current balance in a given pool
-    def get_balances(self, pair: Pair) -> List:
-        pass
+    def get_balances(self) -> dict:
+        query = '''
+           {
+              user(id: {address}) {
+                exchangeBalances {
+                  userAddress
+                  exchangeAddress
+
+                  ethDeposited
+                  tokensDeposited
+                  ethWithdrawn
+                  tokensWithdrawn
+                  uniTokensMinted
+                  uniTokensBurned
+
+                  ethBought
+                  ethSold
+                  tokensBought
+                  tokensSold
+                  ethFeesPaid
+                  tokenFeesPaid
+                  ethFeesInUSD
+                  tokenFeesInUSD
+                }
+              }
+            }
+        '''
+        variables = {
+            'address': self.account_address
+        }
+
+        result = self.graph_request(self.graph_url, query.format(**variables))
+        return result
 
     # filter contract events for an address to focus on swaps
     def get_trades(self, pair: Pair) -> List[Trade]:
@@ -71,22 +105,22 @@ class UniswapV2(Contract):
     #     return token_reserve / eth_reserve
 
     def get_eth_token_input_price(self, amount: Wad):
-        assert(isinstance(amount, Wad))
+        assert (isinstance(amount, Wad))
 
         return Wad(self._contract.functions.getEthToTokenInputPrice(amount.value).call())
 
     def get_token_eth_input_price(self, amount: Wad):
-        assert(isinstance(amount, Wad))
+        assert (isinstance(amount, Wad))
 
         return Wad(self._contract.functions.getTokenToEthInputPrice(amount.value).call())
 
     def get_eth_token_output_price(self, amount: Wad):
-        assert(isinstance(amount, Wad))
+        assert (isinstance(amount, Wad))
 
         return Wad(self._contract.functions.getEthToTokenOutputPrice(amount.value).call())
 
     def get_token_eth_output_price(self, amount: Wad):
-        assert(isinstance(amount, Wad))
+        assert (isinstance(amount, Wad))
 
         return Wad(self._contract.functions.getTokenToEthOutputPrice(amount.value).call())
 
@@ -94,7 +128,7 @@ class UniswapV2(Contract):
         return Wad(self._contract.functions.balanceOf(self.account_address.address).call())
 
     def add_liquidity(self, amount: Wad) -> Transact:
-        assert(isinstance(amount, Wad))
+        assert (isinstance(amount, Wad))
 
         min_liquidity = Wad.from_number(0.5) * amount
         max_token = amount * self.get_exchange_rate() * Wad.from_number(1.00000001)
@@ -104,7 +138,7 @@ class UniswapV2(Contract):
                         {'value': amount.value})
 
     def remove_liquidity(self, amount: Wad) -> Transact:
-        assert(isinstance(amount, Wad))
+        assert (isinstance(amount, Wad))
 
         return Transact(self, self.web3, self.abi, self.exchange, self._contract,
                         'removeLiquidity', [amount.value, 1, 1, self._deadline()])
@@ -138,9 +172,8 @@ class UniswapV2(Contract):
         return int(time.time()) + 1000
 
     def __eq__(self, other):
-        assert(isinstance(other, UniswapExchange))
+        assert (isinstance(other, UniswapExchange))
         return self.address == other.address
 
     def __repr__(self):
         return f"UniswapExchange('{self.exchange}')"
-

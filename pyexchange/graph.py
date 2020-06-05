@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import time
+import logging
 import requests
 
 from typing import Optional
@@ -26,15 +28,17 @@ get_balances = '''
   user(id: "0x0000000000c90bc353314b6911180ed7e06019a9") {
     exchangeBalances {
       userAddress
-      exchangeAddress
 
       ethDeposited
       tokensDeposited
       ethWithdrawn
       tokensWithdrawn
-      uniTokensMinted
-      uniTokensBurned
-
+      uniTokenBalance
+      
+      exchange {
+        tokenSymbol
+      }
+      
       ethBought
       ethSold
       tokensBought
@@ -45,7 +49,7 @@ get_balances = '''
       tokenFeesInUSD
     }
   }
-}
+}}
 '''
 
 get_market_info = '''query ($id: String!) {
@@ -59,38 +63,70 @@ get_market_info = '''query ($id: String!) {
 }
 '''
 
-get_trades = '''
-{
+# Uses ETH_DAI exchangeAddress
+get_trades = '''{
   transactions(
     where: {
-      timeStamp_gt: 1544832000
-      timeStamp_lt: 1545696000
-      tokenSymbol: "DAI"
-      userAddress: "0x85c5c26dc2af5546341fc1988b9d178148b4838b"
+      timestamp_gt: 1544832000
+      timestamp_lt: 1591308137
+      exchangeAddress: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
+      user: "0x85c5c26dc2af5546341fc1988b9d178148b4838b"
     }
     first: 10
   ) {
     id
     exchangeAddress
-    userAddress
     block
-    ethAmount
-    tokenAmount
     fee
-    event
-    timeStamp
+    timestamp
+    
+    tokenPurchaseEvents {
+      tokenAmount
+      tokenFee
+      ethAmount
+    }
+    ethPurchaseEvents {
+      ethAmount
+      tokenAmount
+    }
   }
+}'''
+
+get_trades_variables = {
+    'user': "our address",
+    'current_timestamp': int(time.time())
 }
-'''
 
 class GraphClient:
+
+    logger = logging.getLogger()
 
     def __init__(self, timeout: float = 9.5):
         assert (isinstance(timeout, float))
 
         self.timeout = timeout
 
-    def graph_request(self, graph_url: str, query: str, variables: dict = None) -> dict:
+    def mutation_request(self, graph_url: str, mutation: str, variables: dict = None):
+        assert (isinstance(graph_url, str))
+        assert (isinstance(mutation, str))
+
+        headers = {'Accept': 'application/json',
+                   'Content-Type': 'application/json'}
+
+        json = {'mutation': mutation}
+        if variables:
+            json['variables'] = variables
+
+        result = self._result(requests.request(method="POST",
+                                               url=graph_url,
+                                               headers=headers,
+                                               json=json,
+                                               timeout=self.timeout))
+
+        logging.info(f"Executed mutation and received response: {result}")
+        return result['data']
+
+    def query_request(self, graph_url: str, query: str, variables: dict = None) -> dict:
         assert (isinstance(graph_url, str))
         assert (isinstance(query, str))
 
@@ -106,7 +142,8 @@ class GraphClient:
                                                headers=headers,
                                                json=json,
                                                timeout=self.timeout))
-        print(result)
+
+        logging.info(f"Executed query and received response: {result}")
         return result['data']
 
     def _result(self, result) -> Optional[dict]:
@@ -124,7 +161,6 @@ class GraphClient:
 graph_url = 'https://api.thegraph.com/subgraphs/name/graphprotocol/uniswap'
 # graph_url = 'http://127.0.0.1:8000/subgraphs/name/davekaj/uniswap'
 uniswap_graph = GraphClient()
-# print(uniswap_graph.graph_request(graph_url, get_market_info, {"id": "1"}))
-print(uniswap_graph.graph_request(graph_url, get_trades))
-
-
+# print(uniswap_graph.query_request(graph_url, get_market_info, {"id": "1"}))
+print(uniswap_graph.query_request(graph_url, get_trades))
+# print(uniswap_graph.query_request(graph_url, get_balances))
