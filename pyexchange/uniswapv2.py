@@ -39,13 +39,12 @@ class UniswapTrade(Trade):
 
 
 class UniswapV2(Contract, GraphClient):
-    # TODO: Factory ABI used to dynamically retrieve new exchange addresses
-    # factory_abi = Contract._load_abi(__name__, 'abi/UNISWAP_V2.abi')
 
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
     router_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')
+    factory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')
 
-    def __init__(self, web3: Web3, graph_url: str, pair: Address, router: Address):
+    def __init__(self, web3: Web3, graph_url: str, pair: Address, router: Address, factory):
         assert (isinstance(web3, Web3))
         assert (isinstance(graph_url, str))
         assert (isinstance(pair, Address))
@@ -57,6 +56,7 @@ class UniswapV2(Contract, GraphClient):
         # self.token = ERC20Token(web3=web3, address=token)
         self._pair_contract = self._get_contract(web3, self.pair_abi, pair)
         self._router_contract = self._get_contract(web3, self.router_abi, router)
+        self._factory_contract = self._get_contract(web3, self.factory_contract, factory)
         self.account_address = Address(self.web3.eth.defaultAccount)
         self.graph_url = graph_url
 
@@ -87,6 +87,7 @@ class UniswapV2(Contract, GraphClient):
         return result['data']
 
     # TODO: check against token address
+    # TODO: Need to add support for tokens to pyexchange
     def _is_pair(self, pair_to_check, desired_pair) -> bool:
         name0 = desired_pair.split()[0]
         name1 = desired_pair.split()[0]
@@ -117,11 +118,34 @@ class UniswapV2(Contract, GraphClient):
         }
 
         result = self.query_request(self.graph_url, query, variables)
-        return result
+        return result['data']
 
     # filter contract events for an address to focus on swaps
     def get_trades(self, pair: Pair) -> List[Trade]:
-        pass
+        query = '''query ($address: ID!)
+        {
+          swaps(where: {id: $address}) {
+            id
+            sender
+            pair {
+              id
+            }
+            amountUSD
+            amount0In
+            amount1In
+            amount0Out
+            amount1Out
+            timestamp
+            logIndex
+          }
+        }
+        '''
+        variables = {
+            'address': self.account_address
+        }
+
+        result = self.query_request(self.graph_url, query, variables)
+        return list(map(lambda swap: UniswapTrade.from_message(swap), result['data']['swaps']))
 
     # TODO: use periphery library for pricing
     # def get_exchange_rate(self):
@@ -155,19 +179,27 @@ class UniswapV2(Contract, GraphClient):
     def get_minimum_liquidity(self):
         return Wad(self._contract.functions.MINIMUM_LIQUIDITY(self.account_address.address).call())
 
-    def add_liquidity(self, amount: Wad, token_a: Address, token_b: Address) -> Transact:
-        assert (isinstance(amount, Wad))
+    # TODO: finish implementing with CREATE2
+    # Factory contract exposes a getPair method that can also be called offchain with CREATE2 to save gas
+    def get_pair_address(self, token1: Address, token2: Address) -> Address:
+        return Address(self._factory_contract.functions.getPair(token1, token2).call())
 
-        min_liquidity = Wad.from_number(0.5) * amount
-        max_token = amount * self.get_exchange_rate() * Wad.from_number(1.00000001)
+    def add_liquidity(self, amounts: dict, token_a: Address, token_b: Address) -> Transact:
+        assert (isinstance(amounts, dict))
+
+        # min_liquidity = Wad.from_number(0.5) * amount
+        # max_token = amount * self.get_exchange_rate() * Wad.from_number(1.00000001)
+
+        pairAddress = self.get_pair_address(token_a, token_b)
 
         addLiquidityArgs = [
             token_a,
             token_b,
-            amount_a_desired,
-            amount_b_desired,
-            amount_a_min,
-            amount_b_min,
+            amounts['amount_a_desired'],
+            amounts['amount_b_desired'],
+            amounts['amount_a_min'],
+            amounts['amount_b_min'],
+            pairAddress,
             self._deadline()
         ]
 
