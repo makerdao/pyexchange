@@ -101,12 +101,14 @@ class GraphClient:
 
     logger = logging.getLogger()
 
-    def __init__(self, timeout: float = 9.5):
+    def __init__(self, graph_url: str, timeout: float = 9.5):
         assert (isinstance(timeout, float))
+        assert (isinstance(graph_url, str))
 
+        self.graph_url = graph_url
         self.timeout = timeout
 
-    def mutation_request(self, graph_url: str, mutation: str, variables: dict = None):
+    def mutation_request(self, mutation: str, variables: dict = None):
         assert (isinstance(graph_url, str))
         assert (isinstance(mutation, str))
 
@@ -126,7 +128,7 @@ class GraphClient:
         logging.info(f"Executed mutation and received response: {result}")
         return result['data']
 
-    def query_request(self, graph_url: str, query: str, variables: dict = None) -> dict:
+    def query_request(self, query: str, variables: dict = None) -> dict:
         assert (isinstance(graph_url, str))
         assert (isinstance(query, str))
 
@@ -160,7 +162,7 @@ class GraphClient:
 
 graph_url = 'https://api.thegraph.com/subgraphs/name/graphprotocol/uniswap'
 # graph_url = 'http://127.0.0.1:8000/subgraphs/name/davekaj/uniswap'
-uniswap_graph = GraphClient()
-# print(uniswap_graph.query_request(graph_url, get_market_info, {"id": "1"}))
-print(uniswap_graph.query_request(graph_url, get_trades))
-# print(uniswap_graph.query_request(graph_url, get_balances))
+uniswap_graph = GraphClient(graph_url)
+print(uniswap_graph.query_request(get_market_info, {"id": "1"}))
+# print(uniswap_graph.query_request(get_trades))
+# print(uniswap_graph.query_request( get_balances))

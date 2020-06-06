@@ -38,7 +38,7 @@ class UniswapTrade(Trade):
                      amount=Wad.from_number(item['amount']))
 
 
-class UniswapV2(Contract, GraphClient):
+class UniswapV2(Contract):
 
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
     router_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')
@@ -58,7 +58,7 @@ class UniswapV2(Contract, GraphClient):
         self._router_contract = self._get_contract(web3, self.router_abi, router)
         self._factory_contract = self._get_contract(web3, self.factory_contract, factory)
         self.account_address = Address(self.web3.eth.defaultAccount)
-        self.graph_url = graph_url
+        self.graph_client = GraphClient(graph_url)
 
     def get_account_token_balance(self):
         return self.token.balance_of(self.account_address)
@@ -83,7 +83,7 @@ class UniswapV2(Contract, GraphClient):
             }
         }
         '''
-        result = self.query_request(self.graph_url, query, None)
+        result = self.graph_client.query_request(query, None)
         return result['data']
 
     # TODO: check against token address
@@ -117,7 +117,7 @@ class UniswapV2(Contract, GraphClient):
             'user': self.account_address
         }
 
-        result = self.query_request(self.graph_url, query, variables)
+        result = self.graph_client.query_request(query, variables)
         return result['data']
 
     # filter contract events for an address to focus on swaps
@@ -144,7 +144,7 @@ class UniswapV2(Contract, GraphClient):
             'address': self.account_address
         }
 
-        result = self.query_request(self.graph_url, query, variables)
+        result = self.graph_client.query_request(query, variables)
         return list(map(lambda swap: UniswapTrade.from_message(swap), result['data']['swaps']))
 
     # TODO: use periphery library for pricing

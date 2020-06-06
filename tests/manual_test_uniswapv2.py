@@ -22,35 +22,40 @@ from web3 import Web3, HTTPProvider
 from pymaker.keys import register_key
 from pyexchange.uniswapv2 import UniswapV2
 
-DAI_ADDRESS = Address("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359")
+WETH_ADDRESS = Address("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+DAI_ADDRESS = Address("0x6b175474e89094c44da98b954eedeac495271d0f")
 MKR_ADDRESS = Address("0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2")
-ETH_DAI_ADDRESS = Address("0x09cabEC1eAd1c0Ba254B09efb3EE13841712bE14")
-MKR_DAI_ADDRESS = Address("0x2C4Bd064b998838076fa341A83d007FC2FA50957")
-FACTORY_ADDRESS = Address("0xc0a47dFe034B400B47bDaD5FecDa2621de6c4d95")
+FACTORY_ADDRESS = Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
+ROUTER_ADDRESS = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
 
 web3 = Web3(HTTPProvider(sys.argv[1], request_kwargs={"timeout": 600}))
 web3.eth.defaultAccount = sys.argv[2]
 register_key(web3, sys.argv[3])
 
 uniswap = UniswapV2(web3, DAI_ADDRESS, ETH_DAI_ADDRESS)
-current_liq = uniswap.get_current_liquidity()
-print(current_liq)
+# current_liq = uniswap.get_current_liquidity()
+# print(current_liq)
 
-amount = Wad.from_number(0.2)
-transaction = uniswap.add_liquidity(amount)
+token_a_desired = Wad.from_number(20.0)
+token_b_desired = Wad.from_number(0.2)
+token_a_min = Wad.from_number()
+token_b_min = Wad.from_number()
+amounts = {}
+
+transaction = uniswap.add_liquidity(amounts, DAI_ADDRESS, WETH_ADDRESS)
 res = transaction.transact()
 print(res.successful)
 print(res.transaction_hash.hex())
 
-current_liq = uniswap.get_current_liquidity()
-print(current_liq)
-
-transaction = uniswap.remove_liquidity(current_liq)
-transact = transaction.transact()
-print(transact.successful)
-print(transact.transaction_hash.hex())
-
-current_liq = uniswap.get_current_liquidity()
-print(current_liq)
+# current_liq = uniswap.get_current_liquidity()
+# print(current_liq)
+#
+# transaction = uniswap.remove_liquidity(current_liq)
+# transact = transaction.transact()
+# print(transact.successful)
+# print(transact.transaction_hash.hex())
+#
+# current_liq = uniswap.get_current_liquidity()
+# print(current_liq)
 
 
