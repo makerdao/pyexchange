@@ -39,17 +39,24 @@ class UniswapTrade(Trade):
 
 
 class UniswapV2(Contract, GraphClient):
-    abi = Contract._load_abi(__name__, 'abi/UNISWAP_V2.abi')
+    # TODO: Factory ABI used to dynamically retrieve new exchange addresses
+    # factory_abi = Contract._load_abi(__name__, 'abi/UNISWAP_V2.abi')
 
-    def __init__(self, web3: Web3, token: Address, exchange: Address, graph_url: str):
+    pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
+    router_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')
+
+    def __init__(self, web3: Web3, graph_url: str, pair: Address, router: Address):
         assert (isinstance(web3, Web3))
-        assert (isinstance(token, Address))
-        assert (isinstance(exchange, Address))
+        assert (isinstance(graph_url, str))
+        assert (isinstance(pair, Address))
+        assert (isinstance(router, Address))
 
         self.web3 = web3
-        self.exchange = exchange
-        self.token = ERC20Token(web3=web3, address=token)
-        self._contract = self._get_contract(web3, self.abi, exchange)
+        self.pair = pair
+        self.router = router
+        # self.token = ERC20Token(web3=web3, address=token)
+        self._pair_contract = self._get_contract(web3, self.pair_abi, pair)
+        self._router_contract = self._get_contract(web3, self.router_abi, router)
         self.account_address = Address(self.web3.eth.defaultAccount)
         self.graph_url = graph_url
 
@@ -59,39 +66,57 @@ class UniswapV2(Contract, GraphClient):
     def get_exchange_balance(self):
         return self.token.balance_of(self.exchange)
 
+    def get_markets(self) -> dict:
+        query = '''
+        {
+            pairs {
+                totalSupply
+                id
+                token0 {
+                  name
+                  id
+                }
+                token1 {
+                  name
+                  id
+                }
+            }
+        }
+        '''
+        result = self.query_request(self.graph_url, query, None)
+        return result['data']
+
+    # TODO: check against token address
+    def _is_pair(self, pair_to_check, desired_pair) -> bool:
+        name0 = desired_pair.split()[0]
+        name1 = desired_pair.split()[0]
+
+        if name0 == "ETH":
+            name0 = 'Wrapped Ether'
+
+        if name0 == "DAI":
+            name0 = 'Wrapped Ether'
+        # if pair_to_check['token0']['id'] =
+
+    def get_pair(self, pair) -> dict:
+        return filter(lambda p: self._is_pair(p, pair), self.get_markets()['pairs'])[0]
+
     # return the current balance in a given pool
     def get_balances(self) -> dict:
-        query = '''
-           {
-              user(id: {address}) {
-                exchangeBalances {
-                  userAddress
-                  exchangeAddress
-
-                  ethDeposited
-                  tokensDeposited
-                  ethWithdrawn
-                  tokensWithdrawn
-                  uniTokensMinted
-                  uniTokensBurned
-
-                  ethBought
-                  ethSold
-                  tokensBought
-                  tokensSold
-                  ethFeesPaid
-                  tokenFeesPaid
-                  ethFeesInUSD
-                  tokenFeesInUSD
-                }
+        query = '''query ($user: ID!)
+            {
+              liquidityPositions(where: {user: $user}) {
+                id
+                liquidityTokenBalance
+                poolOwnership
               }
             }
         '''
         variables = {
-            'address': self.account_address
+            'user': self.account_address
         }
 
-        result = self.graph_request(self.graph_url, query.format(**variables))
+        result = self.query_request(self.graph_url, query, variables)
         return result
 
     # filter contract events for an address to focus on swaps
@@ -127,21 +152,37 @@ class UniswapV2(Contract, GraphClient):
     def get_current_liquidity(self):
         return Wad(self._contract.functions.balanceOf(self.account_address.address).call())
 
-    def add_liquidity(self, amount: Wad) -> Transact:
+    def get_minimum_liquidity(self):
+        return Wad(self._contract.functions.MINIMUM_LIQUIDITY(self.account_address.address).call())
+
+    def add_liquidity(self, amount: Wad, token_a: Address, token_b: Address) -> Transact:
         assert (isinstance(amount, Wad))
 
         min_liquidity = Wad.from_number(0.5) * amount
         max_token = amount * self.get_exchange_rate() * Wad.from_number(1.00000001)
 
-        return Transact(self, self.web3, self.abi, self.exchange, self._contract,
-                        'addLiquidity', [min_liquidity.value, max_token.value, self._deadline()],
-                        {'value': amount.value})
+        addLiquidityArgs = [
+            token_a,
+            token_b,
+            amount_a_desired,
+            amount_b_desired,
+            amount_a_min,
+            amount_b_min,
+            self._deadline()
+        ]
+
+        return Transact(self, self.web3, self.router_abi, self.router, self._router_contract,
+                        'addLiquidity', addLiquidityArgs, {'value': amount.value})
 
     def remove_liquidity(self, amount: Wad) -> Transact:
         assert (isinstance(amount, Wad))
 
+        removeLiquidityArgs = [
+            amount.value, 1, 1, self._deadline()
+        ]
+
         return Transact(self, self.web3, self.abi, self.exchange, self._contract,
-                        'removeLiquidity', [amount.value, 1, 1, self._deadline()])
+                        'removeLiquidity', removeLiquidityArgs)
 
     def eth_to_token_swap_input(self, eth_sold: Wad) -> Transact:
         """Convert ETH to Tokens.
