@@ -16,74 +16,28 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-from pprint import pformat
-from typing import Optional, List
-
-import dateutil.parser
-import requests
-import time
-
+import threading
 import uuid
 import hmac
 import hashlib
 import json
+import dateutil.parser
+import requests
+import time
 
+from typing import List
 from urllib.parse import urlencode
 
 from pyexchange.api import PyexAPI
+from pyexchange.model import Trade, Order
 
 from pymaker.numeric import Wad
 from pymaker.util import http_response_summary
 
-class Order:
-    def __init__(self,
-                 order_id: str,
-                 timestamp: str, # current UTC time at order placement
-                 book: str,
-                 is_sell: bool,
-                 price: Wad,
-                 amount: Wad):
 
-        assert(isinstance(book, str))
-        assert(isinstance(timestamp, str))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
-
-        self.order_id = order_id
-        self.timestamp = timestamp
-        self.book = book
-        self.is_sell = is_sell
-        self.price = price
-        self.amount = amount
-
-    @property
-    def sell_to_buy_price(self) -> Wad:
-        return self.price
-
-    @property
-    def buy_to_sell_price(self) -> Wad:
-        return self.price
-
-    @property
-    def remaining_buy_amount(self) -> Wad:
-        return self.amount*self.price if self.is_sell else self.amount
-
-    @property
-    def remaining_sell_amount(self) -> Wad:
-        return self.amount if self.is_sell else self.amount*self.price
-
-    def __hash__(self):
-        return hash((self.order_id,
-                     self.timestamp,
-                     self.price,
-                     self.amount))
-
-    def __repr__(self):
-        return pformat(vars(self))
-
+class BitsoOrder(Order):
     @staticmethod
-    def from_message(item):
+    def from_message(item: dict) -> Order:
         return Order(order_id=item['oid'],
                      timestamp=item['created_at'],
                      book=item['book'],
@@ -91,47 +45,21 @@ class Order:
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['original_amount']))
 
-class Trade:
-    def __init__(self,
-                 trade_id: str,
-                 timestamp: int,
-                 pair: Optional[str],
-                 is_sell: bool,
-                 price: Wad,
-                 amount: Wad):
-        assert(isinstance(trade_id, str))
-        assert(isinstance(timestamp, int))
-        assert(isinstance(pair, str) or (pair is None))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
 
-        self.trade_id = trade_id
-        self.timestamp = timestamp
-        self.pair = pair
-        self.is_sell = is_sell
-        self.price = price
-        self.amount = amount
+def iso8601_to_unix(timestamp) -> int:
+    assert (isinstance(timestamp, str))
+    int_timestamp = int(dateutil.parser.isoparse(timestamp).timestamp())
+    return int_timestamp
 
-    def __eq__(self, other):
-        assert(isinstance(other, Trade))
-        return self.trade_id == other.trade_id and \
-               self.timestamp == other.timestamp and \
-               self.pair == other.pair and \
-               self.is_sell == other.is_sell and \
-               self.price == other.price and \
-               self.amount == other.amount
-
-    def __hash__(self):
-        return hash((self.trade_id,
-                     self.timestamp,
-                     self.pair,
-                     self.is_sell,
-                     self.price,
-                     self.amount))
-
-    def __repr__(self):
-        return pformat(vars(self))
+class BitsoTrade(Trade):
+    @staticmethod
+    def from_message(item: dict) -> Trade:
+        return Trade(trade_id=item['tid'],
+                     timestamp=iso8601_to_unix(item['created_at']),
+                     pair=item['book'],
+                     is_sell=item['side'] == 'bid',
+                     price=Wad.from_number(item['price']),
+                     amount=Wad.from_number(abs(float(item['major']))))
 
 
 class BitsoApi(PyexAPI):
@@ -154,6 +82,8 @@ class BitsoApi(PyexAPI):
         self.api_key = api_key
         self.secret_key = secret_key
         self.timeout = timeout
+        self.last_nonce = 0
+        self.last_nonce_lock = threading.Lock()
 
     # This endpoint returns a list of existing exchange order books and their respective order placement limits.
     def get_markets(self):
@@ -182,7 +112,7 @@ class BitsoApi(PyexAPI):
         }
 
         orders = self._http_authenticated_request("GET", "/v3/open_orders", params)
-        return list(map(lambda item: Order.from_message(item), orders["payload"]))
+        return list(map(lambda item: BitsoOrder.from_message(item), orders["payload"]))
 
     # Trading: Submits and awaits acknowledgement of an (exclusively) limit order,
     # returning the order id.
@@ -235,12 +165,7 @@ class BitsoApi(PyexAPI):
         }
 
         result = self._http_authenticated_request("GET", f"/v3/user_trades", params)
-        return list(map(lambda item: Trade(trade_id=item['tid'],
-                                           timestamp=self._iso8601_to_unix(item['created_at']),
-                                           pair=item['book'],
-                                           is_sell=item['side'] == 'bid',
-                                           price=Wad.from_number(item['price']),
-                                           amount=Wad.from_number(abs(float(item['major'])))), result["payload"]))
+        return list(map(lambda item: BitsoTrade.from_message(item), result["payload"]))
 
     def get_all_trades(self, book: str, page_number: int = 1) -> List[Trade]:
         # Params for filtering orders
@@ -249,12 +174,7 @@ class BitsoApi(PyexAPI):
             "limit": 100 # OPtional: number or orders to return, max 100
         }
         result = self._http_request("GET", "/v3/trades", params)["payload"]
-        return list(map(lambda item: Trade(trade_id=str(item['tid']),
-                                    timestamp=self._iso8601_to_unix(item['created_at']),
-                                    pair=item['book'],
-                                    is_sell=item['maker_side'] == 'buy',
-                                    price=Wad.from_number(item['price']),
-                                    amount=Wad.from_number(abs(float(item['amount'])))), result))
+        return list(map(lambda item: BitsoTrade.from_message(item), result))
 
     def _http_request(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
@@ -276,7 +196,7 @@ class BitsoApi(PyexAPI):
         assert(isinstance(params, dict) or (params is None))
         assert(isinstance(data, dict))
 
-        nonce = str(int(round(time.time() * 1000)))
+        nonce = self._choose_nonce()
 
         # if has params, else strip out query params, otherwise call fails
         if not params:
@@ -332,7 +252,16 @@ class BitsoApi(PyexAPI):
         else:
             return pair.lower()
 
-    def _iso8601_to_unix(self, timestamp) -> int:
-        assert(isinstance(timestamp, str))
-        int_timestamp = int(dateutil.parser.isoparse(timestamp).timestamp())
-        return int_timestamp
+    def _choose_nonce(self) -> int:
+        with self.last_nonce_lock:
+            timed_nonce = int(time.time() * 1000)
+
+            if self.last_nonce + 1 > timed_nonce:
+                self.logger.info(
+                    f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}', using '{self.last_nonce + 1}' instead")
+
+                self.last_nonce += 1
+            else:
+                self.last_nonce = timed_nonce
+
+            return self.last_nonce

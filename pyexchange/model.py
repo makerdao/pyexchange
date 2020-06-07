@@ -90,7 +90,7 @@ class Order:
         return pformat(vars(self))
 
     @staticmethod
-    def from_message(item):
+    def from_message(item: dict) -> Order:
         return Order(order_id=item['oid'],
                      timestamp=item['created_at'],
                      pair=item['book'],
@@ -145,7 +145,7 @@ class Trade:
         return pformat(vars(self))
 
     @staticmethod
-    def from_message(item):
+    def from_message(item: dict) -> Trade:
         return Trade(trade_id=item['oid'],
                      timestamp=item['created_at'],
                      pair=item['book'],
