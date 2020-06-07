@@ -204,7 +204,7 @@ class UniswapV2(Contract):
         ]
 
         return Transact(self, self.web3, self.router_abi, self.router, self._router_contract,
-                        'addLiquidity', addLiquidityArgs, {'value': amount.value})
+                        'addLiquidity', addLiquidityArgs)
 
     def remove_liquidity(self, amount: Wad) -> Transact:
         assert (isinstance(amount, Wad))
