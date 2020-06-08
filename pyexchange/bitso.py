@@ -54,13 +54,22 @@ class BitsoOrder(Order):
 
 class BitsoTrade(Trade):
     @staticmethod
-    def from_message(item: dict):
+    def from_our_trades(item: dict):
         return Trade(trade_id=item['tid'],
                      timestamp=iso8601_to_unix(item['created_at']),
                      pair="-".join(item['book'].split('_')).upper(),
                      is_sell=item['side'] == 'bid',
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(abs(float(item['major']))))
+
+    @staticmethod
+    def from_all_trades(item: dict):
+        return Trade(trade_id=item['tid'],
+                     timestamp=iso8601_to_unix(item['created_at']),
+                     pair="-".join(item['book'].split('_')).upper(),
+                     is_sell=item['maker_side'] == 'buy',
+                     price=Wad.from_number(item['price']),
+                     amount=Wad.from_number(abs(float(item['amount']))))
 
 
 class BitsoApi(PyexAPI):
@@ -166,7 +175,7 @@ class BitsoApi(PyexAPI):
         }
 
         result = self._http_authenticated_request("GET", f"/v3/user_trades", params)
-        return list(map(lambda item: BitsoTrade.from_message(item), result["payload"]))
+        return list(map(lambda item: BitsoTrade.from_our_trades(item), result["payload"]))
 
     def get_all_trades(self, book: str, page_number: int = 1) -> List[Trade]:
         # Params for filtering orders
@@ -175,7 +184,7 @@ class BitsoApi(PyexAPI):
             "limit": 100 # OPtional: number or orders to return, max 100
         }
         result = self._http_request("GET", "/v3/trades", params)["payload"]
-        return list(map(lambda item: BitsoTrade.from_message(item), result))
+        return list(map(lambda item: BitsoTrade.from_all_trades(item), result))
 
     def _http_request(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
