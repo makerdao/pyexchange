@@ -22,7 +22,7 @@ import time
 from datetime import datetime, timezone
 
 from pymaker import Wad
-from pyexchange.bitso import BitsoApi, Order, Trade
+from pyexchange.bitso import BitsoApi, Order, Trade, iso8601_to_unix
 
 # Models HTTP response, produced by BitsoMockServer
 class MockedResponse:
@@ -100,6 +100,13 @@ class TestBitso:
             timeout = 15.5
         )
 
+    def test_convert_iso_to_unix(self):
+        iso_timestamp = datetime.now(tz=timezone.utc).isoformat()
+        assert(isinstance(iso_timestamp, str))
+
+        unix_timestamp = iso8601_to_unix(iso_timestamp)
+        assert(isinstance(unix_timestamp, int))
+
     def test_get_markets(self, mocker):
         mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
         response = self.bitso.get_markets()
@@ -112,8 +119,8 @@ class TestBitso:
         remaining_amount = Wad.from_number(0.153)
         order = Order(
             order_id="153153",
-            timestamp=datetime.now(tz=timezone.utc).isoformat(),
-            book="eth_mxn",
+            timestamp=iso8601_to_unix(datetime.now(tz=timezone.utc).isoformat()),
+            pair="eth_mxn",
             is_sell=False,
             price=price,
             amount=amount
@@ -134,7 +141,7 @@ class TestBitso:
         by_oid = {}
         duplicate_count = 0
         duplicate_first_found = -1
-        current_time = datetime.now(tz=timezone.utc).isoformat()
+        current_time = iso8601_to_unix(datetime.now(tz=timezone.utc).isoformat())
         for index, order in enumerate(orders):
             assert(isinstance(order, Order))
             assert(order.order_id is not None)
