@@ -64,7 +64,7 @@ class BitsoTrade(Trade):
 
     @staticmethod
     def from_all_trades(item: dict):
-        return Trade(trade_id=item['tid'],
+        return Trade(trade_id=str(item['tid']),
                      timestamp=iso8601_to_unix(item['created_at']),
                      pair="-".join(item['book'].split('_')).upper(),
                      is_sell=item['maker_side'] == 'buy',
