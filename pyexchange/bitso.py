@@ -197,7 +197,7 @@ class BitsoApi(PyexAPI):
         assert(isinstance(params, dict) or (params is None))
         assert(isinstance(data, dict))
 
-        nonce = self._choose_nonce()
+        nonce = str(self._choose_nonce())
 
         # if has params, else strip out query params, otherwise call fails
         if not params:
