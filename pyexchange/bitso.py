@@ -35,28 +35,29 @@ from pymaker.numeric import Wad
 from pymaker.util import http_response_summary
 
 
-class BitsoOrder(Order):
-    @staticmethod
-    def from_message(item: dict) -> Order:
-        return Order(order_id=item['oid'],
-                     timestamp=item['created_at'],
-                     book=item['book'],
-                     is_sell=True if item['side'] == 'sell' else False,
-                     price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['original_amount']))
-
-
 def iso8601_to_unix(timestamp) -> int:
     assert (isinstance(timestamp, str))
     int_timestamp = int(dateutil.parser.isoparse(timestamp).timestamp())
     return int_timestamp
 
-class BitsoTrade(Trade):
+
+class BitsoOrder(Order):
     @staticmethod
-    def from_message(item: dict) -> Trade:
-        return Trade(trade_id=item['tid'],
+    def from_message(item: dict):
+        return Order(order_id=item['oid'],
                      timestamp=iso8601_to_unix(item['created_at']),
                      pair=item['book'],
+                     is_sell=True if item['side'] == 'sell' else False,
+                     price=Wad.from_number(item['price']),
+                     amount=Wad.from_number(item['original_amount']))
+
+
+class BitsoTrade(Trade):
+    @staticmethod
+    def from_message(item: dict):
+        return Trade(trade_id=item['tid'],
+                     timestamp=iso8601_to_unix(item['created_at']),
+                     pair="-".join(item['book'].split('_')).upper(),
                      is_sell=item['side'] == 'bid',
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(abs(float(item['major']))))
