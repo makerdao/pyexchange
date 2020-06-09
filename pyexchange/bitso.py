@@ -162,7 +162,7 @@ class BitsoApi(PyexAPI):
         self.logger.info(f"Cancelling order #{order_id}...")
 
         result = self._http_authenticated_request("DELETE", f"/v3/orders/{order_id}", {})
-        return True if result["success"] == "True" else False
+        return result["success"] == "True"
 
     # Trading: Retrieves most recent trades for a given order_id or client_id.
     def get_trades(self, book: str = "", page_number: int = 1) -> List[Trade]:
