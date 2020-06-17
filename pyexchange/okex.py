@@ -348,7 +348,7 @@ class OKEXApi:
         # file.close()
 
         if check_result:
-            if 'error_code' in data and data["error_code"] != 0 and data["error_code"] != "":
+            if 'error_code' in data and data["error_code"] != "0" and data["error_code"] != "":
                 raise Exception(f"OKCoin API negative response: {http_response_summary(response)}")
 
         if has_cursor:
