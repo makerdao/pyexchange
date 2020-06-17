@@ -44,19 +44,16 @@ class UniswapV2(Contract):
     router_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')
     factory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')
 
-    def __init__(self, web3: Web3, graph_url: str, pair: Address, router: Address, factory):
+    def __init__(self, web3: Web3, graph_url: str, router: Address, factory: Address):
         assert (isinstance(web3, Web3))
         assert (isinstance(graph_url, str))
-        assert (isinstance(pair, Address))
         assert (isinstance(router, Address))
 
         self.web3 = web3
-        self.pair = pair
         self.router = router
         # self.token = ERC20Token(web3=web3, address=token)
-        self._pair_contract = self._get_contract(web3, self.pair_abi, pair)
-        self._router_contract = self._get_contract(web3, self.router_abi, router)
-        self._factory_contract = self._get_contract(web3, self.factory_contract, factory)
+        self._router_contract = self._get_contract(web3, self.router_abi['abi'], router)
+        self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], factory)
         self.account_address = Address(self.web3.eth.defaultAccount)
         self.graph_client = GraphClient(graph_url)
 
@@ -184,27 +181,34 @@ class UniswapV2(Contract):
     def get_pair_address(self, token1: Address, token2: Address) -> Address:
         return Address(self._factory_contract.functions.getPair(token1, token2).call())
 
+    def set_pair_contract(self, pair_address: Address):
+        self._pair_contract = self._get_contract(self.web3, self.pair_abi, pair_address)
+
+    # Amounts is a dictionary of uint256 values
     def add_liquidity(self, amounts: dict, token_a: Address, token_b: Address) -> Transact:
         assert (isinstance(amounts, dict))
 
         # min_liquidity = Wad.from_number(0.5) * amount
         # max_token = amount * self.get_exchange_rate() * Wad.from_number(1.00000001)
 
-        pairAddress = self.get_pair_address(token_a, token_b)
+        pairAddress = self.get_pair_address(token_a.address, token_b.address)
 
         addLiquidityArgs = [
-            token_a,
-            token_b,
+            token_a.address,
+            token_b.address,
             amounts['amount_a_desired'],
             amounts['amount_b_desired'],
             amounts['amount_a_min'],
             amounts['amount_b_min'],
-            pairAddress,
+            pairAddress.address,
             self._deadline()
         ]
 
-        return Transact(self, self.web3, self.router_abi, self.router, self._router_contract,
-                        'addLiquidity', addLiquidityArgs)
+        return Transact(self, self.web3, self.router_abi['abi'], self.router, self._router_contract,
+                        'addLiquidity', addLiquidityArgs, {'gas': 500000})
+
+    # Enable liquidity to be removed from a pool up to a set limit
+    def permit_removal(self, pair: Pair, amount: Wad) -> Transact:
 
     def remove_liquidity(self, amount: Wad) -> Transact:
         assert (isinstance(amount, Wad))
@@ -249,4 +253,4 @@ class UniswapV2(Contract):
         return self.address == other.address
 
     def __repr__(self):
-        return f"UniswapExchange('{self.exchange}')"
+        return f"UniswapV2"
