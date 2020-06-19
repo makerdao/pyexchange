@@ -50,12 +50,16 @@ class UniswapV2(Contract):
         assert (isinstance(router, Address))
 
         self.web3 = web3
-        self.router = router
+        self.router_address = router
         # self.token = ERC20Token(web3=web3, address=token)
         self._router_contract = self._get_contract(web3, self.router_abi['abi'], router)
         self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], factory)
+        self.factory_address = factory
         self.account_address = Address(self.web3.eth.defaultAccount)
         self.graph_client = GraphClient(graph_url)
+
+    def unlock_account(self):
+        return self.web3.parity.personal.unlock_account(self.account_address, "", None)
 
     def get_account_token_balance(self):
         return self.token.balance_of(self.account_address)
@@ -200,49 +204,104 @@ class UniswapV2(Contract):
             amounts['amount_b_desired'],
             amounts['amount_a_min'],
             amounts['amount_b_min'],
-            pairAddress.address,
+            self.account_address.address,
+            # pairAddress.address,
             self._deadline()
         ]
 
-        return Transact(self, self.web3, self.router_abi['abi'], self.router, self._router_contract,
-                        'addLiquidity', addLiquidityArgs, {'gas': 500000})
+        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+                        'addLiquidity', addLiquidityArgs, {'gas': 50000000})
+        # return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+        #                 'addLiquidity', addLiquidityArgs, {'gas': 500000})
 
+    # Amounts is a dictionary of uint256 values
+    def add_liquidity_eth(self, amounts: dict, token: Address) -> Transact:
+        assert (isinstance(amounts, dict))
+
+        addLiquidityArgs = [
+            token.address,
+            amounts['amount_token_desired'],
+            amounts['amount_token_min'],
+            amounts['amount_eth_min'],
+            self.account_address.address,
+            self._deadline()
+        ]
+
+        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+                        'addLiquidityETH', addLiquidityArgs)
+        # return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+        #                 'addLiquidity', addLiquidityArgs, {'gas': 500000})
+
+    # TODO: finish implementing
     # Enable liquidity to be removed from a pool up to a set limit
     def permit_removal(self, pair: Pair, amount: Wad) -> Transact:
+        pass
 
+    # TODO: finish implementing
     def remove_liquidity(self, amount: Wad) -> Transact:
         assert (isinstance(amount, Wad))
 
         removeLiquidityArgs = [
-            amount.value, 1, 1, self._deadline()
+            amount.value,
+            1,
+            1,
+            self._deadline()
         ]
 
-        return Transact(self, self.web3, self.abi, self.exchange, self._contract,
+        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
                         'removeLiquidity', removeLiquidityArgs)
 
-    def eth_to_token_swap_input(self, eth_sold: Wad) -> Transact:
+    def get_block(self):
+        return self.web3.eth.getBlock('latest')['number']
+
+    def get_amounts_in(self) -> int:
+        return self._router_contract.functions.getAmountsIn(50,
+                                                            ["0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                                                             "0x6b175474e89094c44da98b954eedeac495271d0f"]).call()
+
+    def swap_exact_eth_for_tokens(self, eth_to_swap: int, min_amount_out: int, path: List) -> Transact:
         """Convert ETH to Tokens.
 
         Args:
-            eth_sold: Amount of ETH to swap for token.
-
+            eth_to_swap: Amount of ETH to swap for token.
+            min_amount_out: Minimum amount of output token to set price
+            path: array of token addresses used to form swap route
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
-        return Transact(self, self.web3, self.abi, self.exchange, self._contract,
-                        'ethToTokenSwapInput', [1, self._deadline()], {'value': eth_sold.value})
+        swapArgs = [
+            min_amount_out,
+            path,
+            self.account_address.address,
+            self._deadline()
+        ]
 
-    def token_to_eth_swap_input(self, tokens_sold: Wad) -> Transact:
-        """Convert Tokens to ETH.
+        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+                        'swapExactETHForTokens', swapArgs, {'value': eth_to_swap})
+
+
+    def swap_exact_tokens_for_tokens(self, tokens_to_swap: int, min_amount_out: int, path: List) -> Transact:
+        """Convert ERC20 to ERC20.
+
+        Requires Approval to have already been called on the token to swap
 
         Args:
-            eth_sold: Amount of token to swap for ETH.
-
+            tokens_to_swap: Amount of given token to swap for token.
+            min_amount_out: Minimum amount of output token to set price
+            path: array of token addresses used to form swap route
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
-        return Transact(self, self.web3, self.abi, self.exchange, self._contract,
-                        'tokenToEthSwapInput', [tokens_sold.value, 1, self._deadline()])
+        swapArgs = [
+            tokens_to_swap,
+            min_amount_out,
+            path,
+            self.account_address.address,
+            self._deadline()
+        ]
+
+        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+                        'swapExactTokensForTokens', swapArgs)
 
     def _deadline(self):
         """Get a predefined deadline."""
