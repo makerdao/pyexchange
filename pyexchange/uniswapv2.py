@@ -51,15 +51,11 @@ class UniswapV2(Contract):
 
         self.web3 = web3
         self.router_address = router
-        # self.token = ERC20Token(web3=web3, address=token)
         self._router_contract = self._get_contract(web3, self.router_abi['abi'], router)
         self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], factory)
         self.factory_address = factory
         self.account_address = Address(self.web3.eth.defaultAccount)
         self.graph_client = GraphClient(graph_url)
-
-    def unlock_account(self):
-        return self.web3.parity.personal.unlock_account(self.account_address, "", None)
 
     def get_account_token_balance(self):
         return self.token.balance_of(self.account_address)
@@ -121,8 +117,11 @@ class UniswapV2(Contract):
         result = self.graph_client.query_request(query, variables)
         return result['data']
 
-    # filter contract events for an address to focus on swaps
+    # filter contract events for a given pool address to focus on swaps
     def get_trades(self, pair: Pair) -> List[Trade]:
+
+        pairAddress = self.get_pair_address(token_a.address, token_b.address)
+
         query = '''query ($address: ID!)
         {
           swaps(where: {id: $address}) {
@@ -192,11 +191,6 @@ class UniswapV2(Contract):
     def add_liquidity(self, amounts: dict, token_a: Address, token_b: Address) -> Transact:
         assert (isinstance(amounts, dict))
 
-        # min_liquidity = Wad.from_number(0.5) * amount
-        # max_token = amount * self.get_exchange_rate() * Wad.from_number(1.00000001)
-
-        pairAddress = self.get_pair_address(token_a.address, token_b.address)
-
         addLiquidityArgs = [
             token_a.address,
             token_b.address,
@@ -205,14 +199,11 @@ class UniswapV2(Contract):
             amounts['amount_a_min'],
             amounts['amount_b_min'],
             self.account_address.address,
-            # pairAddress.address,
             self._deadline()
         ]
 
         return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
-                        'addLiquidity', addLiquidityArgs, {'gas': 50000000})
-        # return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
-        #                 'addLiquidity', addLiquidityArgs, {'gas': 500000})
+                        'addLiquidity', addLiquidityArgs)
 
     # Amounts is a dictionary of uint256 values
     def add_liquidity_eth(self, amounts: dict, token: Address) -> Transact:
@@ -228,28 +219,68 @@ class UniswapV2(Contract):
         ]
 
         return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
-                        'addLiquidityETH', addLiquidityArgs)
-        # return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
-        #                 'addLiquidity', addLiquidityArgs, {'gas': 500000})
+                        'addLiquidityETH', addLiquidityArgs, {'value': amounts['amount_token_desired']})
 
     # TODO: finish implementing
     # Enable liquidity to be removed from a pool up to a set limit
     def permit_removal(self, pair: Pair, amount: Wad) -> Transact:
         pass
 
-    # TODO: finish implementing
-    def remove_liquidity(self, amount: Wad) -> Transact:
-        assert (isinstance(amount, Wad))
+    def remove_liquidity(self, token_a: Address, token_b: Address, amounts: dict) -> Transact:
+        assert (isinstance(token_a, Address))
+        assert (isinstance(token_b, Address))
+        assert (isinstance(amounts, dict))
+
+        """ Remove liquidity from arbitrary token pair.
+
+        Args:
+            token_a: Address of pool token A.
+            token_b: Address of pool token B.
+            amounts: dictionary[uint256, uint256, uint256]
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
 
         removeLiquidityArgs = [
-            amount.value,
-            1,
-            1,
+            token_a.address,
+            token_b.address,
+            amounts['liquidity'],
+            amounts['amountAMin'],
+            amounts['amountBMin'],
+            self.account_address,
             self._deadline()
         ]
 
         return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
                         'removeLiquidity', removeLiquidityArgs)
+
+    # TODO: add switch to handle whether or not a givne pool charges a fee
+    # If so, use ternary to change invoked method name
+    def remove_liquidity_eth(self, token: Address, amounts: dict) -> Transact:
+        assert (isinstance(token, Address))
+        assert (isinstance(amounts, dict))
+
+        """ Remove liquidity from arbitrary token pair.
+
+        Args:
+            token_a: Address of pool token A.
+            token_b: Address of pool token B.
+            amounts: dictionary[uint256, uint256, uint256]
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+
+        removeLiquidityArgs = [
+            token.address,
+            amounts['liquidity'],
+            amounts['amountTokenMin'],
+            amounts['amountETHMin'],
+            self.account_address.address,
+            self._deadline()
+        ]
+
+        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+                        'removeLiquidityETH', removeLiquidityArgs)
 
     def get_block(self):
         return self.web3.eth.getBlock('latest')['number']
