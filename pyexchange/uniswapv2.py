@@ -44,6 +44,8 @@ class UniswapV2(Contract):
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
     router_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')
     factory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')
+    router_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Router02.bin')
+    factory_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Factory.bin')
 
     def __init__(self, web3: Web3, graph_url: str, router: Address, factory: Address):
                  # ec_signature_r: Optional[str], ec_signature_s: Optional[str], ec_signature_v: Optional[int]):
@@ -56,7 +58,7 @@ class UniswapV2(Contract):
         self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], factory)
         self.router_address = router
         self.factory_address = factory
-        self.account_address = Address(self.web3.eth.defaultAccount)
+        self.account_address = self.web3.eth.defaultAccount
         self.graph_client = GraphClient(graph_url)
 
         # self.ec_signature_r = ec_signature_r
@@ -109,19 +111,22 @@ class UniswapV2(Contract):
     # return the current balance in a given pool
     def get_balances(self) -> dict:
         query = '''query ($user: ID!)
-            {
-              liquidityPositions(where: {user: $user}) {
-                id
-                liquidityTokenBalance
-                poolOwnership
-              }
+        {
+            users(where: {id: $user}) {
+            liquidityPositions {
+              id
+              liquidityTokenBalance
+              poolOwnership
             }
+          }
+        }
         '''
         variables = {
             'user': self.account_address
         }
 
         result = self.graph_client.query_request(query, variables)
+        print(result)
         return result['data']
 
     # filter contract events for a given pool address to focus on swaps
@@ -208,7 +213,7 @@ class UniswapV2(Contract):
             amounts['amount_b_desired'],
             amounts['amount_a_min'],
             amounts['amount_b_min'],
-            self.account_address.address,
+            self.account_address,
             self._deadline()
         ]
 
@@ -224,7 +229,7 @@ class UniswapV2(Contract):
             amounts['amount_token_desired'],
             amounts['amount_token_min'],
             amounts['amount_eth_min'],
-            self.account_address.address,
+            self.account_address,
             self._deadline()
         ]
 
@@ -273,8 +278,7 @@ class UniswapV2(Contract):
         """ Remove liquidity from token-weth pair.
 
         Args:
-            token_a: Address of pool token A.
-            token_b: Address of pool token B.
+            token_a: Address of pool token.
             amounts: dictionary[uint256, uint256, uint256]
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
@@ -285,7 +289,7 @@ class UniswapV2(Contract):
             amounts['liquidity'],
             amounts['amountTokenMin'],
             amounts['amountETHMin'],
-            self.account_address.address,
+            self.account_address,
             self._deadline()
         ]
 
@@ -304,6 +308,8 @@ class UniswapV2(Contract):
     def swap_exact_eth_for_tokens(self, eth_to_swap: int, min_amount_out: int, path: List) -> Transact:
         """Convert ETH to Tokens.
 
+        Requires Approval to have already been called on the token to swap
+
         Args:
             eth_to_swap: Amount of ETH to swap for token.
             min_amount_out: Minimum amount of output token to set price
@@ -314,7 +320,7 @@ class UniswapV2(Contract):
         swapArgs = [
             min_amount_out,
             path,
-            self.account_address.address,
+            self.account_address,
             self._deadline()
         ]
 
@@ -338,7 +344,7 @@ class UniswapV2(Contract):
             tokens_to_swap,
             min_amount_out,
             path,
-            self.account_address.address,
+            self.account_address,
             self._deadline()
         ]
 

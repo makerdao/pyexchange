@@ -24,8 +24,12 @@ from json import JSONDecodeError
 from lib.pymaker.pymaker.util import http_response_summary
 
 get_balances = '''
+  # liquidityPositions(where: {user: {id: "0x332f60EDC783E4Db3E0a18F8dFEB368Ae178CCd9"}}) {
+  #   id
+  #   liquidityTokenBalance
+  #   poolOwnership
 {
-  user(id: "0x0000000000c90bc353314b6911180ed7e06019a9") {
+  user(id: "0x332f60EDC783E4Db3E0a18F8dFEB368Ae178CCd9") {
     exchangeBalances {
       userAddress
 
@@ -49,7 +53,7 @@ get_balances = '''
       tokenFeesInUSD
     }
   }
-}}
+}
 '''
 
 get_market_info = '''query ($id: String!) {
@@ -160,9 +164,9 @@ class GraphClient:
         return data
 
 
-graph_url = 'https://api.thegraph.com/subgraphs/name/graphprotocol/uniswap'
+graph_url = 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2'
 # graph_url = 'http://127.0.0.1:8000/subgraphs/name/davekaj/uniswap'
 uniswap_graph = GraphClient(graph_url)
-print(uniswap_graph.query_request(get_market_info, {"id": "1"}))
+# print(uniswap_graph.query_request(get_market_info, {"id": "1"}))
 # print(uniswap_graph.query_request(get_trades))
-# print(uniswap_graph.query_request( get_balances))
+# print(uniswap_graph.query_request(get_balances))
