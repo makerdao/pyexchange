@@ -17,7 +17,6 @@
 
 import time
 from web3 import Web3
-from typing import List, Optional
 from typing import List
 
 from pymaker import Contract, Address, Transact, Wad
@@ -183,26 +182,38 @@ class UniswapV2(Contract):
     def get_block(self) -> Transact:
         return self.web3.eth.getBlock('latest')['number']
 
-    def get_amounts_out(self, amount_in: int, path: List) -> int:
+    def get_amounts_out(self, amount_in: int, path: List) -> List:
+        """ Calculate amount of given inputs to achieve an exact output amount.
+
+        Desired amount_out must be less than available liquidity or call will fail.
+
+        Args:
+            amounts_in: Desired amount of tokens out.
+            path: List of addresses used to form a path for swap
+        Returns:
+            A list of uint256 reserve amounts required.
+        """
         assert (isinstance(amount_in, int))
         assert (isinstance(path, List))
 
-        return self._router_contract.functions.getAmountsIn(amount_in, path).call()
+        return self._router_contract.functions.getAmountsOut(amount_in, path).call()
 
-    def get_amounts_in(self, amount_out: int, path: List) -> int:
+    def get_amounts_in(self, amount_out: int, path: List) -> List:
+        """ Calculate amount of given inputs to achieve an exact output amount.
+        
+        Desired amount_out must be less than available liquidity or call will fail.
+
+        Args:
+            amount_out: Desired amount of tokens out.
+            path: List of addresses used to form a path for swap 
+        Returns:
+            A list of uint256 reserve amounts required.
+        """
         assert (isinstance(amount_out, int))
         assert (isinstance(path, List))
 
-        """ Remove liquidity from token-weth pair.
-
-        Args:
-            amount_out: Address of pool token.
-            path: list of addresses used to form a path for swap 
-        Returns:
-            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
-        """
-
-        return self._router_contract.functions.getAmountsIn(amount_out, path).call()
+        result = self._router_contract.functions.getAmountsIn(amount_out, path).call()
+        return result
 
     # Amounts is a dictionary of uint256 values
     def add_liquidity(self, amounts: dict, token_a: Address, token_b: Address) -> Transact:
@@ -274,9 +285,6 @@ class UniswapV2(Contract):
     # TODO: add switch to handle whether or not a givne pool charges a fee
     # If so, use ternary to change invoked method name
     def remove_liquidity_eth(self, token: Address, amounts: dict):
-        assert (isinstance(token, Address))
-        assert (isinstance(amounts, dict))
-
         """ Remove liquidity from token-weth pair.
 
         Args:
@@ -285,6 +293,8 @@ class UniswapV2(Contract):
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
+        assert (isinstance(token, Address))
+        assert (isinstance(amounts, dict))
 
         removeLiquidityArgs = [
             token.address,

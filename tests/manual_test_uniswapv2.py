@@ -38,16 +38,19 @@ web3 = Web3(HTTPProvider(sys.argv[1], request_kwargs={"timeout": 600}))
 web3.eth.defaultAccount = sys.argv[2]
 register_key(web3, sys.argv[3])
 
-Transact.gas_estimate_for_bad_txs = 23000
+# Transact.gas_estimate_for_bad_txs = 23000
 
 uniswap = UniswapV2(web3, 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2', ROUTER_ADDRESS, FACTORY_ADDRESS)
-# current_liq = uniswap.get_current_liquidity()
-# print(current_liq)
-# dai = Token("DAI", DAI_KOVAN_ADDRESS, 18)
-print(uniswap.get_pair_address(DAI_KOVAN_ADDRESS.address, WETH_KOVAN_ADDRESS.address))
-# print(uniswap.get_pair_address(DAI_KOVAN_ADDRESS.address, WETH_ADDRESS.address))
+
+dai = Token("DAI", DAI_KOVAN_ADDRESS, 18)
 dai_weth_pair = Token("POOL", uniswap.get_pair_address(DAI_KOVAN_ADDRESS.address, WETH_KOVAN_ADDRESS.address), 18)
-uniswap.approve(dai_weth_pair, web3.toWei(5, 'ether'))
+# uniswap.approve(dai_weth_pair, web3.toWei(5, 'ether'))
+
+amounts_in = uniswap.get_amounts_in(web3.toWei(0.5, 'ether'), [DAI_KOVAN_ADDRESS.address, MKR_KOVAN_ADDRESS.address])
+print(amounts_in)
+
+amounts_out = uniswap.get_amounts_out(web3.toWei(0.5, 'ether'), [DAI_KOVAN_ADDRESS.address, MKR_KOVAN_ADDRESS.address])
+print(amounts_out)
 
 add_token_pair_amounts = {
     "amount_a_desired": web3.toWei(1.9, 'ether'),
