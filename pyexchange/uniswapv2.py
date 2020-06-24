@@ -68,9 +68,6 @@ class UniswapV2(Contract):
     def get_account_token_balance(self):
         return self.token.balance_of(self.account_address)
 
-    def get_exchange_balance(self):
-        return self.token.balance_of(self.exchange)
-
     def get_markets(self) -> dict:
         query = '''
         {
@@ -113,11 +110,11 @@ class UniswapV2(Contract):
         query = '''query ($user: ID!)
         {
             users(where: {id: $user}) {
-            liquidityPositions {
-              id
-              liquidityTokenBalance
-              poolOwnership
-            }
+                liquidityPositions {
+                  id
+                  liquidityTokenBalance
+                  poolOwnership
+                }
           }
         }
         '''
@@ -165,42 +162,47 @@ class UniswapV2(Contract):
     #     token_reserve = self.get_exchange_balance()
     #     return token_reserve / eth_reserve
 
-    def get_eth_token_input_price(self, amount: Wad):
-        assert (isinstance(amount, Wad))
-
-        return Wad(self._contract.functions.getEthToTokenInputPrice(amount.value).call())
-
-    def get_token_eth_input_price(self, amount: Wad):
-        assert (isinstance(amount, Wad))
-
-        return Wad(self._contract.functions.getTokenToEthInputPrice(amount.value).call())
-
-    def get_eth_token_output_price(self, amount: Wad):
-        assert (isinstance(amount, Wad))
-
-        return Wad(self._contract.functions.getEthToTokenOutputPrice(amount.value).call())
-
-    def get_token_eth_output_price(self, amount: Wad):
-        assert (isinstance(amount, Wad))
-
-        return Wad(self._contract.functions.getTokenToEthOutputPrice(amount.value).call())
-
     def get_current_liquidity(self):
         return Wad(self._contract.functions.balanceOf(self.account_address.address).call())
 
     def get_minimum_liquidity(self):
         return Wad(self._contract.functions.MINIMUM_LIQUIDITY(self.account_address.address).call())
 
-    # TODO: finish implementing with CREATE2
-    # Factory contract exposes a getPair method that can also be called offchain with CREATE2 to save gas
     def get_pair_address(self, token1: Address, token2: Address) -> Address:
         return Address(self._factory_contract.functions.getPair(token1, token2).call())
 
-    def approve(self, token: Token):
+    def approve(self, token: Token, amount: int):
         assert (isinstance(token, Token))
+        assert (isinstance(amount, int))
+
+        erc20_token = ERC20Token(self.web3, token.address)
 
         approval_function = directly()
-        return approval_function(token, self.router_address, 'IUniswapV2Router02')
+        return approval_function(erc20_token, self.router_address, 'IUniswapV2Router02')
+
+    def get_block(self) -> Transact:
+        return self.web3.eth.getBlock('latest')['number']
+
+    def get_amounts_out(self, amount_in: int, path: List) -> int:
+        assert (isinstance(amount_in, int))
+        assert (isinstance(path, List))
+
+        return self._router_contract.functions.getAmountsIn(amount_in, path).call()
+
+    def get_amounts_in(self, amount_out: int, path: List) -> int:
+        assert (isinstance(amount_out, int))
+        assert (isinstance(path, List))
+
+        """ Remove liquidity from token-weth pair.
+
+        Args:
+            amount_out: Address of pool token.
+            path: list of addresses used to form a path for swap 
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
+
+        return self._router_contract.functions.getAmountsIn(amount_out, path).call()
 
     # Amounts is a dictionary of uint256 values
     def add_liquidity(self, amounts: dict, token_a: Address, token_b: Address) -> Transact:
@@ -295,15 +297,7 @@ class UniswapV2(Contract):
 
         # return self._router_contract.functions.removeLiquidityETH(*removeLiquidityArgs).transact()
         return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
-                        'removeLiquidityETHSupportingFeeOnTransferTokens', removeLiquidityArgs)
-
-    def get_block(self) -> Transact:
-        return self.web3.eth.getBlock('latest')['number']
-
-    def get_amounts_in(self) -> int:
-        return self._router_contract.functions.getAmountsIn(50,
-                                                            ["0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                                                             "0x6b175474e89094c44da98b954eedeac495271d0f"]).call()
+                        'removeLiquidityETH', removeLiquidityArgs)
 
     def swap_exact_eth_for_tokens(self, eth_to_swap: int, min_amount_out: int, path: List) -> Transact:
         """Convert ETH to Tokens.
