@@ -113,8 +113,8 @@ class GraphClient:
         self.timeout = timeout
 
     def mutation_request(self, mutation: str, variables: dict = None):
-        assert (isinstance(graph_url, str))
         assert (isinstance(mutation, str))
+        assert (isinstance(variables, dict) or isinstance(variables, None))
 
         headers = {'Accept': 'application/json',
                    'Content-Type': 'application/json'}
@@ -124,7 +124,7 @@ class GraphClient:
             json['variables'] = variables
 
         result = self._result(requests.request(method="POST",
-                                               url=graph_url,
+                                               url=self.graph_url,
                                                headers=headers,
                                                json=json,
                                                timeout=self.timeout))
@@ -133,8 +133,8 @@ class GraphClient:
         return result['data']
 
     def query_request(self, query: str, variables: dict = None) -> dict:
-        assert (isinstance(graph_url, str))
         assert (isinstance(query, str))
+        assert (isinstance(variables, str) or isinstance(variables, None))
 
         headers = {'Accept': 'application/json',
                    'Content-Type': 'application/json'}
@@ -144,7 +144,7 @@ class GraphClient:
             json['variables'] = variables
 
         result = self._result(requests.request(method="POST",
-                                               url=graph_url,
+                                               url=self.graph_url,
                                                headers=headers,
                                                json=json,
                                                timeout=self.timeout))
