@@ -46,26 +46,25 @@ class UniswapV2(Contract):
     router_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Router02.bin')
     factory_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Factory.bin')
 
-    def __init__(self, web3: Web3, graph_url: str, router: Address, factory: Address):
+    def __init__(self, web3: Web3, graph_url: str, token_a: Token, token_b: Token):
                  # ec_signature_r: Optional[str], ec_signature_s: Optional[str], ec_signature_v: Optional[int]):
         assert (isinstance(web3, Web3))
         assert (isinstance(graph_url, str))
-        assert (isinstance(router, Address))
+        assert (isinstance(token_a, Token))
+        assert (isinstance(token_b, Token))
 
         self.web3 = web3
-        self._router_contract = self._get_contract(web3, self.router_abi['abi'], router)
-        self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], factory)
-        self.router_address = router
-        self.factory_address = factory
+        self.router_address = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+        self.factory_address = Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
+        self._router_contract = self._get_contract(web3, self.router_abi['abi'], self.router_address)
+        self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], self.factory_address)
+        self._pair_contract = self._get_contract(web3, self.pair_abi['abi'], Address(self.get_pair_address(token_a.address.address, token_b.address.address)))
         self.account_address = self.web3.eth.defaultAccount
         self.graph_client = GraphClient(graph_url)
 
         # self.ec_signature_r = ec_signature_r
         # self.ec_signature_s = ec_signature_s
         # self.ec_signature_v = ec_signature_v
-
-    def get_account_token_balance(self):
-        return self.token.balance_of(self.account_address)
 
     def get_markets(self) -> dict:
         query = '''
@@ -155,17 +154,26 @@ class UniswapV2(Contract):
         result = self.graph_client.query_request(query, variables)
         return list(map(lambda swap: UniswapTrade.from_message(swap), result['data']['swaps']))
 
-    # TODO: use periphery library for pricing
-    # def get_exchange_rate(self):
-    #     eth_reserve = self.get_eth_exchange_balance()
-    #     token_reserve = self.get_exchange_balance()
-    #     return token_reserve / eth_reserve
+    def get_exchange_balance(self, token: Token, pair_address: Address):
+        return ERC20Token(web3=self.web3, address=token.address).balance_of(pair_address)
 
-    def get_current_liquidity(self):
-        return Wad(self._contract.functions.balanceOf(self.account_address.address).call())
+    # retrieve exchange rate for an arbitrary token pair
+    def get_exchange_rate(self, token_a: Token, token_b: Token):
+        assert (isinstance(token_a, Token))
+        assert (isinstance(token_b, Token))
+
+        pair_address = Address(self.get_pair_address(token_a.address.address, token_b.address.address))
+
+        token_a_reserve = self.get_exchange_balance(token_a, pair_address)
+        token_b_reserve = self.get_exchange_balance(token_b, pair_address)
+
+        return token_a_reserve / token_b_reserve
+
+    def get_current_liquidity(self) -> Wad:
+        return Wad(self._pair_contract.functions.balanceOf(self.account_address).call())
 
     def get_minimum_liquidity(self):
-        return Wad(self._contract.functions.MINIMUM_LIQUIDITY(self.account_address.address).call())
+        return Wad(self._router_contract.functions.MINIMUM_LIQUIDITY(self.account_address).call())
 
     def get_pair_address(self, token1: Address, token2: Address) -> Address:
         return Address(self._factory_contract.functions.getPair(token1, token2).call())
@@ -255,10 +263,6 @@ class UniswapV2(Contract):
         pass
 
     def remove_liquidity(self, token_a: Address, token_b: Address, amounts: dict) -> Transact:
-        assert (isinstance(token_a, Address))
-        assert (isinstance(token_b, Address))
-        assert (isinstance(amounts, dict))
-
         """ Remove liquidity from arbitrary token pair.
 
         Args:
@@ -268,6 +272,10 @@ class UniswapV2(Contract):
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
+
+        assert (isinstance(token_a, Address))
+        assert (isinstance(token_b, Address))
+        assert (isinstance(amounts, dict))
 
         removeLiquidityArgs = [
             token_a.address,
