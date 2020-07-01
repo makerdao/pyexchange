@@ -39,6 +39,10 @@ class UniswapTrade(Trade):
 
 
 class UniswapV2(Contract):
+    """
+
+    Each uniswap instance is intended to be used with a single pool at a time.
+    """
 
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
     router_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')
@@ -54,15 +58,18 @@ class UniswapV2(Contract):
         assert (isinstance(token_b, Token))
 
         self.web3 = web3
+        self.token_a = token_a
+        self.token_b = token_b
         self.router_address = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
         self.factory_address = Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
+        self.pair_address = self.get_pair_address(self.token_a.address.address, self.token_b.address.address)
         self._router_contract = self._get_contract(web3, self.router_abi['abi'], self.router_address)
         self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], self.factory_address)
-        self._pair_contract = self._get_contract(web3, self.pair_abi['abi'], Address(self.get_pair_address(token_a.address.address, token_b.address.address)))
-        self.account_address = self.web3.eth.defaultAccount
+        self._pair_contract = self._get_contract(web3, self.pair_abi['abi'], self.pair_address)
+        self.account_address = Address(self.web3.eth.defaultAccount)
         self.graph_client = GraphClient(graph_url)
 
-        # self.ec_signature_r = ec_signature_r
+    # self.ec_signature_r = ec_signature_r
         # self.ec_signature_s = ec_signature_s
         # self.ec_signature_v = ec_signature_v
 
@@ -117,7 +124,7 @@ class UniswapV2(Contract):
         }
         '''
         variables = {
-            'user': self.account_address
+            'user': self.account_address.address
         }
 
         result = self.graph_client.query_request(query, variables)
@@ -126,8 +133,6 @@ class UniswapV2(Contract):
 
     # filter contract events for a given pool address to focus on swaps
     def get_trades(self, pair: Pair) -> List[Trade]:
-
-        pairAddress = self.get_pair_address(token_a.address, token_b.address)
 
         query = '''query ($address: ID!)
         {
@@ -148,11 +153,17 @@ class UniswapV2(Contract):
         }
         '''
         variables = {
-            'address': self.account_address
+            'address': self.account_address.address
         }
 
         result = self.graph_client.query_request(query, variables)
         return list(map(lambda swap: UniswapTrade.from_message(swap), result['data']['swaps']))
+
+    def get_account_token_balance(self, token: Token) -> Wad:
+        return token.balance_of(self.account_address)
+
+    def get_account_eth_balance(self) -> Wad:
+        return Wad(self.web3.eth.getBalance(self.account_address.address))
 
     def get_exchange_balance(self, token: Token, pair_address: Address):
         return ERC20Token(web3=self.web3, address=token.address).balance_of(pair_address)
@@ -162,7 +173,7 @@ class UniswapV2(Contract):
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
 
-        pair_address = Address(self.get_pair_address(token_a.address.address, token_b.address.address))
+        pair_address = self.get_pair_address(token_a.address.address, token_b.address.address)
 
         token_a_reserve = self.get_exchange_balance(token_a, pair_address)
         token_b_reserve = self.get_exchange_balance(token_b, pair_address)
@@ -170,10 +181,10 @@ class UniswapV2(Contract):
         return token_a_reserve / token_b_reserve
 
     def get_current_liquidity(self) -> Wad:
-        return Wad(self._pair_contract.functions.balanceOf(self.account_address).call())
+        return Wad(self._pair_contract.functions.balanceOf(self.account_address.address).call())
 
     def get_minimum_liquidity(self):
-        return Wad(self._router_contract.functions.MINIMUM_LIQUIDITY(self.account_address).call())
+        return Wad(self._pair_contract.functions.MINIMUM_LIQUIDITY(self.account_address.address).call())
 
     def get_pair_address(self, token1: Address, token2: Address) -> Address:
         return Address(self._factory_contract.functions.getPair(token1, token2).call())
@@ -234,7 +245,7 @@ class UniswapV2(Contract):
             amounts['amount_b_desired'],
             amounts['amount_a_min'],
             amounts['amount_b_min'],
-            self.account_address,
+            self.account_address.address,
             self._deadline()
         ]
 
@@ -250,7 +261,7 @@ class UniswapV2(Contract):
             amounts['amount_token_desired'],
             amounts['amount_token_min'],
             amounts['amount_eth_min'],
-            self.account_address,
+            self.account_address.address,
             self._deadline()
         ]
 
@@ -283,7 +294,7 @@ class UniswapV2(Contract):
             amounts['liquidity'],
             amounts['amountAMin'],
             amounts['amountBMin'],
-            self.account_address,
+            self.account_address.address,
             self._deadline()
         ]
 
@@ -309,7 +320,7 @@ class UniswapV2(Contract):
             amounts['liquidity'],
             amounts['amountTokenMin'],
             amounts['amountETHMin'],
-            self.account_address,
+            self.account_address.address,
             self._deadline()
         ]
 
@@ -332,7 +343,7 @@ class UniswapV2(Contract):
         swapArgs = [
             min_amount_out,
             path,
-            self.account_address,
+            self.account_address.address,
             self._deadline()
         ]
 
@@ -356,7 +367,7 @@ class UniswapV2(Contract):
             tokens_to_swap,
             min_amount_out,
             path,
-            self.account_address,
+            self.account_address.address,
             self._deadline()
         ]
 
