@@ -164,12 +164,12 @@ class FixEngine:
                 # handle message rejection
                 if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
                     if message.get(102) is not None:
-                        logging.debug(f"Order cancellation rejected due to {message.get(58).decode('utf-8')}, tag_102 code: {message.get(102).decode('utf-8')}")
+                        logging.error(f"Order cancellation rejected due to {message.get(58).decode('utf-8')}, tag_102 code: {message.get(102).decode('utf-8')}")
                     return message
 
                 if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
                     if message.get(103) is not None:
-                        logging.debug(f"Order placement rejected due to {message.get(58).decode('utf-8')}, tag_103 code: {message.get(103).decode('utf-8')}")
+                        logging.error(f"Order placement rejected due to {message.get(58).decode('utf-8')}, tag_103 code: {message.get(103).decode('utf-8')}")
                     return message
             await asyncio.sleep(0.3)
 
