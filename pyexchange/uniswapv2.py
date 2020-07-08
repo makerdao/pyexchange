@@ -62,10 +62,11 @@ class UniswapV2(Contract):
         self.token_b = token_b
         self.router_address = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
         self.factory_address = Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
-        self.pair_address = self.get_pair_address(self.token_a.address.address, self.token_b.address.address)
         self._router_contract = self._get_contract(web3, self.router_abi['abi'], self.router_address)
         self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], self.factory_address)
+        self.pair_address = self.get_pair_address(self.token_a.address.address, self.token_b.address.address)
         self._pair_contract = self._get_contract(web3, self.pair_abi['abi'], self.pair_address)
+        self.pair_token = Token('Liquidity', self.pair_address, 18)
         self.account_address = Address(self.web3.eth.defaultAccount)
         self.graph_client = GraphClient(graph_url)
 
@@ -160,36 +161,37 @@ class UniswapV2(Contract):
         return list(map(lambda swap: UniswapTrade.from_message(swap), result['data']['swaps']))
 
     def get_account_token_balance(self, token: Token) -> Wad:
-        return token.balance_of(self.account_address)
+        return ERC20Token(web3=self.web3, address=token.address).balance_of(self.account_address)
 
     def get_account_eth_balance(self) -> Wad:
-        return Wad(self.web3.eth.getBalance(self.account_address.address))
+        return Wad.from_number(Web3.fromWei(self.web3.eth.getBalance(self.account_address.address), 'ether'))
 
-    def get_exchange_balance(self, token: Token, pair_address: Address):
+    def get_exchange_balance(self, token: Token, pair_address: Address) -> Wad:
         return ERC20Token(web3=self.web3, address=token.address).balance_of(pair_address)
 
     # retrieve exchange rate for an arbitrary token pair
-    def get_exchange_rate(self, token_a: Token, token_b: Token):
-        assert (isinstance(token_a, Token))
-        assert (isinstance(token_b, Token))
+    def get_exchange_rate(self):
+        pair_address = self.get_pair_address(self.token_a.address.address, self.token_b.address.address)
 
-        pair_address = self.get_pair_address(token_a.address.address, token_b.address.address)
-
-        token_a_reserve = self.get_exchange_balance(token_a, pair_address)
-        token_b_reserve = self.get_exchange_balance(token_b, pair_address)
+        token_a_reserve = self.get_exchange_balance(self.token_a, pair_address)
+        token_b_reserve = self.get_exchange_balance(self.token_b, pair_address)
 
         return token_a_reserve / token_b_reserve
+
+    def get_total_liquidity(self) -> Wad:
+        return Wad(self._pair_contract.functions.totalSupply().call())
 
     def get_current_liquidity(self) -> Wad:
         return Wad(self._pair_contract.functions.balanceOf(self.account_address.address).call())
 
-    def get_minimum_liquidity(self):
+    def get_minimum_liquidity(self) -> Wad:
         return Wad(self._pair_contract.functions.MINIMUM_LIQUIDITY(self.account_address.address).call())
 
     def get_pair_address(self, token1: Address, token2: Address) -> Address:
         return Address(self._factory_contract.functions.getPair(token1, token2).call())
 
-    def approve(self, token: Token, amount: int):
+    # TODO: determine appropriate amount default
+    def approve(self, token: Token, amount: int = 10):
         assert (isinstance(token, Token))
         assert (isinstance(amount, int))
 
@@ -201,10 +203,10 @@ class UniswapV2(Contract):
     def get_block(self) -> Transact:
         return self.web3.eth.getBlock('latest')['number']
 
-    def get_amounts_out(self, amount_in: int, path: List) -> List:
-        """ Calculate amount of given inputs to achieve an exact output amount.
+    def get_amounts_out(self, amount_in: Wad, path: List) -> List[Wad]:
+        """ Calculate maximum output amount of a given input.
 
-        Desired amount_out must be less than available liquidity or call will fail.
+        Desired amount_in must be less than available liquidity or call will fail.
 
         Args:
             amounts_in: Desired amount of tokens out.
@@ -212,12 +214,14 @@ class UniswapV2(Contract):
         Returns:
             A list of uint256 reserve amounts required.
         """
-        assert (isinstance(amount_in, int))
+        assert (isinstance(amount_in, Wad))
         assert (isinstance(path, List))
 
-        return self._router_contract.functions.getAmountsOut(amount_in, path).call()
+        # TODO: account for non standard decimals
+        amounts = self._router_contract.functions.getAmountsOut(amount_in.value, path).call()
+        return list(map(lambda amount: Wad.from_number(Web3.fromWei(amount, 'ether')), amounts))
 
-    def get_amounts_in(self, amount_out: int, path: List) -> List:
+    def get_amounts_in(self, amount_out: Wad, path: List) -> List[Wad]:
         """ Calculate amount of given inputs to achieve an exact output amount.
         
         Desired amount_out must be less than available liquidity or call will fail.
@@ -228,23 +232,25 @@ class UniswapV2(Contract):
         Returns:
             A list of uint256 reserve amounts required.
         """
-        assert (isinstance(amount_out, int))
+        assert (isinstance(amount_out, Wad))
         assert (isinstance(path, List))
 
-        result = self._router_contract.functions.getAmountsIn(amount_out, path).call()
-        return result
+        amounts = self._router_contract.functions.getAmountsIn(amount_out.value, path).call()
+        return list(map(lambda amount: Wad.from_number(Web3.fromWei(amount, 'ether')), amounts))
 
-    # Amounts is a dictionary of uint256 values
-    def add_liquidity(self, amounts: dict, token_a: Address, token_b: Address) -> Transact:
+    # Amounts is a dictionary of Wads
+    def add_liquidity(self, amounts: dict, token_a: Token, token_b: Token) -> Transact:
         assert (isinstance(amounts, dict))
+        assert (isinstance(token_a, Token))
+        assert (isinstance(token_b, Token))
 
         addLiquidityArgs = [
-            token_a.address,
-            token_b.address,
-            amounts['amount_a_desired'],
-            amounts['amount_b_desired'],
-            amounts['amount_a_min'],
-            amounts['amount_b_min'],
+            token_a.address.address,
+            token_b.address.address,
+            amounts['amount_a_desired'].value,
+            amounts['amount_b_desired'].value,
+            amounts['amount_a_min'].value,
+            amounts['amount_b_min'].value,
             self.account_address.address,
             self._deadline()
         ]
@@ -252,28 +258,29 @@ class UniswapV2(Contract):
         return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
                         'addLiquidity', addLiquidityArgs)
 
-    # Amounts is a dictionary of uint256 values
-    def add_liquidity_eth(self, amounts: dict, token: Address) -> Transact:
+    # Amounts is a dictionary of Wads
+    def add_liquidity_eth(self, amounts: dict, token: Token) -> Transact:
         assert (isinstance(amounts, dict))
+        assert (isinstance(token, Token))
 
         addLiquidityArgs = [
-            token.address,
-            amounts['amount_token_desired'],
-            amounts['amount_token_min'],
-            amounts['amount_eth_min'],
+            token.address.address,
+            amounts['amount_token_desired'].value,
+            amounts['amount_token_min'].value,
+            amounts['amount_eth_min'].value,
             self.account_address.address,
             self._deadline()
         ]
 
         return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
-                        'addLiquidityETH', addLiquidityArgs, {'value': amounts['amount_token_desired']})
+                        'addLiquidityETH', addLiquidityArgs, {'value': amounts['amount_eth_desired'].value})
 
     # TODO: finish implementing
     # Enable liquidity to be removed from a pool up to a set limit
     def permit_removal(self, pair: Pair, amount: Wad) -> Transact:
         pass
 
-    def remove_liquidity(self, token_a: Address, token_b: Address, amounts: dict) -> Transact:
+    def remove_liquidity(self, amounts: dict, token_a: Token, token_b: Token) -> Transact:
         """ Remove liquidity from arbitrary token pair.
 
         Args:
@@ -284,16 +291,16 @@ class UniswapV2(Contract):
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
 
-        assert (isinstance(token_a, Address))
-        assert (isinstance(token_b, Address))
+        assert (isinstance(token_a, Token))
+        assert (isinstance(token_b, Token))
         assert (isinstance(amounts, dict))
 
         removeLiquidityArgs = [
-            token_a.address,
-            token_b.address,
-            amounts['liquidity'],
-            amounts['amountAMin'],
-            amounts['amountBMin'],
+            token_a.address.address,
+            token_b.address.address,
+            amounts['liquidity'].value,
+            amounts['amountAMin'].value,
+            amounts['amountBMin'].value,
             self.account_address.address,
             self._deadline()
         ]
@@ -303,7 +310,7 @@ class UniswapV2(Contract):
 
     # TODO: add switch to handle whether or not a givne pool charges a fee
     # If so, use ternary to change invoked method name
-    def remove_liquidity_eth(self, token: Address, amounts: dict):
+    def remove_liquidity_eth(self, amounts: dict, token: Token):
         """ Remove liquidity from token-weth pair.
 
         Args:
@@ -312,14 +319,14 @@ class UniswapV2(Contract):
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
-        assert (isinstance(token, Address))
+        assert (isinstance(token, Token))
         assert (isinstance(amounts, dict))
 
         removeLiquidityArgs = [
-            token.address,
-            amounts['liquidity'],
-            amounts['amountTokenMin'],
-            amounts['amountETHMin'],
+            token.address.address,
+            amounts['liquidity'].value,
+            amounts['amountTokenMin'].value,
+            amounts['amountETHMin'].value,
             self.account_address.address,
             self._deadline()
         ]
