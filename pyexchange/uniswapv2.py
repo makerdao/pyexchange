@@ -64,15 +64,24 @@ class UniswapV2(Contract):
         self.factory_address = Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
         self._router_contract = self._get_contract(web3, self.router_abi['abi'], self.router_address)
         self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], self.factory_address)
+
         self.pair_address = self.get_pair_address(self.token_a.address.address, self.token_b.address.address)
-        self._pair_contract = self._get_contract(web3, self.pair_abi['abi'], self.pair_address)
-        self.pair_token = Token('Liquidity', self.pair_address, 18)
+        self.is_new_pool = self.pair_address == Address("0x0000000000000000000000000000000000000000")
+        if not self.is_new_pool:
+            self.set_and_approve_pair_token(self.pair_address)
+
         self.account_address = Address(self.web3.eth.defaultAccount)
         self.graph_client = GraphClient(graph_url)
 
+    #     TODO: Add permit support
     # self.ec_signature_r = ec_signature_r
         # self.ec_signature_s = ec_signature_s
         # self.ec_signature_v = ec_signature_v
+
+    def set_and_approve_pair_token(self, pair_address: Address):
+        self._pair_contract = self._get_contract(self.web3, self.pair_abi['abi'], pair_address)
+        self.pair_token = Token('Liquidity', pair_address, 18)
+        self.approve(self.pair_token)
 
     def get_markets(self) -> dict:
         query = '''
@@ -161,16 +170,16 @@ class UniswapV2(Contract):
         return list(map(lambda swap: UniswapTrade.from_message(swap), result['data']['swaps']))
 
     def get_account_token_balance(self, token: Token) -> Wad:
-        return ERC20Token(web3=self.web3, address=token.address).balance_of(self.account_address)
+        return token.normalize_amount(ERC20Token(web3=self.web3, address=token.address).balance_of(self.account_address))
 
     def get_account_eth_balance(self) -> Wad:
         return Wad.from_number(Web3.fromWei(self.web3.eth.getBalance(self.account_address.address), 'ether'))
 
     def get_exchange_balance(self, token: Token, pair_address: Address) -> Wad:
-        return ERC20Token(web3=self.web3, address=token.address).balance_of(pair_address)
+        return token.normalize_amount(ERC20Token(web3=self.web3, address=token.address).balance_of(pair_address))
 
     # retrieve exchange rate for an arbitrary token pair
-    def get_exchange_rate(self):
+    def get_exchange_rate(self) -> Wad:
         pair_address = self.get_pair_address(self.token_a.address.address, self.token_b.address.address)
 
         token_a_reserve = self.get_exchange_balance(self.token_a, pair_address)
