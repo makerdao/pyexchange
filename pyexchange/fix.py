@@ -288,7 +288,7 @@ class FixEngine:
                 m = self.create_message(simplefix.MSGTYPE_HEARTBEAT)
                 await self._write_message(m)
             except ConnectionError as ex:
-                logging.info(f"Unable to send heartbeat: {ex}")
+                logging.warning(f"Unable to send heartbeat: {ex}")
 
     def _append_sequence_number(self, m: simplefix.FixMessage):
         assert isinstance(m, simplefix.FixMessage)
