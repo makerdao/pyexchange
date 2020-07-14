@@ -99,7 +99,7 @@ class FixEngine:
             if message is None:
                 return
 
-            logging.debug(f"client received message {message}")
+            logging.info(f"client received message {message}")
             assert isinstance(message, simplefix.FixMessage)
 
             # Handle session messages, queue application messages.
@@ -127,7 +127,7 @@ class FixEngine:
             self.write(m)
 
         if message.get(simplefix.TAG_RESETSEQNUMFLAG) == simplefix.RESETSEQNUMFLAG_YES:
-            logging.debug("resetting sequence number to 1")
+            logging.info("resetting sequence number to 1")
             self.sequenceNum = 1
 
         return is_session_message
@@ -139,7 +139,7 @@ class FixEngine:
         try:
             self._append_sequence_number(message)
             self.writer.write(message.encode())
-            logging.debug(f"client sending message {fprint(message.encode())}")
+            logging.info(f"client sending message {fprint(message.encode())}")
             await self.writer.drain()
             self.last_msg_sent = datetime.now()
         finally:
@@ -174,7 +174,7 @@ class FixEngine:
             await asyncio.sleep(0.3)
 
     def wait_for_response(self, message_type: str) -> simplefix.FixMessage:
-        logging.debug(f"waiting for 35={message_type} response")
+        logging.info(f"waiting for 35={message_type} response")
         message = self.caller_loop.run_until_complete(self._wait_for_response(message_type))
         return message
 
@@ -244,7 +244,7 @@ class FixEngine:
             self.caller_loop.run_until_complete(self._write_message(m))
             self.last_msg_sent = None  # Prevent heartbeat during logout
             while not self.write_queue.empty():
-                logging.debug("waiting to logout")
+                logging.info("waiting to logout")
                 time.sleep(1)
         except ConnectionError:
             pass
