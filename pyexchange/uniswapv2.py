@@ -40,8 +40,9 @@ class UniswapTrade(Trade):
 
 class UniswapV2(Contract):
     """
+    UniswapV2 Python Client
 
-    Each uniswap instance is intended to be used with a single pool at a time.
+    Each UniswapV2 instance is intended to be used with a single pool at a time.
     """
 
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
@@ -65,7 +66,7 @@ class UniswapV2(Contract):
         self._router_contract = self._get_contract(web3, self.router_abi['abi'], self.router_address)
         self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], self.factory_address)
 
-        self.pair_address = self.get_pair_address(self.token_a.address.address, self.token_b.address.address)
+        self.pair_address = self.get_pair_address(self.token_a.address, self.token_b.address)
         self.is_new_pool = self.pair_address == Address("0x0000000000000000000000000000000000000000")
         if not self.is_new_pool:
             self.set_and_approve_pair_token(self.pair_address)
@@ -73,10 +74,10 @@ class UniswapV2(Contract):
         self.account_address = Address(self.web3.eth.defaultAccount)
         self.graph_client = GraphClient(graph_url)
 
-    #     TODO: Add permit support
-    # self.ec_signature_r = ec_signature_r
-        # self.ec_signature_s = ec_signature_s
-        # self.ec_signature_v = ec_signature_v
+        #     TODO: Add permit support
+        # self.ec_signature_r = ec_signature_r
+            # self.ec_signature_s = ec_signature_s
+            # self.ec_signature_v = ec_signature_v
 
     def set_and_approve_pair_token(self, pair_address: Address):
         self._pair_contract = self._get_contract(self.web3, self.pair_abi['abi'], pair_address)
@@ -180,7 +181,7 @@ class UniswapV2(Contract):
 
     # retrieve exchange rate for an arbitrary token pair
     def get_exchange_rate(self) -> Wad:
-        pair_address = self.get_pair_address(self.token_a.address.address, self.token_b.address.address)
+        pair_address = self.get_pair_address(self.token_a.address, self.token_b.address)
 
         token_a_reserve = self.get_exchange_balance(self.token_a, pair_address)
         token_b_reserve = self.get_exchange_balance(self.token_b, pair_address)
@@ -196,8 +197,8 @@ class UniswapV2(Contract):
     def get_minimum_liquidity(self) -> Wad:
         return Wad(self._pair_contract.functions.MINIMUM_LIQUIDITY(self.account_address.address).call())
 
-    def get_pair_address(self, token1: Address, token2: Address) -> Address:
-        return Address(self._factory_contract.functions.getPair(token1, token2).call())
+    def get_pair_address(self, token1_address: Address, token2_address: Address) -> Address:
+        return Address(self._factory_contract.functions.getPair(token1_address.address, token2_address.address).call())
 
     # TODO: determine appropriate amount default
     def approve(self, token: Token, amount: int = 10):
