@@ -24,7 +24,7 @@ from pymaker.token import ERC20Token
 from pymaker.model import Token
 from pymaker.approval import directly
 from pyexchange.graph import GraphClient
-from pyexchange.model import Pair, Trade
+from pyexchange.model import Trade
 
 
 class UniswapTrade(Trade):
@@ -143,7 +143,7 @@ class UniswapV2(Contract):
         return result['data']
 
     # filter contract events for a given pool address to focus on swaps
-    def get_trades(self, pair: Pair) -> List[Trade]:
+    def get_trades(self, pair) -> List[Trade]:
 
         query = '''query ($address: ID!)
         {
@@ -213,23 +213,28 @@ class UniswapV2(Contract):
     def get_block(self) -> Transact:
         return self.web3.eth.getBlock('latest')['number']
 
-    def get_amounts_out(self, amount_in: Wad, path: List) -> List[Wad]:
+    def get_amounts_out(self, amount_in: Wad, tokens: List[Token]) -> List[Wad]:
         """ Calculate maximum output amount of a given input.
 
         Desired amount_in must be less than available liquidity or call will fail.
 
         Args:
             amounts_in: Desired amount of tokens out.
-            path: List of addresses used to form a path for swap
+            tokens: List of tokens used to form a path for swap and normalize amounts for token decimals
         Returns:
             A list of uint256 reserve amounts required.
         """
         assert (isinstance(amount_in, Wad))
-        assert (isinstance(path, List))
+        assert (isinstance(tokens, List))
 
-        # TODO: account for non standard decimals
-        amounts = self._router_contract.functions.getAmountsOut(amount_in.value, path).call()
-        return list(map(lambda amount: Wad.from_number(Web3.fromWei(amount, 'ether')), amounts))
+        token_addresses = list(map(lambda token: token.address.address, tokens))
+        amounts = self._router_contract.functions.getAmountsOut(amount_in.value, token_addresses).call()
+        wad_amounts = list(map(lambda amount: Wad.from_number(Web3.fromWei(amount, 'ether')), amounts))
+
+        for index, token in enumerate(tokens):
+            wad_amounts[index] = token.normalize_amount(wad_amounts[index])
+
+        return wad_amounts
 
     def get_amounts_in(self, amount_out: Wad, path: List) -> List[Wad]:
         """ Calculate amount of given inputs to achieve an exact output amount.
@@ -287,7 +292,7 @@ class UniswapV2(Contract):
 
     # TODO: finish implementing
     # Enable liquidity to be removed from a pool up to a set limit
-    def permit_removal(self, pair: Pair, amount: Wad) -> Transact:
+    def permit_removal(self, pair, amount: Wad) -> Transact:
         pass
 
     def remove_liquidity(self, amounts: dict, token_a: Token, token_b: Token) -> Transact:
