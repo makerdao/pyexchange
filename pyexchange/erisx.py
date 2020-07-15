@@ -184,7 +184,6 @@ class ErisxApi(PyexAPI):
         message.append_pair(simplefix.TAG_ORDERQTY, amount)
         message.append_pair(simplefix.TAG_ORDTYPE, simplefix.ORDTYPE_LIMIT)  # always place limit orders
         message.append_pair(simplefix.TAG_PRICE, price)
-        message.append_pair(simplefix.TAG_TIMEINFORCE, simplefix.TIMEINFORCE_GOOD_TILL_CANCEL)
 
         # place post only orders
         message.append_pair(simplefix.TAG_EXECINST, simplefix.EXECINST_PARTICIPATE_DONT_INITIATE)
