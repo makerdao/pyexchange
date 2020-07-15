@@ -43,6 +43,8 @@ class UniswapV2(Contract):
     UniswapV2 Python Client
 
     Each UniswapV2 instance is intended to be used with a single pool at a time.
+
+    Documentation is available here: https://uniswap.org/docs/v2/
     """
 
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
@@ -171,15 +173,20 @@ class UniswapV2(Contract):
         return list(map(lambda swap: UniswapTrade.from_message(swap), result['data']['swaps']))
 
     def get_account_token_balance(self, token: Token) -> Wad:
+        assert (isinstance(token, Token))
+
         return token.normalize_amount(ERC20Token(web3=self.web3, address=token.address).balance_of(self.account_address))
 
     def get_account_eth_balance(self) -> Wad:
         return Wad.from_number(Web3.fromWei(self.web3.eth.getBalance(self.account_address.address), 'ether'))
 
     def get_exchange_balance(self, token: Token, pair_address: Address) -> Wad:
+        assert (isinstance(token, Token))
+        assert (isinstance(pair_address, Address))
+
         return token.normalize_amount(ERC20Token(web3=self.web3, address=token.address).balance_of(pair_address))
 
-    # retrieve exchange rate for an arbitrary token pair
+    # retrieve exchange rate for the instance's pair token
     def get_exchange_rate(self) -> Wad:
         pair_address = self.get_pair_address(self.token_a.address, self.token_b.address)
 
@@ -188,17 +195,23 @@ class UniswapV2(Contract):
 
         return token_a_reserve / token_b_reserve
 
+    # Return the total number of liquidity tokens minted for a given pair
     def get_total_liquidity(self) -> Wad:
         return Wad(self._pair_contract.functions.totalSupply().call())
 
+    # Return our liquidity token balance
     def get_current_liquidity(self) -> Wad:
         return Wad(self._pair_contract.functions.balanceOf(self.account_address.address).call())
 
+    # Return a pools minimum liquidity token balance
     def get_minimum_liquidity(self) -> Wad:
         return Wad(self._pair_contract.functions.MINIMUM_LIQUIDITY(self.account_address.address).call())
 
-    def get_pair_address(self, token1_address: Address, token2_address: Address) -> Address:
-        return Address(self._factory_contract.functions.getPair(token1_address.address, token2_address.address).call())
+    def get_pair_address(self, token_a_address: Address, token_b_address: Address) -> Address:
+        assert (isinstance(token_a_address, Address))
+        assert (isinstance(token_b_address, Address))
+
+        return Address(self._factory_contract.functions.getPair(token_a_address.address, token_b_address.address).call())
 
     # TODO: determine appropriate amount default
     def approve(self, token: Token, amount: int = 10):
@@ -253,8 +266,16 @@ class UniswapV2(Contract):
         amounts = self._router_contract.functions.getAmountsIn(amount_out.value, path).call()
         return list(map(lambda amount: Wad.from_number(Web3.fromWei(amount, 'ether')), amounts))
 
-    # Amounts is a dictionary of Wads
     def add_liquidity(self, amounts: dict, token_a: Token, token_b: Token) -> Transact:
+        """ Add liquidity to arbitrary token pair.
+
+        Args:
+            amounts: dictionary[Wad, Wad, Wad, Wad]
+            token_a: First token in the pool
+            token_b: Second token in the pool
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
         assert (isinstance(amounts, dict))
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
@@ -273,8 +294,15 @@ class UniswapV2(Contract):
         return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
                         'addLiquidity', addLiquidityArgs)
 
-    # Amounts is a dictionary of Wads
     def add_liquidity_eth(self, amounts: dict, token: Token) -> Transact:
+        """ Add liquidity to token-weth pair.
+
+        Args:
+            amounts: dictionary[Wad, Wad, Wad, Wad]
+            token_a: Token side of the pool
+        Returns:
+            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+        """
         assert (isinstance(amounts, dict))
         assert (isinstance(token, Token))
 
@@ -305,7 +333,6 @@ class UniswapV2(Contract):
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
-
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
         assert (isinstance(amounts, dict))
@@ -334,8 +361,8 @@ class UniswapV2(Contract):
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
-        assert (isinstance(token, Token))
         assert (isinstance(amounts, dict))
+        assert (isinstance(token, Token))
 
         removeLiquidityArgs = [
             token.address.address,
@@ -346,11 +373,10 @@ class UniswapV2(Contract):
             self._deadline()
         ]
 
-        # return self._router_contract.functions.removeLiquidityETH(*removeLiquidityArgs).transact()
         return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
                         'removeLiquidityETH', removeLiquidityArgs)
 
-    def swap_exact_eth_for_tokens(self, eth_to_swap: int, min_amount_out: int, path: List) -> Transact:
+    def swap_exact_eth_for_tokens(self, eth_to_swap: Wad, min_amount_out: Wad, path: List) -> Transact:
         """Convert ETH to Tokens.
 
         Requires Approval to have already been called on the token to swap
@@ -362,18 +388,21 @@ class UniswapV2(Contract):
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
+        assert (isinstance(eth_to_swap, Wad))
+        assert (isinstance(min_amount_out, Wad))
+        assert (isinstance(path, List))
+
         swapArgs = [
-            min_amount_out,
+            min_amount_out.value,
             path,
             self.account_address.address,
             self._deadline()
         ]
 
         return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
-                        'swapExactETHForTokens', swapArgs, {'value': eth_to_swap})
+                        'swapExactETHForTokens', swapArgs, {'value': eth_to_swap.value})
 
-
-    def swap_exact_tokens_for_tokens(self, tokens_to_swap: int, min_amount_out: int, path: List) -> Transact:
+    def swap_exact_tokens_for_tokens(self, tokens_to_swap: Wad, min_amount_out: Wad, path: List) -> Transact:
         """Convert ERC20 to ERC20.
 
         Requires Approval to have already been called on the token to swap
@@ -385,6 +414,10 @@ class UniswapV2(Contract):
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
+        assert (isinstance(tokens_to_swap, Wad))
+        assert (isinstance(min_amount_out, Wad))
+        assert (isinstance(path, List))
+
         swapArgs = [
             tokens_to_swap,
             min_amount_out,
