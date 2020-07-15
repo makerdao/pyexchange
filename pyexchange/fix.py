@@ -258,16 +258,19 @@ class FixEngine:
     async def _session_proc(self):
         (address, port) = tuple(self.endpoint.split(':'))
 
-        if self.certs is not None:
-            self.ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-            self.ssl_context.load_cert_chain(certfile=self.certs['client_cert'], keyfile=self.certs['client_key'])
-            self.ssl_context.check_hostname = False
-            self.ssl_context.verify_mode = ssl.CERT_NONE
-            self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop, ssl=self.ssl_context)
-        else:
-            self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop)
+        try:
+            if self.certs is not None:
+                self.ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+                self.ssl_context.load_cert_chain(certfile=self.certs['client_cert'], keyfile=self.certs['client_key'])
+                self.ssl_context.check_hostname = False
+                self.ssl_context.verify_mode = ssl.CERT_NONE
+                self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop, ssl=self.ssl_context)
+            else:
+                self.reader, self.writer = await asyncio.open_connection(address, port, loop=self.session_loop)
 
-        self.connection_state = FixConnectionState.CONNECTED
+            self.connection_state = FixConnectionState.CONNECTED
+        except Exception as e:
+            logging.error(f"Unable to connect due to {e}")
 
         while self.connection_state != FixConnectionState.LOGGED_OUT:
             if not self.write_queue.empty():
