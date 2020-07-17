@@ -27,17 +27,6 @@ from pyexchange.graph import GraphClient
 from pyexchange.model import Trade
 
 
-class UniswapTrade(Trade):
-    @staticmethod
-    def from_message(item):
-        return Trade(trade_id=item['oid'],
-                     timestamp=item['created_at'],
-                     pair=item['book'],
-                     is_sell=True if item['side'] == 'sell' else False,
-                     price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['amount']))
-
-
 class UniswapV2(Contract):
     """
     UniswapV2 Python Client
@@ -53,10 +42,9 @@ class UniswapV2(Contract):
     router_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Router02.bin')
     factory_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Factory.bin')
 
-    def __init__(self, web3: Web3, graph_url: str, token_a: Token, token_b: Token):
+    def __init__(self, web3: Web3, token_a: Token, token_b: Token):
                  # ec_signature_r: Optional[str], ec_signature_s: Optional[str], ec_signature_v: Optional[int]):
         assert (isinstance(web3, Web3))
-        assert (isinstance(graph_url, str))
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
 
@@ -74,7 +62,6 @@ class UniswapV2(Contract):
             self.set_and_approve_pair_token(self.pair_address)
 
         self.account_address = Address(self.web3.eth.defaultAccount)
-        self.graph_client = GraphClient(graph_url)
 
         #     TODO: Add permit support
         # self.ec_signature_r = ec_signature_r
@@ -85,92 +72,6 @@ class UniswapV2(Contract):
         self._pair_contract = self._get_contract(self.web3, self.pair_abi['abi'], pair_address)
         self.pair_token = Token('Liquidity', pair_address, 18)
         self.approve(self.pair_token)
-
-    def get_markets(self) -> dict:
-        query = '''
-        {
-            pairs {
-                totalSupply
-                id
-                token0 {
-                  name
-                  id
-                }
-                token1 {
-                  name
-                  id
-                }
-            }
-        }
-        '''
-        result = self.graph_client.query_request(query, None)
-        return result['data']
-
-    # TODO: check against token address
-    # TODO: Need to add support for tokens to pyexchange
-    def _is_pair(self, pair_to_check, desired_pair) -> bool:
-        name0 = desired_pair.split()[0]
-        name1 = desired_pair.split()[0]
-
-        if name0 == "ETH":
-            name0 = 'Wrapped Ether'
-
-        if name0 == "DAI":
-            name0 = 'Wrapped Ether'
-        # if pair_to_check['token0']['id'] =
-
-    def get_pair(self, pair) -> dict:
-        return filter(lambda p: self._is_pair(p, pair), self.get_markets()['pairs'])[0]
-
-    # TODO: add code to map over returned balances and write as dict
-    # return the current balance in a given pool
-    def get_balances(self) -> dict:
-        query = '''query ($user: ID!)
-        {
-            users(where: {id: $user}) {
-                liquidityPositions {
-                  id
-                  liquidityTokenBalance
-                  poolOwnership
-                }
-          }
-        }
-        '''
-        variables = {
-            'user': self.account_address.address
-        }
-
-        result = self.graph_client.query_request(query, variables)
-        print(result)
-        return result['data']
-
-    # filter contract events for a given pool address to focus on swaps
-    def get_trades(self, pair) -> List[Trade]:
-
-        query = '''query ($address: ID!)
-        {
-          swaps(where: {id: $address}) {
-            id
-            sender
-            pair {
-              id
-            }
-            amountUSD
-            amount0In
-            amount1In
-            amount0Out
-            amount1Out
-            timestamp
-            logIndex
-          }
-        }
-        '''
-        variables = {
-            'address': self.account_address.address
-        }
-
-        result = self.graph_client.query_request(query, variables)
-        return list(map(lambda swap: UniswapTrade.from_message(swap), result['data']['swaps']))
 
     def get_account_token_balance(self, token: Token) -> Wad:
         assert (isinstance(token, Token))

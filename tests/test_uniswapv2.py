@@ -31,16 +31,17 @@ from pymaker.approval import directly
 from pymaker.deployment import deploy_contract
 from pymaker.numeric import Wad
 from pymaker.token import DSToken, ERC20Token
-from pymaker.zrx import ZrxExchange
+from pymaker.model import Token
+import unittest
 
-
+@unittest.skip("TestUniswapV2 testing skipping")
 class TestUniswapV2(Contract):
 
-    pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
-    router_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')
-    router_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Router02.bin')
-    factory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')
-    factory_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Factory.bin')
+    pair_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Pair.abi')
+    router_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Router02.abi')
+    router_bin = Contract._load_bin(__name__, '../pyexchange/abi/IUniswapV2Router02.bin')
+    factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Factory.abi')
+    factory_bin = Contract._load_bin(__name__, '../pyexchange/abi/IUniswapV2Factory.bin')
 
     def setup_method(self):
         py_evm_main.GENESIS_GAS_LIMIT = 10000000
@@ -53,7 +54,7 @@ class TestUniswapV2(Contract):
         self._router_contract = self._get_contract(self.web3, self.router_abi['abi'], self.router_address)
         self._factory_contract = self._get_contract(self.web3, self.factory_abi['abi'], self.factory_address)
 
-        print(self.router_address, self.factory_address)
+        print(self.router_address, self.factory_address, __name__)
 
         # self.dai_token = ERC20Token(web3=self.web3, address=deploy_contract(self.web3,abi 'DAIToken'))
         # self.token_transfer_proxy_address = deploy_contract(self.web3, 'TokenTransferProxy')
@@ -61,12 +62,13 @@ class TestUniswapV2(Contract):
         # TODO: deploy the other uniswap v2 contracts
         # self.web3.eth.contract(abi=json.loads(pkg_resources.resource_string('pymaker.deployment', f'abi/TokenTransferProxy.abi')))(address=self.token_transfer_proxy_address.address).functions.addAuthorizedAddress(self.exchange.address.address).transact()
 
-        graph_url = 'https://api.thegraph.com/subgraphs/name/graphprotocol/uniswap'
-        self.uniswap = UniswapV2(self.web3, graph_url, self.router_address, self.factory_address)
-
         # self.dgx = DSToken.deploy(self.web3, 'DGX')
         self.dai = DSToken.deploy(self.web3, 'DAI')
-        # self.pair = Pair(self.dgx.address, 9, self.dai.address, 18)
+
+        # Kovan token addresses
+        self.token_a = Token("DAI", Address("0x4f96fe3b7a6cf9725f59d353f723c1bdb64ca6aa"), 18)
+        self.token_b = Token("USDC", Address("0x198419c5c340e8de47ce4c0e4711a03664d42cb2"), 6)
+        self.uniswap = UniswapV2(self.web3, self.token_a, self.token_b)
 
     def test_get_block(self):
         assert isinstance(self.uniswap.get_block(), int)
@@ -87,7 +89,8 @@ class TestUniswapV2(Contract):
     def test_getting_balances(self):
         # given
         # self.dgx.mint(Wad(17 * 10**9)).transact()
-        self.dai.mint(Wad.from_number(17)).transact()
+        self.uniswap.get_account_token_balance(self.token_a)\
+            # mint(Wad.from_number(17)).transact()
 
         # when
         # balances = self.uniswap.get_balances(self.pair)
