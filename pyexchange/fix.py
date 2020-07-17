@@ -273,6 +273,12 @@ class FixEngine:
             logging.error(f"Unable to connect due to {e}")
 
         while self.connection_state != FixConnectionState.LOGGED_OUT:
+            if not self.reader:
+                logging.warning("Socket reader was closed; exiting")
+                return
+            if not self.writer:
+                logging.warning("Socket writer was closed; exiting")
+                return
             if not self.write_queue.empty():
                 await self._write_message(self.write_queue.get())
             if not self.logging_out:
