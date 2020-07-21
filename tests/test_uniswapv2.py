@@ -20,7 +20,7 @@ import time
 import logging
 
 import pkg_resources
-from web3 import EthereumTesterProvider, Web3
+from web3 import EthereumTesterProvider, Web3, HTTPProvider
 
 from eth_tester import EthereumTester, PyEVMBackend
 import eth_tester.backends.pyevm.main as py_evm_main
@@ -43,10 +43,13 @@ class TestUniswapV2(Contract):
     factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Factory.abi')
     factory_bin = Contract._load_bin(__name__, '../pyexchange/abi/IUniswapV2Factory.bin')
 
-    def setup_method(self):
+    def setup_method(self, web3: Web3):
         py_evm_main.GENESIS_GAS_LIMIT = 10000000
-        self.web3 = Web3(EthereumTesterProvider(EthereumTester(PyEVMBackend())))
-        self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
+        # self.web3 = Web3(EthereumTesterProvider(EthereumTester(PyEVMBackend())))
+        # self.web3 = Web3(HTTPProvider("http://localhost:8555"))
+        # self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
+        self.web3 = web3
+        # print(self.web3.eth.defaultAccount)
         self.our_address = Address(self.web3.eth.defaultAccount)
 
         self.router_address = self._deploy(self.web3, self.router_abi['abi'], self.router_bin, [])
@@ -66,9 +69,9 @@ class TestUniswapV2(Contract):
         # Useful for debugging failing transactions
         logger = logging.getLogger('eth')
         # logger.setLevel(8)
-        # Transact.gas_estimate_for_bad_txs = 210000
+        Transact.gas_estimate_for_bad_txs = 210000
 
-    def test_approval(self):
+    def test_approval(self, deployment):
         # given
         assert self.ds_dai.allowance_of(self.our_address, self.router_address) == Wad(0)
 
@@ -93,10 +96,12 @@ class TestUniswapV2(Contract):
 
     def test_add_liquidity_tokens(self):
         # given
-        self.ds_dai.mint(Wad(1700000000 * 10**18)).transact()
-        self.ds_usdc.mint(self.token_usdc.unnormalize_amount(Wad.from_number(90000000000))).transact()
+        self.ds_dai.mint(Wad(1700000000 * 10**18)).transact(from_address=self.our_address)
+        self.ds_usdc.mint(self.token_usdc.unnormalize_amount(Wad.from_number(90000000000))).transact(from_address=self.our_address)
         self.dai_usdc_uniswap.approve(self.token_dai)
         self.dai_usdc_uniswap.approve(self.token_usdc)
+
+        print(self.our_address)
 
         # # given
         # add_liquidity_tokens_args = {
@@ -116,7 +121,7 @@ class TestUniswapV2(Contract):
 
         time.sleep(10)
         # when
-        add_liquidity = self.dai_usdc_uniswap.add_liquidity(add_liquidity_tokens_args, self.token_dai, self.token_usdc).transact()
+        add_liquidity = self.dai_usdc_uniswap.add_liquidity(add_liquidity_tokens_args, self.token_dai, self.token_usdc).transact(from_address=self.our_address)
 
         # then
         assert add_liquidity.result == True
