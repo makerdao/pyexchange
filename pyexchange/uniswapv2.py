@@ -42,8 +42,7 @@ class UniswapV2(Contract):
     router_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Router02.bin')
     factory_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Factory.bin')
 
-    def __init__(self, web3: Web3, token_a: Token, token_b: Token):
-                 # ec_signature_r: Optional[str], ec_signature_s: Optional[str], ec_signature_v: Optional[int]):
+    def __init__(self, web3: Web3, token_a: Token, token_b: Token, router_address: Address = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"), factory_address: Address = Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
@@ -51,8 +50,8 @@ class UniswapV2(Contract):
         self.web3 = web3
         self.token_a = token_a
         self.token_b = token_b
-        self.router_address = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
-        self.factory_address = Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
+        self.router_address = router_address
+        self.factory_address = factory_address
         self._router_contract = self._get_contract(web3, self.router_abi['abi'], self.router_address)
         self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], self.factory_address)
 
@@ -123,9 +122,6 @@ class UniswapV2(Contract):
 
         approval_function = directly()
         return approval_function(erc20_token, self.router_address, 'IUniswapV2Router02')
-
-    def get_block(self) -> Transact:
-        return self.web3.eth.getBlock('latest')['number']
 
     def get_amounts_out(self, amount_in: Wad, tokens: List[Token]) -> List[Wad]:
         """ Calculate maximum output amount of a given input.

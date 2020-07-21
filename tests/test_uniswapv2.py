@@ -17,6 +17,7 @@
 
 import json
 import time
+import logging
 
 import pkg_resources
 from web3 import EthereumTesterProvider, Web3
@@ -26,7 +27,7 @@ import eth_tester.backends.pyevm.main as py_evm_main
 
 from pyexchange.uniswapv2 import UniswapV2
 from pyexchange.model import Pair
-from pymaker import Address, Contract
+from pymaker import Address, Contract, Transact
 from pymaker.approval import directly
 from pymaker.deployment import deploy_contract
 from pymaker.numeric import Wad
@@ -34,7 +35,6 @@ from pymaker.token import DSToken, ERC20Token
 from pymaker.model import Token
 import unittest
 
-@unittest.skip("TestUniswapV2 testing skipping")
 class TestUniswapV2(Contract):
 
     pair_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Pair.abi')
@@ -54,95 +54,84 @@ class TestUniswapV2(Contract):
         self._router_contract = self._get_contract(self.web3, self.router_abi['abi'], self.router_address)
         self._factory_contract = self._get_contract(self.web3, self.factory_abi['abi'], self.factory_address)
 
-        print(self.router_address, self.factory_address, __name__)
+        self.ds_dai = DSToken.deploy(self.web3, 'DAI')
+        self.ds_usdc = DSToken.deploy(self.web3, 'USDC')
 
-        # self.dai_token = ERC20Token(web3=self.web3, address=deploy_contract(self.web3,abi 'DAIToken'))
-        # self.token_transfer_proxy_address = deploy_contract(self.web3, 'TokenTransferProxy')
-        # self.exchange = ZrxExchange.deploy(self.web3, self.zrx_token.address, self.token_transfer_proxy_address)
-        # TODO: deploy the other uniswap v2 contracts
-        # self.web3.eth.contract(abi=json.loads(pkg_resources.resource_string('pymaker.deployment', f'abi/TokenTransferProxy.abi')))(address=self.token_transfer_proxy_address.address).functions.addAuthorizedAddress(self.exchange.address.address).transact()
+        self.token_dai = Token("DAI", self.ds_dai.address, 18)
+        self.token_usdc = Token("USDC", self.ds_usdc.address, 6)
+        self.dai_usdc_uniswap = UniswapV2(self.web3, self.token_dai, self.token_usdc, self.router_address, self.factory_address)
+        
+        # print(self.web3.eth.getCode(self.router_address.address))
 
-        # self.dgx = DSToken.deploy(self.web3, 'DGX')
-        self.dai = DSToken.deploy(self.web3, 'DAI')
-
-        # Kovan token addresses
-        self.token_a = Token("DAI", Address("0x4f96fe3b7a6cf9725f59d353f723c1bdb64ca6aa"), 18)
-        self.token_b = Token("USDC", Address("0x198419c5c340e8de47ce4c0e4711a03664d42cb2"), 6)
-        self.uniswap = UniswapV2(self.web3, self.token_a, self.token_b)
-
-    def test_get_block(self):
-        assert isinstance(self.uniswap.get_block(), int)
+        # Useful for debugging failing transactions
+        logger = logging.getLogger('eth')
+        # logger.setLevel(8)
+        # Transact.gas_estimate_for_bad_txs = 210000
 
     def test_approval(self):
         # given
-        assert self.dai.allowance_of(self.our_address, self.router_address) == Wad(0)
+        assert self.ds_dai.allowance_of(self.our_address, self.router_address) == Wad(0)
 
         # when
-        # self._router_contract.approve([self.dai], directly())
-        approval_function = directly()
-        
-        approval_function(self.dai, self.router_address, 'IUniswapV2Router02')
+        self.dai_usdc_uniswap.approve(self.token_dai)
 
         # then
-        assert self.dai.allowance_of(self.our_address, self.router_address) > Wad(0)
+        assert self.ds_dai.allowance_of(self.our_address, self.router_address) > Wad(0)
 
-    def test_getting_balances(self):
+    def test_getting_token_balances(self):
         # given
-        # self.dgx.mint(Wad(17 * 10**9)).transact()
-        self.uniswap.get_account_token_balance(self.token_a)\
-            # mint(Wad.from_number(17)).transact()
+        self.ds_dai.mint(Wad(17 * 10**18)).transact()
+        self.ds_usdc.mint(self.token_usdc.unnormalize_amount(Wad.from_number(9))).transact()
 
         # when
-        # balances = self.uniswap.get_balances(self.pair)
+        balance_dai = self.dai_usdc_uniswap.get_account_token_balance(self.token_dai)
+        balance_usdc = self.dai_usdc_uniswap.get_account_token_balance(self.token_usdc)
+
         # then
-        # assert balances[0] == Wad.from_number(17)
-        # assert balances[1] == Wad.from_number(17)
+        assert balance_dai == Wad.from_number(17)
+        assert balance_usdc == Wad.from_number(9)
 
-    def test_add_liquidity_eth(self):
+    def test_add_liquidity_tokens(self):
+        # given
+        self.ds_dai.mint(Wad(1700000000 * 10**18)).transact()
+        self.ds_usdc.mint(self.token_usdc.unnormalize_amount(Wad.from_number(90000000000))).transact()
+        self.dai_usdc_uniswap.approve(self.token_dai)
+        self.dai_usdc_uniswap.approve(self.token_usdc)
 
-        eth_pair_amounts = {
-            "amount_token_desired": self.web3.toWei(24, 'ether'),
-            "amount_token_min": self.web3.toWei(21, 'ether'),
-            "amount_eth_min": self.web3.toWei(.1, 'ether')
+        # # given
+        # add_liquidity_tokens_args = {
+        #     "amount_a_desired": Wad.from_number(1.9),
+        #     "amount_b_desired": self.token_usdc.unnormalize_amount(Wad.from_number(2.0)),
+        #     "amount_a_min": Wad.from_number(1.8),
+        #     "amount_b_min": self.token_usdc.unnormalize_amount(Wad.from_number(1.9))
+        # }
+
+        # given
+        add_liquidity_tokens_args = {
+            "amount_a_desired": Wad.from_number(1.9),
+            "amount_b_desired": Wad.from_number(2.0),
+            "amount_a_min": Wad.from_number(1.8),
+            "amount_b_min": Wad.from_number(1.9)
         }
 
-        approval_function = directly()
-        approval_function(self.dai, self.router_address, 'IUniswapV2Router02')
-
-        time.sleep(20)
+        time.sleep(10)
         # when
-        add_liquidity = self.uniswap.add_liquidity_eth(eth_pair_amounts, self.dai.address).transact()
+        add_liquidity = self.dai_usdc_uniswap.add_liquidity(add_liquidity_tokens_args, self.token_dai, self.token_usdc).transact()
 
         # then
         assert add_liquidity.result == True
 
-        # when
-        # orders = self.uniswap.get_orders(self.pair, [add_liquidity])
-        # # then
-        # assert orders[0].order_id is not place_order
-        # assert orders[0].is_sell is True
-        # assert orders[0].price == Wad.from_number(45.0)
-        # assert orders[0].amount == Wad.from_number(5.0)
-        # assert orders[0].add_liquidity == add_liquidity
+        # then
+        assert self.dai_usdc_uniswap.get_current_liquidity() > Wad.from_number(0)
+
+    def test_add_liquidity_eth(self):
+        pass
+
+    def test_get_exchange_rate(self):
+        pass
+
+    def test_remove_liquidity(self):
+        pass
 
     def test_remove_liquidity_eth(self):
-        # when
-        zrx_order = self.uniswap.place_order(self.pair, False, Wad.from_number(45.0), Wad.from_number(5.0), 999)
-        # then
-        assert zrx_order.buy_token == self.dgx.address
-        assert zrx_order.buy_amount == Wad(5 * 10**9)
-        assert zrx_order.pay_token == self.dai.address
-        assert zrx_order.pay_amount == Wad.from_number(5.0 * 45.0)
-        assert zrx_order.expiration == 999
-
-        # when
-        orders = self.uniswap.get_orders(self.pair, [zrx_order])
-        # then
-        assert orders[0].order_id is not None
-        assert orders[0].is_sell is False
-        assert orders[0].price == Wad.from_number(45.0)
-        assert orders[0].amount == Wad.from_number(5.0)
-        assert orders[0].zrx_order == zrx_order
-
-    def test_swap():
         pass
