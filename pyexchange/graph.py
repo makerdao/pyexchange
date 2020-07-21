@@ -23,83 +23,6 @@ from typing import Optional
 from json import JSONDecodeError
 from lib.pymaker.pymaker.util import http_response_summary
 
-get_balances = '''
-  # liquidityPositions(where: {user: {id: "0x332f60EDC783E4Db3E0a18F8dFEB368Ae178CCd9"}}) {
-  #   id
-  #   liquidityTokenBalance
-  #   poolOwnership
-{
-  user(id: "0x332f60EDC783E4Db3E0a18F8dFEB368Ae178CCd9") {
-    exchangeBalances {
-      userAddress
-
-      ethDeposited
-      tokensDeposited
-      ethWithdrawn
-      tokensWithdrawn
-      uniTokenBalance
-      
-      exchange {
-        tokenSymbol
-      }
-      
-      ethBought
-      ethSold
-      tokensBought
-      tokensSold
-      ethFeesPaid
-      tokenFeesPaid
-      ethFeesInUSD
-      tokenFeesInUSD
-    }
-  }
-}
-'''
-
-get_market_info = '''query ($id: String!) {
-      uniswap(id: $id) {
-        exchangeCount
-        totalVolumeInEth
-        totalLiquidityInEth
-        totalVolumeUSD
-        totalLiquidityUSD
-      }
-}
-'''
-
-# Uses ETH_DAI exchangeAddress
-get_trades = '''{
-  transactions(
-    where: {
-      timestamp_gt: 1544832000
-      timestamp_lt: 1591308137
-      exchangeAddress: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
-      user: "0x85c5c26dc2af5546341fc1988b9d178148b4838b"
-    }
-    first: 10
-  ) {
-    id
-    exchangeAddress
-    block
-    fee
-    timestamp
-    
-    tokenPurchaseEvents {
-      tokenAmount
-      tokenFee
-      ethAmount
-    }
-    ethPurchaseEvents {
-      ethAmount
-      tokenAmount
-    }
-  }
-}'''
-
-get_trades_variables = {
-    'user': "our address",
-    'current_timestamp': int(time.time())
-}
 
 class GraphClient:
 
@@ -163,10 +86,3 @@ class GraphClient:
 
         return data
 
-
-graph_url = 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2'
-# graph_url = 'http://127.0.0.1:8000/subgraphs/name/davekaj/uniswap'
-uniswap_graph = GraphClient(graph_url)
-# print(uniswap_graph.query_request(get_market_info, {"id": "1"}))
-# print(uniswap_graph.query_request(get_trades))
-# print(uniswap_graph.query_request(get_balances))
