@@ -18,6 +18,8 @@
 import json
 import time
 import logging
+import pytest
+import unittest
 
 import pkg_resources
 from web3 import EthereumTesterProvider, Web3, HTTPProvider
@@ -27,51 +29,104 @@ import eth_tester.backends.pyevm.main as py_evm_main
 
 from pyexchange.uniswapv2 import UniswapV2
 from pyexchange.model import Pair
-from pymaker import Address, Contract, Transact
+from pymaker import Address, Contract, Receipt, Transact
 from pymaker.approval import directly
 from pymaker.deployment import deploy_contract
 from pymaker.numeric import Wad
 from pymaker.token import DSToken, ERC20Token
 from pymaker.model import Token
-import unittest
+from pymaker.keys import register_keys, register_private_key
+
 
 class TestUniswapV2(Contract):
+    """
+    In order to run automated tests locally, all dependent contracts and deployable bytecode need to be available for deploying contract to local network. 
+    
+    Deployable bytecode differs from the runtime bytecode you would see on Etherscan.
 
+    Advanced WETH contract is used by Uniswap as opposed to jhttps://unpkg.com/browse/advanced-weth@1.0.0/build/contracts/AdvancedWETH.json
+    """
     pair_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Pair.abi')
-    router_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Router02.abi')
-    router_bin = Contract._load_bin(__name__, '../pyexchange/abi/IUniswapV2Router02.bin')
-    factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Factory.abi')
-    factory_bin = Contract._load_bin(__name__, '../pyexchange/abi/IUniswapV2Factory.bin')
+    router_abi = Contract._load_abi(__name__, '../pyexchange/abi/UniswapV2Router02.abi')
+    router_bin = Contract._load_bin(__name__, '../pyexchange/abi/UniswapV2Router02.bin')
+    factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/UniswapV2Factory.abi')
+    factory_bin = Contract._load_bin(__name__, '../pyexchange/abi/UniswapV2Factory.bin')
+    weth_abi = Contract._load_abi(__name__, '../pyexchange/abi/WETH.abi')
+    weth_bin = Contract._load_bin(__name__, '../pyexchange/abi/WETH.bin')
+    advanced_weth_abi = Contract._load_abi(__name__, '../pyexchange/abi/ADVANCED_WETH.abi')
+    advanced_weth_bin = Contract._load_bin(__name__, '../pyexchange/abi/ADVANCED_WETH.bin')
 
+    # @pytest.fixture(scope="session", autouse=True)
     def setup_method(self, web3: Web3):
-        py_evm_main.GENESIS_GAS_LIMIT = 10000000
-        # self.web3 = Web3(EthereumTesterProvider(EthereumTester(PyEVMBackend())))
-        # self.web3 = Web3(HTTPProvider("http://localhost:8555"))
-        # self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
-        self.web3 = web3
-        # print(self.web3.eth.defaultAccount)
+
+        # self.web3 = Web3(HTTPProvider("http://0.0.0.0:8545"))
+        # # self.web3.eth.defaultAccount = "0x50FF810797f75f6bfbf2227442e0c961a8562F4C"
+        # self.web3.eth.defaultAccount = Web3.toChecksumAddress("0x00a329c0648769a73afac7f9381e08fb43dbea72")
+        # register_keys(self.web3,
+        #             ["key_file=tests/config/keys/UnlimitedChain/key1.json,pass_file=/dev/null",
+        #             "key_file=tests/config/keys/UnlimitedChain/key2.json,pass_file=/dev/null",
+        #             "key_file=tests/config/keys/UnlimitedChain/key3.json,pass_file=/dev/null",
+        #             "key_file=tests/config/keys/UnlimitedChain/key4.json,pass_file=/dev/null",
+        #             "key_file=tests/config/keys/UnlimitedChain/key.json,pass_file=/dev/null"])
+
+        self.web3 = Web3(HTTPProvider("http://0.0.0.0:7545"))
+        self.web3.eth.defaultAccount = Web3.toChecksumAddress("0xb3B95e13f01AAa642AD7D3D698E35270C6526ed4")
+        register_private_key(self.web3, "a43391a46155678effe70e2aa4c9797c659764b1dbc5e4e557f24e8b04b7a8d8")
+
         self.our_address = Address(self.web3.eth.defaultAccount)
 
-        self.router_address = self._deploy(self.web3, self.router_abi['abi'], self.router_bin, [])
-        self.factory_address = self._deploy(self.web3, self.factory_abi['abi'], self.factory_bin, [])
-        self._router_contract = self._get_contract(self.web3, self.router_abi['abi'], self.router_address)
-        self._factory_contract = self._get_contract(self.web3, self.factory_abi['abi'], self.factory_address)
+        self.weth_address = self._deploy(self.web3, self.weth_abi, self.weth_bin, [])
+        self.advanced_weth_address = self._deploy(self.web3, self.advanced_weth_abi, self.advanced_weth_bin, [self.weth_address.address])
+        self.factory_address = self._deploy(self.web3, self.factory_abi, self.factory_bin, [self.our_address.address])
+        self.router_address = self._deploy(self.web3, self.router_abi, self.router_bin, [self.factory_address.address, self.advanced_weth_address.address])
+        self._router_contract = self._get_contract(self.web3, self.router_abi, self.router_address)
+        self._factory_contract = self._get_contract(self.web3, self.factory_abi, self.factory_address)
 
         self.ds_dai = DSToken.deploy(self.web3, 'DAI')
         self.ds_usdc = DSToken.deploy(self.web3, 'USDC')
-
         self.token_dai = Token("DAI", self.ds_dai.address, 18)
         self.token_usdc = Token("USDC", self.ds_usdc.address, 6)
+        self.token_weth = Token("WETH", self.weth_address, 18)
+
         self.dai_usdc_uniswap = UniswapV2(self.web3, self.token_dai, self.token_usdc, self.router_address, self.factory_address)
-        
-        # print(self.web3.eth.getCode(self.router_address.address))
-
-        # Useful for debugging failing transactions
-        logger = logging.getLogger('eth')
+        self.dai_eth_uniswap = UniswapV2(self.web3, self.token_dai, self.token_weth, self.router_address, self.factory_address)
+        ## Useful for debugging failing transactions
+        # logger = logging.getLogger('eth')
         # logger.setLevel(8)
-        Transact.gas_estimate_for_bad_txs = 210000
+        # Transact.gas_estimate_for_bad_txs = 210000
 
-    def test_approval(self, deployment):
+    def add_liquidity_tokens(self) -> Receipt:
+        self.ds_dai.mint(Wad(17 * 10**18)).transact(from_address=self.our_address)
+        self.ds_usdc.mint(self.token_usdc.unnormalize_amount(Wad.from_number(9))).transact(from_address=self.our_address)
+        self.dai_usdc_uniswap.approve(self.token_dai)
+        self.dai_usdc_uniswap.approve(self.token_usdc)
+
+        add_liquidity_tokens_args = {
+            "amount_a_desired": Wad.from_number(1.9),
+            "amount_b_desired": self.token_usdc.unnormalize_amount(Wad.from_number(2.0)),
+            "amount_a_min": Wad.from_number(1.8),
+            "amount_b_min": self.token_usdc.unnormalize_amount(Wad.from_number(1.9))
+        }
+
+        return self.dai_usdc_uniswap.add_liquidity(add_liquidity_tokens_args, self.token_dai, self.token_usdc).transact(from_address=self.our_address)
+
+    def add_liquidity_eth(self) -> Receipt:
+        self.ds_dai.mint(Wad(300 * 10**18)).transact(from_address=self.our_address)
+        self.dai_usdc_uniswap.approve(self.token_dai)
+        self.dai_usdc_uniswap.approve(self.token_usdc)
+
+        add_liquidity_eth_args = {
+            "amount_token_desired": Wad.from_number(280),
+            "amount_eth_desired": Wad.from_number(1),
+            "amount_token_min":  Wad.from_number(275),
+            "amount_eth_min": Wad.from_number(0.95)
+        }
+
+        # print(self.dai_eth_uniswap.get_account_eth_balance())
+
+        return self.dai_eth_uniswap.add_liquidity_eth(add_liquidity_eth_args, self.token_dai).transact(from_address=self.our_address)
+
+    def test_approval(self):
         # given
         assert self.ds_dai.allowance_of(self.our_address, self.router_address) == Wad(0)
 
@@ -95,47 +150,73 @@ class TestUniswapV2(Contract):
         assert balance_usdc == Wad.from_number(9)
 
     def test_add_liquidity_tokens(self):
-        # given
-        self.ds_dai.mint(Wad(1700000000 * 10**18)).transact(from_address=self.our_address)
-        self.ds_usdc.mint(self.token_usdc.unnormalize_amount(Wad.from_number(90000000000))).transact(from_address=self.our_address)
-        self.dai_usdc_uniswap.approve(self.token_dai)
-        self.dai_usdc_uniswap.approve(self.token_usdc)
-
-        print(self.our_address)
-
-        # # given
-        # add_liquidity_tokens_args = {
-        #     "amount_a_desired": Wad.from_number(1.9),
-        #     "amount_b_desired": self.token_usdc.unnormalize_amount(Wad.from_number(2.0)),
-        #     "amount_a_min": Wad.from_number(1.8),
-        #     "amount_b_min": self.token_usdc.unnormalize_amount(Wad.from_number(1.9))
-        # }
-
-        # given
-        add_liquidity_tokens_args = {
-            "amount_a_desired": Wad.from_number(1.9),
-            "amount_b_desired": Wad.from_number(2.0),
-            "amount_a_min": Wad.from_number(1.8),
-            "amount_b_min": Wad.from_number(1.9)
-        }
-
-        time.sleep(10)
         # when
-        add_liquidity = self.dai_usdc_uniswap.add_liquidity(add_liquidity_tokens_args, self.token_dai, self.token_usdc).transact(from_address=self.our_address)
+        add_liquidity = self.add_liquidity_tokens()
 
         # then
-        assert add_liquidity.result == True
+        assert add_liquidity.successful == True
+
+        # when
+        self.dai_usdc_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
 
         # then
         assert self.dai_usdc_uniswap.get_current_liquidity() > Wad.from_number(0)
 
     def test_add_liquidity_eth(self):
-        pass
+        # when
+        add_liquidity_eth = self.add_liquidity_eth()
+
+        # then
+        assert add_liquidity_eth.successful == True
+
+        # when
+        self.dai_usdc_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_weth.address))
+
+        # then
+        assert self.dai_usdc_uniswap.get_current_liquidity() > Wad.from_number(0)
+
+    def test_remove_liquidity_tokens(self):
+        # when
+        add_liquidity = self.add_liquidity_tokens()
+        self.dai_usdc_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
+
+        current_liquidity = self.dai_usdc_uniswap.get_current_liquidity()
+        total_liquidity = self.dai_usdc_uniswap.get_total_liquidity()
+        dai_exchange_balance = self.dai_usdc_uniswap.get_exchange_balance(self.token_dai, self.dai_usdc_uniswap.pair_address)
+        usdc_exchange_balance = self.token_usdc.unnormalize_amount(self.dai_usdc_uniswap.get_exchange_balance(self.token_usdc, self.dai_usdc_uniswap.pair_address))
+
+        # then
+        assert current_liquidity > Wad.from_number(0)
+        assert total_liquidity > Wad.from_number(0)
+        assert total_liquidity > current_liquidity
+
+        # given
+        amount_a_min = current_liquidity * dai_exchange_balance / total_liquidity
+        amount_b_min = current_liquidity * usdc_exchange_balance / total_liquidity
+        remove_liquidity_tokens_args = {
+            "liquidity": current_liquidity,
+            "amountAMin": amount_a_min,
+            "amountBMin": amount_b_min
+        }
+
+        # when
+        remove_liquidity = self.dai_usdc_uniswap.remove_liquidity(remove_liquidity_tokens_args, self.token_dai, self.token_usdc).transact(from_address=self.our_address)
+
+        # then
+        assert remove_liquidity.successful == True
+        assert self.dai_usdc_uniswap.get_current_liquidity() == Wad.from_number(0)
+
+    def test_tokens_swap(self):
+        # given
+        add_liquidity = self.add_liquidity_tokens()
+
+        # when
+        swap = self.dai_usdc_uniswap.swap_exact_tokens_for_tokens(Wad.from_number(.4), self.token_usdc.unnormalize_amount(Wad.from_number(.5)), [self.ds_dai.address.address, self.ds_usdc.address.address]).transact(from_address=self.our_address)
+        
+        # then
+        assert swap.successful == True
 
     def test_get_exchange_rate(self):
-        pass
-
-    def test_remove_liquidity(self):
         pass
 
     def test_remove_liquidity_eth(self):

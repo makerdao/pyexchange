@@ -37,23 +37,25 @@ class UniswapV2(Contract):
     """
 
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
-    router_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')
-    factory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')
-    router_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Router02.bin')
-    factory_bin = Contract._load_bin(__name__, 'abi/IUniswapV2Factory.bin')
+    router_abi = Contract._load_abi(__name__, 'abi/UniswapV2Router02.abi')
+    router_bin = Contract._load_bin(__name__, 'abi/UniswapV2Router02.bin')
+    factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
+    factory_bin = Contract._load_bin(__name__, 'abi/UniswapV2Factory.bin')
 
     def __init__(self, web3: Web3, token_a: Token, token_b: Token, router_address: Address = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"), factory_address: Address = Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
+        assert (isinstance(router_address, Address))
+        assert (isinstance(factory_address, Address))
 
         self.web3 = web3
         self.token_a = token_a
         self.token_b = token_b
         self.router_address = router_address
         self.factory_address = factory_address
-        self._router_contract = self._get_contract(web3, self.router_abi['abi'], self.router_address)
-        self._factory_contract = self._get_contract(web3, self.factory_abi['abi'], self.factory_address)
+        self._router_contract = self._get_contract(web3, self.router_abi, self.router_address)
+        self._factory_contract = self._get_contract(web3, self.factory_abi, self.factory_address)
 
         self.pair_address = self.get_pair_address(self.token_a.address, self.token_b.address)
         self.is_new_pool = self.pair_address == Address("0x0000000000000000000000000000000000000000")
@@ -68,6 +70,7 @@ class UniswapV2(Contract):
             # self.ec_signature_v = ec_signature_v
 
     def set_and_approve_pair_token(self, pair_address: Address):
+        self.pair_address = pair_address
         self._pair_contract = self._get_contract(self.web3, self.pair_abi['abi'], pair_address)
         self.pair_token = Token('Liquidity', pair_address, 18)
         self.approve(self.pair_token)
@@ -113,15 +116,13 @@ class UniswapV2(Contract):
 
         return Address(self._factory_contract.functions.getPair(token_a_address.address, token_b_address.address).call())
 
-    # TODO: determine appropriate amount default
-    def approve(self, token: Token, amount: int = 10):
+    def approve(self, token: Token):
         assert (isinstance(token, Token))
-        assert (isinstance(amount, int))
 
         erc20_token = ERC20Token(self.web3, token.address)
 
         approval_function = directly()
-        return approval_function(erc20_token, self.router_address, 'IUniswapV2Router02')
+        return approval_function(erc20_token, self.router_address, 'UniswapV2Router02')
 
     def get_amounts_out(self, amount_in: Wad, tokens: List[Token]) -> List[Wad]:
         """ Calculate maximum output amount of a given input.
@@ -188,7 +189,7 @@ class UniswapV2(Contract):
             self._deadline()
         ]
 
-        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+        return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'addLiquidity', addLiquidityArgs)
 
     def add_liquidity_eth(self, amounts: dict, token: Token) -> Transact:
@@ -212,7 +213,7 @@ class UniswapV2(Contract):
             self._deadline()
         ]
 
-        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+        return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'addLiquidityETH', addLiquidityArgs, {'value': amounts['amount_eth_desired'].value})
 
     # TODO: finish implementing
@@ -244,7 +245,7 @@ class UniswapV2(Contract):
             self._deadline()
         ]
 
-        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+        return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'removeLiquidity', removeLiquidityArgs)
 
     # TODO: add switch to handle whether or not a givne pool charges a fee
@@ -270,7 +271,7 @@ class UniswapV2(Contract):
             self._deadline()
         ]
 
-        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+        return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'removeLiquidityETH', removeLiquidityArgs)
 
     def swap_exact_eth_for_tokens(self, eth_to_swap: Wad, min_amount_out: Wad, path: List) -> Transact:
@@ -296,7 +297,7 @@ class UniswapV2(Contract):
             self._deadline()
         ]
 
-        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+        return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'swapExactETHForTokens', swapArgs, {'value': eth_to_swap.value})
 
     def swap_exact_tokens_for_tokens(self, tokens_to_swap: Wad, min_amount_out: Wad, path: List) -> Transact:
@@ -316,14 +317,14 @@ class UniswapV2(Contract):
         assert (isinstance(path, List))
 
         swapArgs = [
-            tokens_to_swap,
-            min_amount_out,
+            tokens_to_swap.value,
+            min_amount_out.value,
             path,
             self.account_address.address,
             self._deadline()
         ]
 
-        return Transact(self, self.web3, self.router_abi['abi'], self.router_address, self._router_contract,
+        return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'swapExactTokensForTokens', swapArgs)
 
     def _deadline(self):

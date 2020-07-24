@@ -78,7 +78,7 @@ class DydxMockServer:
 class TestDydx:
     def setup_method(self):
         self.dydx = DydxApi(
-            "http://localhost:8889",
+            "http://localhost:8545",
             "dcba44978751342a68e81b0e487de87e52720f6f94792cc237045bce0f9d05fc"
         )
 
