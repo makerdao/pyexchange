@@ -31,7 +31,7 @@ ETH_ADDRESS = Address("0x0000000000000000000000000000000000000000")
 WETH_ADDRESS = Address("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
 WETH_KOVAN_ADDRESS = Address("0xd0a1e359811322d97991e03f863a0c30c2cf029c")
 DAI_ADDRESS = Address("0x6B175474E89094C44Da98b954EedeAC495271d0F")
-DAI_KOVAN_ADDRESS = Address("0x4F96Fe3b7A6Cf9725f59d353F723c1bDb64CA6Aa")
+DAI_KOVAN_ADDRESS = Address("0x4f96fe3b7a6cf9725f59d353f723c1bdb64ca6aa")
 USDC_ADDRESS = Address("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
 MKR_ADDRESS = Address("0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2")
 MKR_KOVAN_ADDRESS = Address("0xAaF64BFCC32d0F15873a02163e7E500671a4ffcD")
@@ -51,8 +51,7 @@ usdc_kovan = Token("USDC", USDC_KOVAN_ADDRESS, 6)
 usdc_mainnet = Token("USDC", USDC_MAINNET_ADDRESS, 6)
 
 wbtc = Token('WBTC', Address("0xe0c9275e44ea80ef17579d33c55136b7da269aeb"), 8)
-# uniswap = UniswapV2(web3, 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2', ROUTER_ADDRESS, FACTORY_ADDRESS)
-uniswap = UniswapV2(web3, 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2', usdc_mainnet, weth_mainnet)
+uniswap = UniswapV2(web3, dai, weth_kovan)
 
 dai_weth_pair = Token("POOL", uniswap.get_pair_address(DAI_KOVAN_ADDRESS, WETH_KOVAN_ADDRESS), 18)
 # uniswap.approve(wbtc, web3.toWei(5, 'ether'))
@@ -94,10 +93,10 @@ add_token_pair_amounts = {
 # print(res.successful)
 
 add_eth_pair_amounts = {
-    "amount_eth_desired": Wad(5),
-    "amount_token_desired": web3.toWei(2.4, 'ether'),
-    "amount_token_min": web3.toWei(2.1, 'ether'),
-    "amount_eth_min": web3.toWei(.015, 'ether')
+    "amount_eth_desired": Wad.from_number(.1),
+    "amount_token_desired": Wad.from_number(3.5),
+    "amount_token_min": Wad.from_number(3),
+    "amount_eth_min": Wad.from_number(0.01)
 }
 
 # time.sleep(20)
@@ -107,10 +106,10 @@ add_eth_pair_amounts = {
 # print(res)
 # print(res.transaction_hash.hex())
 # time.sleep(10)
-transaction = uniswap.add_liquidity_eth(add_eth_pair_amounts, usdc_mainnet)
+transaction = uniswap.add_liquidity_eth(add_eth_pair_amounts, dai)
 res = transaction.transact()
-print(res)
-# print(res.transaction_hash.hex())
+print(res.successful)
+print(res.transaction_hash.hex())
 
 # print(uniswap.get_pair_address(Address('0xe0c9275e44ea80ef17579d33c55136b7da269aeb'), Address('0xd0a1e359811322d97991e03f863a0c30c2cf029c')))
 # balances = uniswap.get_balances()

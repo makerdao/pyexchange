@@ -37,8 +37,10 @@ class UniswapV2(Contract):
     """
 
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
+    Irouter_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Router02.abi')['abi']
     router_abi = Contract._load_abi(__name__, 'abi/UniswapV2Router02.abi')
     router_bin = Contract._load_bin(__name__, 'abi/UniswapV2Router02.bin')
+    Ifactory_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Factory.abi')['abi']
     factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
     factory_bin = Contract._load_bin(__name__, 'abi/UniswapV2Factory.bin')
 
@@ -54,8 +56,8 @@ class UniswapV2(Contract):
         self.token_b = token_b
         self.router_address = router_address
         self.factory_address = factory_address
-        self._router_contract = self._get_contract(web3, self.router_abi, self.router_address)
-        self._factory_contract = self._get_contract(web3, self.factory_abi, self.factory_address)
+        self._router_contract = self._get_contract(web3, self.Irouter_abi, self.router_address)
+        self._factory_contract = self._get_contract(web3, self.Ifactory_abi, self.factory_address)
 
         self.pair_address = self.get_pair_address(self.token_a.address, self.token_b.address)
         self.is_new_pool = self.pair_address == Address("0x0000000000000000000000000000000000000000")
@@ -248,7 +250,7 @@ class UniswapV2(Contract):
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'removeLiquidity', removeLiquidityArgs)
 
-    # TODO: add switch to handle whether or not a givne pool charges a fee
+    # TODO: add switch to handle whether or not a given pool charges a fee
     # If so, use ternary to change invoked method name
     def remove_liquidity_eth(self, amounts: dict, token: Token):
         """ Remove liquidity from token-weth pair.
