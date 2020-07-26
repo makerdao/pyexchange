@@ -66,11 +66,6 @@ class UniswapV2(Contract):
 
         self.account_address = Address(self.web3.eth.defaultAccount)
 
-        #     TODO: Add permit support
-        # self.ec_signature_r = ec_signature_r
-            # self.ec_signature_s = ec_signature_s
-            # self.ec_signature_v = ec_signature_v
-
     def set_and_approve_pair_token(self, pair_address: Address):
         self.pair_address = pair_address
         self._pair_contract = self._get_contract(self.web3, self.pair_abi['abi'], pair_address)
@@ -218,11 +213,6 @@ class UniswapV2(Contract):
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'addLiquidityETH', addLiquidityArgs, {'value': amounts['amount_eth_desired'].value})
 
-    # TODO: finish implementing
-    # Enable liquidity to be removed from a pool up to a set limit
-    def permit_removal(self, pair, amount: Wad) -> Transact:
-        pass
-
     def remove_liquidity(self, amounts: dict, token_a: Token, token_b: Token) -> Transact:
         """ Remove liquidity from arbitrary token pair.
 
@@ -274,7 +264,7 @@ class UniswapV2(Contract):
         ]
 
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
-                        'removeLiquidityETH', removeLiquidityArgs)
+                        'removeLiquidityETHSupportingFeeOnTransferTokens', removeLiquidityArgs)
 
     def swap_exact_eth_for_tokens(self, eth_to_swap: Wad, min_amount_out: Wad, path: List) -> Transact:
         """Convert ETH to Tokens.
