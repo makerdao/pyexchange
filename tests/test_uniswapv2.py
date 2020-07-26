@@ -52,11 +52,8 @@ class TestUniswapV2(Contract):
     router_bin = Contract._load_bin(__name__, '../pyexchange/abi/UniswapV2Router02.bin')
     factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/UniswapV2Factory.abi')
     factory_bin = Contract._load_bin(__name__, '../pyexchange/abi/UniswapV2Factory.bin')
-    Iweth_abi = Contract._load_abi(__name__, '../pyexchange/abi/IWETH.abi')['abi']
     weth_abi = Contract._load_abi(__name__, '../pyexchange/abi/WETH.abi')
     weth_bin = Contract._load_bin(__name__, '../pyexchange/abi/WETH.bin')
-    advanced_weth_abi = Contract._load_abi(__name__, '../pyexchange/abi/ADVANCED_WETH.abi')
-    advanced_weth_bin = Contract._load_bin(__name__, '../pyexchange/abi/ADVANCED_WETH.bin')
 
     # @pytest.fixture(scope="session", autouse=True)
     def setup_method(self, web3: Web3):
@@ -78,10 +75,9 @@ class TestUniswapV2(Contract):
         self.our_address = Address(self.web3.eth.defaultAccount)
 
         self.weth_address = self._deploy(self.web3, self.weth_abi, self.weth_bin, [])
-        self.advanced_weth_address = self._deploy(self.web3, self.advanced_weth_abi, self.advanced_weth_bin, [self.weth_address.address])
         self.factory_address = self._deploy(self.web3, self.factory_abi, self.factory_bin, [self.our_address.address])
-        self.router_address = self._deploy(self.web3, self.router_abi, self.router_bin, [self.factory_address.address, self.advanced_weth_address.address])
-        self._weth_contract = self._get_contract(self.web3, self.Iweth_abi, self.weth_address)
+        self.router_address = self._deploy(self.web3, self.router_abi, self.router_bin, [self.factory_address.address, self.weth_address.address])
+        self._weth_contract = self._get_contract(self.web3, self.weth_abi, self.weth_address)
 
         self.ds_dai = DSToken.deploy(self.web3, 'DAI')
         self.ds_usdc = DSToken.deploy(self.web3, 'USDC')
@@ -126,8 +122,6 @@ class TestUniswapV2(Contract):
 
         print(self.dai_eth_uniswap.get_account_eth_balance())
         print(self.dai_eth_uniswap.get_account_token_balance(self.token_dai))
-        print(self.ds_dai, self.token_weth.address)
-        print(self.dai_eth_uniswap.is_new_pool, self.dai_eth_uniswap.pair_address)
         return self.dai_eth_uniswap.add_liquidity_eth(add_liquidity_eth_args, self.token_dai).transact(from_address=self.our_address)
 
     def test_approval(self):
@@ -166,13 +160,6 @@ class TestUniswapV2(Contract):
         # then
         assert self.dai_usdc_uniswap.get_current_liquidity() > Wad.from_number(0)
 
-    def test_weth_deposit(self):
-        print(self.weth_address)
-        weth_deposit = Transact(self, self.web3, self.Iweth_abi, self.weth_address, self._weth_contract,
-                        'deposit', [], {'value': Wad.from_number(1)}).transact(from_address=self.our_address)
-
-        assert weth_deposit.successful == True
-
     def test_add_liquidity_eth(self):
         # when
         add_liquidity_eth = self.add_liquidity_eth()
@@ -187,7 +174,7 @@ class TestUniswapV2(Contract):
         assert self.dai_eth_uniswap.get_current_liquidity() > Wad.from_number(0)
 
     def test_remove_liquidity_tokens(self):
-        # when
+        # given
         add_liquidity = self.add_liquidity_tokens()
         self.dai_usdc_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
 
@@ -217,6 +204,37 @@ class TestUniswapV2(Contract):
         assert remove_liquidity.successful == True
         assert self.dai_usdc_uniswap.get_current_liquidity() == Wad.from_number(0)
 
+    def test_remove_liquidity_eth(self):
+        # given
+        add_liquidity_eth = self.add_liquidity_eth()
+        self.dai_eth_uniswap.set_and_approve_pair_token(self.dai_eth_uniswap.get_pair_address(self.token_dai.address, self.token_weth.address))
+
+        current_liquidity = self.dai_eth_uniswap.get_current_liquidity()
+        total_liquidity = self.dai_eth_uniswap.get_total_liquidity()
+        dai_exchange_balance = self.dai_eth_uniswap.get_exchange_balance(self.token_dai, self.dai_eth_uniswap.pair_address)
+        weth_exchange_balance = self.dai_eth_uniswap.get_exchange_balance(self.token_weth, self.dai_eth_uniswap.pair_address)
+
+        # then
+        assert current_liquidity > Wad.from_number(0)
+        assert total_liquidity > Wad.from_number(0)
+        assert total_liquidity > current_liquidity
+        
+        # given
+        amount_a_min = current_liquidity * dai_exchange_balance / total_liquidity
+        amount_b_min = current_liquidity * weth_exchange_balance / total_liquidity
+        remove_liquidity_eth_args = {
+            "liquidity": current_liquidity,
+            "amountTokenMin": amount_a_min,
+            "amountETHMin": amount_b_min
+        }
+
+        # when
+        remove_liquidity = self.dai_eth_uniswap.remove_liquidity_eth(remove_liquidity_eth_args, self.token_dai).transact(from_address=self.our_address)
+
+        # then
+        assert remove_liquidity.successful == True
+        assert self.dai_eth_uniswap.get_current_liquidity() == Wad.from_number(0)
+
     def test_tokens_swap(self):
         # given
         add_liquidity = self.add_liquidity_tokens()
@@ -235,9 +253,3 @@ class TestUniswapV2(Contract):
 
         assert balance_dai_after_swap < balance_dai_before_swap
         assert balance_usdc_before_swap < balance_usdc_after_swap
-
-    def test_get_exchange_rate(self):
-        pass
-
-    def test_remove_liquidity_eth(self):
-        pass
