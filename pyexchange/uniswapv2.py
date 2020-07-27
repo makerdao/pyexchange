@@ -37,10 +37,10 @@ class UniswapV2(Contract):
     """
 
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
-    Irouter_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Router02.abi')['abi']
+    Irouter_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')['abi']
     router_abi = Contract._load_abi(__name__, 'abi/UniswapV2Router02.abi')
     router_bin = Contract._load_bin(__name__, 'abi/UniswapV2Router02.bin')
-    Ifactory_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Factory.abi')['abi']
+    Ifactory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')['abi']
     factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
     factory_bin = Contract._load_bin(__name__, 'abi/UniswapV2Factory.bin')
 

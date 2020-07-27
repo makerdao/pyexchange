@@ -36,15 +36,13 @@ from pymaker.numeric import Wad
 from pymaker.token import DSToken, ERC20Token
 from pymaker.model import Token
 from pymaker.keys import register_keys, register_private_key
-
+from os.path import abspath
 
 class TestUniswapV2(Contract):
     """
     In order to run automated tests locally, all dependent contracts and deployable bytecode need to be available for deploying contract to local network. 
-    
     Deployable bytecode differs from the runtime bytecode you would see on Etherscan.
 
-    Advanced WETH contract is used by Uniswap as opposed to jhttps://unpkg.com/browse/advanced-weth@1.0.0/build/contracts/AdvancedWETH.json
     """
     pair_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Pair.abi')
     Irouter_abi = Contract._load_abi(__name__, '../pyexchange/abi/IUniswapV2Router02.abi')['abi']
@@ -55,22 +53,12 @@ class TestUniswapV2(Contract):
     weth_abi = Contract._load_abi(__name__, '../pyexchange/abi/WETH.abi')
     weth_bin = Contract._load_bin(__name__, '../pyexchange/abi/WETH.bin')
 
-    # @pytest.fixture(scope="session", autouse=True)
     def setup_method(self, web3: Web3):
 
-        # self.web3 = Web3(HTTPProvider("http://0.0.0.0:8545"))
-        # # self.web3.eth.defaultAccount = "0x50FF810797f75f6bfbf2227442e0c961a8562F4C"
-        # self.web3.eth.defaultAccount = Web3.toChecksumAddress("0x00a329c0648769a73afac7f9381e08fb43dbea72")
-        # register_keys(self.web3,
-        #             ["key_file=tests/config/keys/UnlimitedChain/key1.json,pass_file=/dev/null",
-        #             "key_file=tests/config/keys/UnlimitedChain/key2.json,pass_file=/dev/null",
-        #             "key_file=tests/config/keys/UnlimitedChain/key3.json,pass_file=/dev/null",
-        #             "key_file=tests/config/keys/UnlimitedChain/key4.json,pass_file=/dev/null",
-        #             "key_file=tests/config/keys/UnlimitedChain/key.json,pass_file=/dev/null"])
-
-        self.web3 = Web3(HTTPProvider("http://0.0.0.0:7545"))
-        self.web3.eth.defaultAccount = Web3.toChecksumAddress("0xe57bFb150E91be83CBd1b5C089C9082aDf974cc1")
-        register_private_key(self.web3, "b936cd318aefff207b434f71aa38d2d19b9075865ee66c200f966854685f5114")
+        # Use Ganache docker container
+        self.web3 = Web3(HTTPProvider("http://0.0.0.0:8555"))
+        self.web3.eth.defaultAccount = Web3.toChecksumAddress("0x9596C16D7bF9323265C2F2E22f43e6c80eB3d943")
+        register_private_key(self.web3, "0x91cf2cc3671a365fcbf38010ff97ee31a5b7e674842663c56769e41600696ead")
 
         self.our_address = Address(self.web3.eth.defaultAccount)
 

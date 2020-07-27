@@ -13,7 +13,7 @@ docker-compose up -d ganache
 docker-compose up -d parity
 sleep 2
 
-PYTHONPATH=$PYTHONPATH:./lib/pymaker py.test -x --cov=pyexchange --cov-report=term --cov-append tests/test_uniswapv2.py
+PYTHONPATH=$PYTHONPATH:./lib/pymaker py.test -x --cov=pyexchange --cov-report=term --cov-append tests/
 TEST_RESULT=$?
 
 # Cleanup local parity node
