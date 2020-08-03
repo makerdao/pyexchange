@@ -71,6 +71,7 @@ class UniswapV2(Contract):
         self._pair_contract = self._get_contract(self.web3, self.pair_abi['abi'], pair_address)
         self.pair_token = Token('Liquidity', pair_address, 18)
         self.approve(self.pair_token)
+        self.is_new_pool = False
 
     def get_account_token_balance(self, token: Token) -> Wad:
         assert (isinstance(token, Token))
@@ -192,9 +193,11 @@ class UniswapV2(Contract):
     def add_liquidity_eth(self, amounts: dict, token: Token) -> Transact:
         """ Add liquidity to token-weth pair.
 
+        It is assumed that eth will always be token_a
+
         Args:
             amounts: dictionary[Wad, Wad, Wad, Wad]
-            token_a: Token side of the pool
+            token_b: Token side of the pool
         Returns:
             A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
         """
@@ -203,15 +206,15 @@ class UniswapV2(Contract):
 
         addLiquidityArgs = [
             token.address.address,
-            amounts['amount_token_desired'].value,
-            amounts['amount_token_min'].value,
-            amounts['amount_eth_min'].value,
+            amounts['amount_b_desired'].value,
+            amounts['amount_b_min'].value,
+            amounts['amount_a_min'].value,
             self.account_address.address,
             self._deadline()
         ]
 
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
-                        'addLiquidityETH', addLiquidityArgs, {'value': amounts['amount_eth_desired'].value})
+                        'addLiquidityETH', addLiquidityArgs, {'value': amounts['amount_a_desired'].value})
 
     def remove_liquidity(self, amounts: dict, token_a: Token, token_b: Token) -> Transact:
         """ Remove liquidity from arbitrary token pair.
@@ -240,8 +243,6 @@ class UniswapV2(Contract):
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'removeLiquidity', removeLiquidityArgs)
 
-    # TODO: add switch to handle whether or not a given pool charges a fee
-    # If so, use ternary to change invoked method name
     def remove_liquidity_eth(self, amounts: dict, token: Token):
         """ Remove liquidity from token-weth pair.
 
@@ -257,8 +258,8 @@ class UniswapV2(Contract):
         removeLiquidityArgs = [
             token.address.address,
             amounts['liquidity'].value,
-            amounts['amountTokenMin'].value,
-            amounts['amountETHMin'].value,
+            amounts['amountBMin'].value,
+            amounts['amountAMin'].value,
             self.account_address.address,
             self._deadline()
         ]

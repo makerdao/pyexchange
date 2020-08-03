@@ -102,14 +102,12 @@ class TestUniswapV2(Contract):
         self.dai_eth_uniswap.approve(self.token_weth)
 
         add_liquidity_eth_args = {
-            "amount_token_desired": Wad.from_number(28),
-            "amount_eth_desired": Wad.from_number(.1),
-            "amount_token_min":  Wad.from_number(25),
-            "amount_eth_min": Wad.from_number(0.01)
+            "amount_b_desired": Wad.from_number(28),
+            "amount_a_desired": Wad.from_number(.1),
+            "amount_b_min":  Wad.from_number(25),
+            "amount_a_min": Wad.from_number(0.01)
         }
 
-        print(self.dai_eth_uniswap.get_account_eth_balance())
-        print(self.dai_eth_uniswap.get_account_token_balance(self.token_dai))
         return self.dai_eth_uniswap.add_liquidity_eth(add_liquidity_eth_args, self.token_dai).transact(from_address=self.our_address)
 
     def test_approval(self):
@@ -208,12 +206,12 @@ class TestUniswapV2(Contract):
         assert total_liquidity > current_liquidity
         
         # given
-        amount_a_min = current_liquidity * dai_exchange_balance / total_liquidity
-        amount_b_min = current_liquidity * weth_exchange_balance / total_liquidity
+        amount_a_min = current_liquidity * weth_exchange_balance / total_liquidity
+        amount_b_min = current_liquidity * dai_exchange_balance / total_liquidity
         remove_liquidity_eth_args = {
             "liquidity": current_liquidity,
-            "amountTokenMin": amount_a_min,
-            "amountETHMin": amount_b_min
+            "amountBMin": amount_b_min,
+            "amountAMin": amount_a_min
         }
 
         # when
