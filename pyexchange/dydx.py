@@ -78,7 +78,7 @@ class DydxApi(PyexAPI):
         assert (isinstance(node, str))
         assert (isinstance(private_key, str))
 
-        self.client = Client(private_key=private_key, node=node)
+        self.client = Client(private_key=private_key, node=node, account_number=consts.ACCOUNT_NUMBERS_SPOT)
 
         self.market_info = self.get_markets()
 
