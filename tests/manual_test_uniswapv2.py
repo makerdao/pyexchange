@@ -56,13 +56,8 @@ uniswap = UniswapV2(web3, dai, weth_kovan)
 dai_weth_pair = Token("POOL", uniswap.get_pair_address(DAI_KOVAN_ADDRESS, WETH_KOVAN_ADDRESS), 18)
 # uniswap.approve(wbtc, web3.toWei(5, 'ether'))
 # uniswap.approve(weth, web3.toWei(5, 'ether'))
-# uniswap.approve(usdc_kovan, web3.toWei(5, 'ether'))
 
-dai_weth_kovan_pair_address = uniswap.get_pair_address(DAI_KOVAN_ADDRESS, WETH_KOVAN_ADDRESS)
-print(dai_weth_kovan_pair_address)
 
-dai_weth_kovan_exchange_rate = uniswap.get_exchange_rate()
-print("exchange rate: ", dai_weth_kovan_exchange_rate)
 
 # amounts_in = uniswap.get_amounts_in(web3.toWei(0.5, 'ether'), [DAI_KOVAN_ADDRESS.address, MKR_KOVAN_ADDRESS.address])
 # print(amounts_in)
@@ -73,68 +68,78 @@ print("exchange rate: ", dai_weth_kovan_exchange_rate)
 # eth_token_amounts_out = uniswap.get_amounts_out(Wad.from_number(0.5), [WETH_KOVAN_ADDRESS.address, DAI_KOVAN_ADDRESS.address])
 # eth_token_amounts_out = uniswap.get_amounts_out(Wad.from_number(0.5), [DAI_KOVAN_ADDRESS.address, WETH_KOVAN_ADDRESS.address])
 
+
+"""
+    INITALIZATION
+"""
+
+dai_weth_kovan_pair_address = uniswap.get_pair_address(DAI_KOVAN_ADDRESS, WETH_KOVAN_ADDRESS)
+print(dai_weth_kovan_pair_address)
+
+dai_weth_kovan_exchange_rate = uniswap.get_exchange_rate()
+print("exchange rate: ", dai_weth_kovan_exchange_rate)
+
 dai_weth_kovan_current_liquidity = uniswap.get_current_liquidity()
 print(dai_weth_kovan_current_liquidity)
 
+permit = uniswap.permit()
+print(permit)
+
+
+
+
+"""
+    ADD LIQUIDITY
+"""
+time.sleep(10)
+
 add_token_pair_amounts = {
-    "amount_a_desired": web3.toWei(1.9, 'ether'),
-    "amount_b_desired": web3.toWei(.1, 'ether'),
-    "amount_a_min": web3.toWei(1.8, 'ether'),
-    "amount_b_min": web3.toWei(.095, 'ether')
+    "amount_a_desired": Wad.from_number(10),
+    "amount_b_desired": Wad.from_number(10.1),
+    "amount_a_min": Wad.from_number(9.95),
+    "amount_b_min": Wad.from_number(10)
 }
-# time.sleep(20)
-# transaction = uniswap.add_liquidity(add_token_pair_amounts, DAI_KOVAN_ADDRESS, MKR_KOVAN_ADDRESS)
-# res = transaction.transact()
-# print(res.successful)
-# print(res.transaction_hash.hex())
-
-# transaction = uniswap.add_liquidity(add_token_pair_amounts, dai, usdc)
-# res = transaction.transact()
-# print(res.successful)
-
-add_eth_pair_amounts = {
-    "amount_eth_desired": Wad.from_number(.1),
-    "amount_token_desired": Wad.from_number(3.5),
-    "amount_token_min": Wad.from_number(3),
-    "amount_eth_min": Wad.from_number(0.01)
-}
-
-# time.sleep(20)
-# transaction = uniswap.add_liquidity_eth(add_eth_pair_amounts, DAI_ADDRESS)
-# transaction = uniswap.add_liquidity_eth(add_eth_pair_amounts, DAI_KOVAN_ADDRESS)
-# res = transaction.transact()
-# print(res)
-# print(res.transaction_hash.hex())
-# time.sleep(10)
-transaction = uniswap.add_liquidity_eth(add_eth_pair_amounts, dai)
+transaction = uniswap.add_liquidity(add_token_pair_amounts, dai, usdc_kovan)
 res = transaction.transact()
 print(res.successful)
 print(res.transaction_hash.hex())
 
-# print(uniswap.get_pair_address(Address('0xe0c9275e44ea80ef17579d33c55136b7da269aeb'), Address('0xd0a1e359811322d97991e03f863a0c30c2cf029c')))
-# balances = uniswap.get_balances()
-# print(balances)
-
-# remove_token_amounts = {
-#     "liquidity": web3.toWei(0.4294, 'ether'),
-#     "amountAMin": web3.toWei(1.89999, 'ether'),
-#     "amountBMin": web3.toWei(.0971676, 'ether')
-# }
-remove_token_amounts = {
-    "liquidity": web3.toWei(0.4294, 'ether'),
-    "amountAMin": web3.toWei(0, 'ether'),
-    "amountBMin": web3.toWei(0, 'ether')
+add_eth_pair_amounts = {
+    "amount_a_desired": Wad.from_number(.1),
+    "amount_b_desired": Wad.from_number(3.5),
+    "amount_b_min": Wad.from_number(3),
+    "amount_a_min": Wad.from_number(0.01)
 }
+
 # time.sleep(20)
-# transaction = uniswap.remove_liquidity(DAI_KOVAN_ADDRESS, MKR_KOVAN_ADDRESS, remove_token_amounts)
-# res = transaction.transact(from_address=Address(web3.eth.defaultAccount))
-# print(res)
+# transaction = uniswap.add_liquidity_eth(add_eth_pair_amounts, dai)
+# res = transaction.transact()
+# print(res.successful)
 # print(res.transaction_hash.hex())
 
+
+
+
+"""
+    REMOVE LIQUIDITY
+"""
+
+remove_token_amounts = {
+    "liquidity": Wad.from_number(0.4294),
+    "amountAMin": Wad.from_number(0),
+    "amountBMin": Wad.from_number(0)
+}
+time.sleep(20)
+# transaction = uniswap.remove_liquidity(DAI_KOVAN_ADDRESS, MKR_KOVAN_ADDRESS, remove_token_amounts)
+transaction = uniswap.remove_liquidity_with_permit(remove_token_amounts, dai, usdc_kovan)
+res = transaction.transact(from_address=Address(web3.eth.defaultAccount))
+print(res)
+print(res.transaction_hash.hex())
+
 remove_eth_amounts = {
-    "liquidity": web3.toWei(0.00784088, 'ether'),
-    "amountTokenMin": web3.toWei(0, 'ether'),
-    "amountETHMin": web3.toWei(0, 'ether')
+    "liquidity": Wad.from_number(0.00784088),
+    "amountTokenMin": Wad.from_number(0),
+    "amountETHMin": Wad.from_number(0)
 }
 # time.sleep(20)
 # transaction = uniswap.remove_liquidity_eth(DAI_KOVAN_ADDRESS, remove_eth_amounts)
@@ -142,20 +147,17 @@ remove_eth_amounts = {
 # print(res)
 # print(res.transaction_hash.hex())
 
+# current_liq = uniswap.get_current_liquidity()
+# print(current_liq)
+
+
+
+
+"""
+    SWAPS
+"""
+
 # transaction = uniswap.swap_exact_tokens_for_tokens(web3.toWei(2, 'ether'), web3.toWei(.097, 'ether'), [DAI_KOVAN_ADDRESS.address, MKR_KOVAN_ADDRESS.address])
 # res = transaction.transact()
 # print(res.successful)
 # print(res.transaction_hash.hex())
-
-# current_liq = uniswap.get_current_liquidity()
-# print(current_liq)
-#
-# transaction = uniswap.remove_liquidity(current_liq)
-# transact = transaction.transact()
-# print(transact.successful)
-# print(transact.transaction_hash.hex())
-#
-# current_liq = uniswap.get_current_liquidity()
-# print(current_liq)
-
-# print(uniswap.get_block())
