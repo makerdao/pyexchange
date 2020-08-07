@@ -190,6 +190,9 @@ class CoinoneApi(PyexAPI):
         currency = pair.split('-')[0]
 
         result = self._http_authenticated_request("POST", f"/v2/order/complete_orders", {"currency": currency})
+        if result['completeOrders'] is None:
+            return []
+
         return list(map(lambda item: CoinoneTrade.from_message(item, pair), result['completeOrders']))
 
     def _choose_nonce(self) -> int:
