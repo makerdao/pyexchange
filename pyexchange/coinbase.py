@@ -243,6 +243,45 @@ class CoinbaseApi(PyexAPI):
 
         return list(map(lambda item: Trade.from_all_list(pair, item), result))
 
+    def get_profiles(self):
+        # Returns list of profiles; one profile exists for each portfolio/account/subaccount
+        return self._http_authenticated("GET", "/profiles", {})
+
+    def get_profile(self, portfolio: str):
+        # Retrieves the profile identifier for a particular account or subaccount based on portfolio name
+        assert isinstance(portfolio, str)
+
+        matching = list(filter(lambda p: p['name'] == portfolio, self.get_profiles()))
+        if len(matching) > 1:
+            raise ValueError("Multiple profiles match that portfolio name; please adjust names via Coinbase Pro GUI")
+        elif len(matching) < 1:
+            raise ValueError(f"No profile was found for portfolio {portfolio}")
+        else:
+            return matching[0]['id']
+
+    def transfer(self, amount: Wad, coin: str, from_portfolio: str, to_portfolio: str):
+        # Moves funds from between default account and subaccount;
+        # must be executed using the API key associated with the sender account
+        assert isinstance(amount, Wad)
+        assert isinstance(coin, str)
+        assert isinstance(from_portfolio, str)
+        assert isinstance(to_portfolio, str)
+
+        profile_from = self.get_profile(from_portfolio)
+        profile_to = self.get_profile(to_portfolio)
+
+        data = {
+            "from": profile_from,
+            "to": profile_to,
+            "currency": coin,
+            "amount": str(float(amount))
+        }
+
+        self.logger.info(f"Transferring {data['amount']} {coin} from {from_portfolio} ({profile_from}) "
+                         f"to {to_portfolio} ({profile_to})")
+
+        return self._http_authenticated("POST", "/profiles/transfer", data)
+
     def get_coinbase_wallets(self):
         return self._http_authenticated("GET", "/coinbase-accounts", {})
 
@@ -318,13 +357,15 @@ class CoinbaseApi(PyexAPI):
                                              data=data,
                                              timeout=self.timeout))
 
-    def _result(self, result) -> Optional[dict]:
+    @staticmethod
+    def _result(result) -> Optional[dict]:
         if not result.ok:
-            raise Exception(f"Coinbase API invalid HTTP response: {http_response_summary(result)}")
+            raise RuntimeError(f"Coinbase API response: {http_response_summary(result)}")
 
-        try:
-            data = result.json()
-        except Exception:
-            raise Exception(f"Coinbase API invalid JSON response: {http_response_summary(result)}")
-
-        return data
+        if result.content and result.content != b'OK':
+            logging.debug(f"Received: {result.content}")
+            try:
+                data = result.json()
+            except json.JSONDecodeError:
+                raise ValueError(f"Coinbase API invalid JSON response: {http_response_summary(result)}")
+            return data
