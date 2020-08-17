@@ -36,7 +36,6 @@ from pymaker.numeric import Wad
 from pymaker.token import DSToken, ERC20Token
 from pymaker.model import Token
 from pymaker.keys import register_keys, register_private_key
-from os.path import abspath
 
 class TestUniswapV2(Contract):
     """

@@ -16,19 +16,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import time
+
 from web3 import Web3
-from eth_utils import keccak
-from eth_abi import encode_abi
-from eth_abi.packed import encode_abi_packed
-from eth_account.messages import encode_defunct
-from bitcoin import ecdsa_raw_sign
 from typing import List, Tuple
 
 from pymaker import Contract, Address, Transact, Wad
-from pymaker.sign import eth_sign, to_vrs
 from pymaker.token import ERC20Token
-from pymaker.tightly_packed import encode_address, encode_uint256, encode_bytes
-from pymaker.util import bytes_to_hexstring, hexstring_to_bytes, http_response_summary
+from pymaker.util import http_response_summary
 from pymaker.model import Token
 from pymaker.approval import directly
 from pyexchange.graph import GraphClient
@@ -76,9 +70,8 @@ class UniswapV2(Contract):
 
     def set_and_approve_pair_token(self, pair_address: Address):
         self.pair_address = pair_address
-        self._pair_contract = self._get_contract(self.web3, self.pair_abi['abi'], pair_address)
-        self.pair_token = Token('Liquidity', pair_address, 18)
-        # self.approve(self.pair_token)
+        self._pair_contract = self._get_contract(self.web3, self.pair_abi['abi'], self.pair_address)
+        self.pair_token = Token('Liquidity', self.pair_address, 18)
         self.is_new_pool = False
 
     def get_account_token_balance(self, token: Token) -> Wad:
@@ -94,6 +87,22 @@ class UniswapV2(Contract):
         assert (isinstance(pair_address, Address))
 
         return token.normalize_amount(ERC20Token(web3=self.web3, address=token.address).balance_of(pair_address))
+
+    def get_our_exchange_balance(self, token: Token, pair_address: Address) -> Wad:
+        assert (isinstance(token, Token))
+        assert (isinstance(pair_address, Address))
+
+        if self.is_new_pool:
+            return Wad.from_number(0)
+
+        current_liquidity = self.get_current_liquidity()
+        if current_liquidity == Wad.from_number(0):
+            return Wad.from_number(0)
+
+        total_liquidity = self.get_total_liquidity()
+        exchange_balance = self.get_exchange_balance(token, pair_address)
+
+        return token.unnormalize_amount(current_liquidity * exchange_balance / total_liquidity)
 
     # retrieve exchange rate for the instance's pair token
     def get_exchange_rate(self) -> Wad:
@@ -131,106 +140,6 @@ class UniswapV2(Contract):
     @staticmethod
     def _to_32byte_hex(val):
         return Web3.toHex(Web3.toBytes(val).rjust(32, b'\0'))
-
-    # https://github.com/ethereum/web3.py/issues/1154
-    def permit(self) -> Tuple:
-        DOMAIN = self._pair_contract.functions.DOMAIN_SEPARATOR().call()
-        TYPEHASH = self._pair_contract.functions.PERMIT_TYPEHASH().call()
-
-        # hashed_permit = keccak(
-        #     encode_abi(
-        #         ['bytes32', 'address', 'address', 'uint256', 'uint256'],
-        #         [
-        #             TYPEHASH,
-        #             self.account_address.address,
-        #             self.router_address.address,
-        #             Wad.from_number(1000000).value,
-        #             self._deadline()
-        #         ]
-        #     )
-        # )
-
-        hashed_permit = Web3.solidityKeccak(
-            ['bytes32', 'address', 'address', 'uint256', 'uint256'],
-            [
-                TYPEHASH,
-                self.account_address.address,
-                self.router_address.address,
-                Wad.from_number(1000000).value,
-                self._deadline()
-            ]
-        )
-
-        print(hashed_permit)
-
-        # Web3.soliditySha3
-        # right pad:
-        # filled_val = short_val.ljust(32, b'\0')
-        # left pad:
-        # filled_val = short_val.rjust(32, b'\0')
-
-        prefixed_message = keccak(b"\x19Ethereum Signed Message:\n") + encode_abi_packed(["bytes32", "bytes32"], [DOMAIN, hashed_permit])
-
-        hashed_message = Web3.solidityKeccak(
-            ["bytes32"], [prefixed_message]
-        )
-
-        with open("hashes.txt", "w+") as outfile:
-            # test_run = "\n" +
-            # "message"
-            outfile.write(str(hashed_message) + "\n")
-        # message = keccak(
-        #     encode_abi(["bytes32", "bytes32"], [DOMAIN, hashed_permit])
-        # )
-        # signature = eth_sign(hexstring_to_bytes(TYPEHASH), self.web3)
-        signature = eth_sign(hashed_permit, self.web3, "91cf2cc3671a365fcbf38010ff97ee31a5b7e674842663c56769e41600696ead", True)
-
-        # encoded_permit = keccak(b"\x19Ethereum Signed Message:\n32" + keccak(b"\x19\x01" + DOMAIN + message))
-        # encoded_permit = keccak(DOMAIN + message)
-        v, r, s = to_vrs(signature)
-        r = bytes_to_hexstring(r)
-        s = bytes_to_hexstring(s)
-
-        # V, R, S = ecdsa_raw_sign(encoded_permit, "91cf2cc3671a365fcbf38010ff97ee31a5b7e674842663c56769e41600696ead")
-        # v = V
-        # r = R
-        # s = S
-        # r = self.web3.toHex(R)
-        # s = self.web3.toHex(S)
-        print("before transform", v,r,s)
-
-        if len(s) < 66:
-            diff = 66 - len(s)
-            s = "0x" + "0" * diff + s[2:]
-
-        if len(r) < 66:
-            diff = 66 - len(r)
-            r = "0x" + "0" * diff + r[2:]
-
-        print("after transform", v,r,s)
-        return v, r, s
-        # return v, self._to_32byte_hex(r), self._to_32byte_hex(s)
-
-
-
-    # def permit(self) -> Tuple:
-    #     DOMAIN = self._pair_contract.functions.DOMAIN_SEPARATOR().call()
-    #     TYPEHASH = self._pair_contract.functions.PERMIT_TYPEHASH().call()
-
-    #     permit_hash = keccak(encode_address(self.account_address) +
-    #                             encode_address(self.router_address) +
-    #                             encode_uint256(Wad.from_number(100000).value) +
-    #                             encode_uint256(self._deadline()))
-
-    #     # hashed_message = self.web3.utils.soliditySha3(self.account_address.address, self.router_address.address, Wad.from_number(1000000).value, self._deadline())
-
-    #     signature = self.web3.eth.account.signHash(permit_hash, "91cf2cc3671a365fcbf38010ff97ee31a5b7e674842663c56769e41600696ead").signature.hex()
-
-    #     v, r, s = to_vrs(signature)
-    #     r = bytes_to_hexstring(r)
-    #     s = bytes_to_hexstring(s)
-
-    #     return v, r, s
 
     def get_amounts_out(self, amount_in: Wad, tokens: List[Token]) -> List[Wad]:
         """ Calculate maximum output amount of a given input.
@@ -326,37 +235,8 @@ class UniswapV2(Contract):
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'addLiquidityETH', addLiquidityArgs, {'value': amounts['amount_a_desired'].value})
 
-    # def remove_liquidity(self, amounts: dict, token_a: Token, token_b: Token) -> Transact:
-    #     """ Remove liquidity from arbitrary token pair.
-
-    #     Args:
-    #         token_a: Address of pool token A.
-    #         token_b: Address of pool token B.
-    #         amounts: dictionary[uint256, uint256, uint256]
-    #     Returns:
-    #         A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
-    #     """
-    #     assert (isinstance(token_a, Token))
-    #     assert (isinstance(token_b, Token))
-    #     assert (isinstance(amounts, dict))
-
-    #     removeLiquidityArgs = [
-    #         token_a.address.address,
-    #         token_b.address.address,
-    #         amounts['liquidity'].value,
-    #         amounts['amountAMin'].value,
-    #         amounts['amountBMin'].value,
-    #         self.account_address.address,
-    #         self._deadline()
-    #     ]
-
-    #     return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
-    #                     'removeLiquidity', removeLiquidityArgs)
-
     def remove_liquidity(self, amounts: dict, token_a: Token, token_b: Token) -> Transact:
         """ Remove liquidity from arbitrary token pair.
-
-        Permit is used to avoid having to additionally call approve on the pair to trade liquidity tokens for collateral
 
         Args:
             token_a: Address of pool token A.
@@ -369,10 +249,9 @@ class UniswapV2(Contract):
         assert (isinstance(token_b, Token))
         assert (isinstance(amounts, dict))
 
-        v, r, s = self.permit()
+        # Will approve Uniswap Liquidity token if allowance not already set
+        self.approve(self.pair_token)
 
-        # TODO: pull apart v, r, s from signature manually ahead of call
-        # ecrecover web3.py
         removeLiquidityArgs = [
             token_a.address.address,
             token_b.address.address,
@@ -380,14 +259,11 @@ class UniswapV2(Contract):
             amounts['amountAMin'].value,
             amounts['amountBMin'].value,
             self.account_address.address,
-            self._deadline(),
-            False,
-            # v, bytes_to_hexstring(r), bytes_to_hexstring(s)
-            v, r, s
+            self._deadline()
         ]
 
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
-                        'removeLiquidityWithPermit', removeLiquidityArgs)
+                        'removeLiquidity', removeLiquidityArgs)
 
     def remove_liquidity_eth(self, amounts: dict, token: Token) -> Transact:
         """ Remove liquidity from token-weth pair.
@@ -400,6 +276,9 @@ class UniswapV2(Contract):
         """
         assert (isinstance(amounts, dict))
         assert (isinstance(token, Token))
+
+        # Will approve Uniswap Liquidity token if allowance not already set
+        self.approve(self.pair_token)
 
         removeLiquidityArgs = [
             token.address.address,
