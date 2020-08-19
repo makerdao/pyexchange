@@ -1,16 +1,12 @@
 #!/bin/sh
 
-# Pull the docker image
-docker pull makerdao/testchain-pymaker:unit-testing
-
 # Remove existing container if tests not gracefully stopped
 docker-compose down
 
 # Start ganache
 docker-compose up -d ganache
 
-# Start parity and wait to initialize
-docker-compose up -d parity
+# Wait to initialize
 sleep 2
 
 PYTHONPATH=$PYTHONPATH:./lib/pymaker py.test -x --cov=pyexchange --cov-report=term --cov-append tests/
