@@ -72,12 +72,12 @@ class Order:
         return pformat(vars(self))
 
     @staticmethod
-    def from_list(item: list, pair: str):
-        return Order(order_id=item['id'],
-                     pair=item['product_id'],
-                     is_sell=True if item['side'] == 'sell' else False,
+    def create(item):
+        return Order(order_id=item['orderId'],
+                     pair=item['symbol'],
+                     is_sell=True if item['side'] == 'SELL' else False,
                      price=Wad.from_number(item['price']),
-                     amount=Wad.from_number(item['size']))
+                     amount=Wad.from_number(item['origQty']))
 
 
 class Trade:
@@ -123,26 +123,19 @@ class Trade:
         return pformat(vars(self))
 
     @staticmethod
-    def from_our_list(pair, trade):
-        return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(dateutil.parser.parse(trade['created_at']).timestamp()),
+    def create(pair, trade):
+        return Trade(trade_id=trade['id'],
+                     timestamp=trade['time'],
                      pair=pair,
-                     is_sell=True if trade['side'] == 'sell' else False,
+                     is_sell=trade['isBuyerMaker'],
                      price=Wad.from_number(trade['price']),
-                     amount=Wad.from_number(trade['size']))
-
-    @staticmethod
-    def from_all_list(pair, trade):
-        return Trade(trade_id=trade['trade_id'],
-                     timestamp=int(dateutil.parser.parse(trade['time']).timestamp()),
-                     pair=pair,
-                     is_sell=True if trade['side'] == 'sell' else False,
-                     price=Wad.from_number(trade['price']),
-                     amount=Wad.from_number(trade['size']))
+                     amount=Wad.from_number(trade['qty']))
 
 
 class BinanceUsApi(PyexAPI):
     """Binance US API interface.
+
+    Implemented based on https://github.com/binance-us/binance-official-api-docs/blob/master/rest-api.md
     """
 
     logger = logging.getLogger()
@@ -157,55 +150,94 @@ class BinanceUsApi(PyexAPI):
         self.timeout = timeout
 
     def get_balances(self):
-        raise NotImplementedError()
+        account_response = self._http_authenticated("GET", f"/api/v3/account", {})
+        return account_response['balances']
 
     def get_balance(self, coin: str):
         assert(isinstance(coin, str))
-        raise NotImplementedError()
-
+        for balance in self.get_balances():
+            if balance['asset'] == coin:
+                return balance
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
         orders = self._http_authenticated("GET", f"/api/v3/openOrders", {'symbol': pair})
 
-        return orders
+        return [Order.create(order) for order in orders]
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        raise NotImplementedError()
+        data = {
+            'symbol': pair,
+            'side': "SELL" if is_sell else "BUY",
+            'type': 'LIMIT', 
+            'quantity': float(amount),
+            'price': float(price),
+            'timeInForce': 'GTC'
+        }
 
-    def cancel_order(self, order_id: str) -> bool:
+        self.logger.info(f"Placing order (Good Till Cancel, {data['side']}, amount {data['quantity']} of {pair},"
+                         f" price {data['price']})...")
+                         
+        result = self._http_authenticated("POST", "/api/v3/order", data)
+        order_id =  result['orderId']
+
+        self.orders_for_pair[pair].append(order_id)
+        self.logger.info(f"Placed order (#{result}) as #{order_id}")
+
+        return order_id
+
+    def cancel_order(self, order_id: str, pair: Optional[str] = None) -> bool:
         assert(isinstance(order_id, str))
-        raise NotImplementedError()
+        assert(isinstance(pair, str) or (pair is None))
 
-    def cancel_all_orders(self) -> List:
-        self.logger.info(f"Cancelling all orders ...")
-        raise NotImplementedError()
+        if pair is None:
+            raise ValueError("Pair is required")
+        
+        self.logger.info(f"Cancelling order #{order_id} on pair {pair}...")
 
+        result = self._http_authenticated("DELETE", "/api/v3/order", {'orderId': order_id, 'pair': pair})
+
+        return 'status' in result and ['status'] == "CANCELLED"
+    
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        raise NotImplementedError()
+        trades_result = self._http_authenticated("GET", "/api/v3/myTrades", {'symbol': pair})
+
+        return [Trade.create(pair, trade) for trade in trades_result]
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
+        
+        trades_result = self._http_unauthenticated("GET", "/api/v3/trades", {'symbol': pair})
 
-        raise NotImplementedError()
+        return [Trade.create(pair, trade) for trade in trades_result]
 
-    def _http_authenticated(self, method: str, resource: str, body: dict):
+    def _http_unauthenticated(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
         assert(isinstance(resource, str))
-        assert(isinstance(body, dict) or (body is None))
+        assert(isinstance(params, dict) or (params is None))
+
+        return self._result(requests.request(method=method,
+                                             url=f"{self.api_server}{resource}",
+                                             params=params,
+                                             timeout=self.timeout))
+
+    def _http_authenticated(self, method: str, resource: str, params: dict):
+        assert(isinstance(method, str))
+        assert(isinstance(resource, str))
+        assert(isinstance(params, dict) or (params is None))
 
         timestamp = int(round(time.time() * 1000)) 
-        data = {**body, **{'timestamp': timestamp}}  
+        data = {**params, **{'timestamp': timestamp}}  
 
         message = urlencode(data)
         message = message.encode('ascii')
@@ -231,5 +263,5 @@ class BinanceUsApi(PyexAPI):
             try:
                 data = result.json()
             except json.JSONDecodeError:
-                raise ValueError(f"Coinbase API invalid JSON response: {http_response_summary(result)}")
+                raise ValueError(f"Binnance API invalid JSON response: {http_response_summary(result)}")
             return data

@@ -30,5 +30,23 @@ logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(logging.I
 # ctor params: api_server: str, api_key: str, secret_key: str
 binance_us = BinanceUsApi("https://api.binance.us", sys.argv[1], sys.argv[2], 9.5)
 
+print('Get all trades - ETHUSD')
+print(binance_us.get_all_trades('ETHUSD'))
+
+print('Get all my account trades - ETHUSD')
+print(binance_us.get_trades('ETHUSD'))
+
 print("get orders ETH-USD")
 print(binance_us.get_orders('ETHUSD'))
+
+print('get balances')
+print(binance_us.get_balances())
+
+print('get ETH balance')
+print(binance_us.get_balance('ETH'))
+
+print('Place order')
+order_id = binance_us.place_order('ETHUSD', False, price=Wad.from_number(420), amount=Wad.from_number(1))
+
+# print('Cancel order')
+# print(binance_us.cancel_order(order_id, pair="ETHUSD"))
