@@ -52,7 +52,7 @@ class TestUniswapV2(Contract):
     weth_abi = Contract._load_abi(__name__, '../pyexchange/abi/WETH.abi')
     weth_bin = Contract._load_bin(__name__, '../pyexchange/abi/WETH.bin')
 
-    def setup_method(self, web3: Web3):
+    def setup_method(self):
 
         # Use Ganache docker container
         self.web3 = Web3(HTTPProvider("http://0.0.0.0:8555"))

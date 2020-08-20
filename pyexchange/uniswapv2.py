@@ -46,7 +46,7 @@ class UniswapV2(Contract):
     factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
     factory_bin = Contract._load_bin(__name__, 'abi/UniswapV2Factory.bin')
 
-    def __init__(self, web3: Web3, token_a: Token, token_b: Token, router_address: Address = Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"), factory_address: Address = Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")):
+    def __init__(self, web3: Web3, token_a: Token, token_b: Token, router_address: Address, factory_address: Address):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
