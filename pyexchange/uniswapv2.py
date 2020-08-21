@@ -109,7 +109,7 @@ class UniswapV2(Contract):
         token_a_reserve = self.get_exchange_balance(self.token_a, self.pair_address)
         token_b_reserve = self.get_exchange_balance(self.token_b, self.pair_address)
 
-        return token_a_reserve / token_b_reserve
+        return token_b_reserve / token_a_reserve
 
     # Return the total number of liquidity tokens minted for a given pair
     def get_total_liquidity(self) -> Wad:
@@ -209,7 +209,7 @@ class UniswapV2(Contract):
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'addLiquidity', addLiquidityArgs)
 
-    def add_liquidity_eth(self, amounts: dict, token: Token) -> Transact:
+    def add_liquidity_eth(self, amounts: dict, token: Token, eth_position: int) -> Transact:
         """ Add liquidity to token-weth pair.
 
         It is assumed that eth will always be token_a
@@ -222,18 +222,30 @@ class UniswapV2(Contract):
         """
         assert (isinstance(amounts, dict))
         assert (isinstance(token, Token))
+        assert (isinstance(eth_position, int))
+
+        if eth_position == 0:
+            token_desired = amounts['amount_b_desired'].value
+            token_min = amounts['amount_b_min'].value
+            eth_desired = amounts['amount_a_desired'].value
+            eth_min = amounts['amount_a_min'].value
+        elif eth_position == 1:
+            token_desired = amounts['amount_a_desired'].value
+            token_min = amounts['amount_a_min'].value
+            eth_desired = amounts['amount_b_desired'].value
+            eth_min = amounts['amount_b_min'].value
 
         addLiquidityArgs = [
             token.address.address,
-            amounts['amount_b_desired'].value,
-            amounts['amount_b_min'].value,
-            amounts['amount_a_min'].value,
+            token_desired,
+            token_min,
+            eth_min,
             self.account_address.address,
             self._deadline()
         ]
 
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
-                        'addLiquidityETH', addLiquidityArgs, {'value': amounts['amount_a_desired'].value})
+                        'addLiquidityETH', addLiquidityArgs, {'value': eth_desired})
 
     def remove_liquidity(self, amounts: dict, token_a: Token, token_b: Token) -> Transact:
         """ Remove liquidity from arbitrary token pair.
@@ -265,7 +277,7 @@ class UniswapV2(Contract):
         return Transact(self, self.web3, self.router_abi, self.router_address, self._router_contract,
                         'removeLiquidity', removeLiquidityArgs)
 
-    def remove_liquidity_eth(self, amounts: dict, token: Token) -> Transact:
+    def remove_liquidity_eth(self, amounts: dict, token: Token, eth_position: int) -> Transact:
         """ Remove liquidity from token-weth pair.
 
         Args:
@@ -276,15 +288,23 @@ class UniswapV2(Contract):
         """
         assert (isinstance(amounts, dict))
         assert (isinstance(token, Token))
+        assert (isinstance(eth_position, int))
 
         # Will approve Uniswap Liquidity token if allowance not already set
         self.approve(self.pair_token)
 
+        if eth_position == 0:
+            token_min = amounts['amountBMin'].value
+            eth_min = amounts['amountAMin'].value
+        elif eth_position == 1:
+            token_min = amounts['amountAMin'].value
+            eth_min = amounts['amountBMin'].value
+
         removeLiquidityArgs = [
             token.address.address,
             amounts['liquidity'].value,
-            amounts['amountBMin'].value,
-            amounts['amountAMin'].value,
+            token_min,
+            eth_min,
             self.account_address.address,
             self._deadline()
         ]
