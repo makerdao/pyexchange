@@ -107,7 +107,7 @@ class TestUniswapV2(Contract):
             "amount_a_min": Wad.from_number(0.01)
         }
 
-        return self.dai_eth_uniswap.add_liquidity_eth(add_liquidity_eth_args, self.token_dai).transact(from_address=self.our_address)
+        return self.dai_eth_uniswap.add_liquidity_eth(add_liquidity_eth_args, self.token_dai, 0).transact(from_address=self.our_address)
 
     def test_approval(self):
         # given
@@ -214,7 +214,7 @@ class TestUniswapV2(Contract):
         }
 
         # when
-        remove_liquidity = self.dai_eth_uniswap.remove_liquidity_eth(remove_liquidity_eth_args, self.token_dai).transact(from_address=self.our_address)
+        remove_liquidity = self.dai_eth_uniswap.remove_liquidity_eth(remove_liquidity_eth_args, self.token_dai, 0).transact(from_address=self.our_address)
 
         # then
         assert remove_liquidity.successful == True

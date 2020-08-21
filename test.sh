@@ -12,7 +12,7 @@ sleep 2
 PYTHONPATH=$PYTHONPATH:./lib/pymaker py.test -x --cov=pyexchange --cov-report=term --cov-append tests/
 TEST_RESULT=$?
 
-# Cleanup local parity node
+# Cleanup local node
 docker-compose down
 
 exit $TEST_RESULT
