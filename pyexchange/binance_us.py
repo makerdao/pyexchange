@@ -81,8 +81,7 @@ class BinanceUsApi(PyexAPI):
         self.timeout = timeout
 
     def get_balances(self):
-        account_response = self._http_authenticated("GET", f"/api/v3/account", {})
-        balances = account_response['balances']
+        balances = self._http_authenticated("GET", f"/api/v3/account", {})['balances']
 
         return {
             balance['asset']: { "free": balance["free"], "locked": balance["locked"] }
@@ -101,7 +100,7 @@ class BinanceUsApi(PyexAPI):
 
         orders = self._http_authenticated("GET", f"/api/v3/openOrders", {'symbol': pair})
 
-        return [BinanceUsOrder.create(order) for order in orders]
+        return list(map(lambda order: BinanceUsOrder.create(order), orders))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert(isinstance(pair, str))
@@ -127,18 +126,15 @@ class BinanceUsApi(PyexAPI):
 
         return str(order_id)
 
-    def cancel_order(self, order_id: str, pair: Optional[str] = None) -> bool:
+    def cancel_order(self, order_id: str, pair: str) -> bool:
         assert(isinstance(order_id, str))
-        assert(isinstance(pair, str) or (pair is None))
+        assert(isinstance(pair, str))
 
-        if pair is None:
-            raise ValueError("Pair is required")
-        
         self.logger.info(f"Cancelling order #{order_id} on pair {pair}...")
 
         result = self._http_authenticated("DELETE", "/api/v3/order", {'orderId': order_id, 'pair': pair})
 
-        return 'status' in result and result['status'] == "CANCELED"
+        return ('status' in result) and (result['status'] == "CANCELED")
     
     def get_trades(self, pair: str, page_number: int = 1) -> List[BinanceUsTrade]:
         assert(isinstance(pair, str))
@@ -147,7 +143,7 @@ class BinanceUsApi(PyexAPI):
         
         trades_result = self._http_authenticated("GET", "/api/v3/myTrades", {'symbol': self._fix_pair(pair)})
 
-        return [BinanceUsTrade.from_my_trade(pair, trade) for trade in trades_result]
+        return list(map(lambda trade: BinanceUsTrade.from_my_trade(pair, trade), trades_result))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[BinanceUsTrade]:
         assert(isinstance(pair, str))
@@ -155,7 +151,7 @@ class BinanceUsApi(PyexAPI):
         
         trades_result = self._http_unauthenticated("GET", "/api/v3/trades", {'symbol': self._fix_pair(pair)})
 
-        return [BinanceUsTrade.from_trade(pair, trade) for trade in trades_result]
+        return list(map(lambda trade: BinanceUsTrade.from_trade(pair, trade), trades_result))
 
     def _http_unauthenticated(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
@@ -198,10 +194,9 @@ class BinanceUsApi(PyexAPI):
         if not result.ok:
             raise RuntimeError(f"Binnance API response: {http_response_summary(result)}")
 
-        if result.content and result.content != b'OK':
-            logging.debug(f"Received: {result.content}")
-            try:
-                data = result.json()
-            except json.JSONDecodeError:
-                raise ValueError(f"Binnance API invalid JSON response: {http_response_summary(result)}")
-            return data
+        logging.debug(f"Received: {result.text}")
+        try:
+            data = result.json()
+        except json.JSONDecodeError:
+            raise ValueError(f"Binnance API invalid JSON response: {http_response_summary(result)}")
+        return data
