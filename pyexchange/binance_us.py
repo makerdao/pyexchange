@@ -16,7 +16,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-from pprint import pformat
 from pyexchange.api import PyexAPI
 import hmac
 import hashlib
@@ -45,11 +44,21 @@ class BinanceUsOrder(Order):
 
 class BinanceUsTrade(Trade):
     @staticmethod
-    def create(pair, trade):
+    def from_my_trade(pair, trade):
         return BinanceUsTrade(trade_id=str(trade['id']),
                      timestamp=trade['time'],
                      pair=pair,
-                     is_sell=trade['isBuyerMaker'],
+                     is_sell=not trade['isBuyer'],
+                     price=Wad.from_number(trade['price']),
+                     amount=Wad.from_number(trade['qty']))
+    
+
+    @staticmethod
+    def from_trade(pair, trade):
+        return BinanceUsTrade(trade_id=str(trade['id']),
+                     timestamp=trade['time'],
+                     pair=pair,
+                     is_sell=not trade['isBuyerMaker'],
                      price=Wad.from_number(trade['price']),
                      amount=Wad.from_number(trade['qty']))
 
@@ -73,7 +82,12 @@ class BinanceUsApi(PyexAPI):
 
     def get_balances(self):
         account_response = self._http_authenticated("GET", f"/api/v3/account", {})
-        return account_response['balances']
+        balances = account_response['balances']
+
+        return {
+            balance['asset']: { "free": balance["free"], "locked": balance["locked"] }
+            for balance in balances
+        }
 
     def get_balance(self, coin: str):
         assert(isinstance(coin, str))
@@ -109,10 +123,9 @@ class BinanceUsApi(PyexAPI):
         result = self._http_authenticated("POST", "/api/v3/order", data)
         order_id =  result['orderId']
 
-        self.orders_for_pair[pair].append(order_id)
         self.logger.info(f"Placed order (#{result}) as #{order_id}")
 
-        return order_id
+        return str(order_id)
 
     def cancel_order(self, order_id: str, pair: Optional[str] = None) -> bool:
         assert(isinstance(order_id, str))
@@ -125,7 +138,7 @@ class BinanceUsApi(PyexAPI):
 
         result = self._http_authenticated("DELETE", "/api/v3/order", {'orderId': order_id, 'pair': pair})
 
-        return 'status' in result and ['status'] == "CANCELLED"
+        return 'status' in result and result['status'] == "CANCELED"
     
     def get_trades(self, pair: str, page_number: int = 1) -> List[BinanceUsTrade]:
         assert(isinstance(pair, str))
@@ -134,7 +147,7 @@ class BinanceUsApi(PyexAPI):
         
         trades_result = self._http_authenticated("GET", "/api/v3/myTrades", {'symbol': self._fix_pair(pair)})
 
-        return [BinanceUsTrade.create(pair, trade) for trade in trades_result]
+        return [BinanceUsTrade.from_my_trade(pair, trade) for trade in trades_result]
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[BinanceUsTrade]:
         assert(isinstance(pair, str))
@@ -142,7 +155,7 @@ class BinanceUsApi(PyexAPI):
         
         trades_result = self._http_unauthenticated("GET", "/api/v3/trades", {'symbol': self._fix_pair(pair)})
 
-        return [BinanceUsTrade.create(pair, trade) for trade in trades_result]
+        return [BinanceUsTrade.from_trade(pair, trade) for trade in trades_result]
 
     def _http_unauthenticated(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
