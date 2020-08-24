@@ -109,7 +109,10 @@ class UniswapV2(Contract):
         token_a_reserve = self.get_exchange_balance(self.token_a, self.pair_address)
         token_b_reserve = self.get_exchange_balance(self.token_b, self.pair_address)
 
-        return token_b_reserve / token_a_reserve
+        if token_a_reserve == Wad.from_number(0) or token_b_reserve == Wad.from_number(0):
+            return Wad.from_number(0)
+        else:
+            return token_b_reserve / token_a_reserve
 
     # Return the total number of liquidity tokens minted for a given pair
     def get_total_liquidity(self) -> Wad:
