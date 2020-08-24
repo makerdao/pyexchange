@@ -102,7 +102,7 @@ class UniswapV2(Contract):
         total_liquidity = self.get_total_liquidity()
         exchange_balance = self.get_exchange_balance(token, pair_address)
 
-        return token.unnormalize_amount(current_liquidity * exchange_balance / total_liquidity)
+        return current_liquidity * exchange_balance / total_liquidity
 
     # retrieve exchange rate for the instance's pair token
     def get_exchange_rate(self) -> Wad:
