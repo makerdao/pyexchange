@@ -55,6 +55,8 @@ class BinanceUsMockServer(MockWebAPIServer):
             return MockedResponse(text=self.responses["myTrades"])
         elif re.search(r"api\/v3\/trades", url):
             return MockedResponse(text=self.responses["trades"])
+        elif re.search(r"api\/v3\/exchangeInfo", url):
+            return MockedResponse(text=self.responses["exchangeInfo"])
         else:
             raise ValueError("Unable to match HTTP GET request to canned response", url)
 
@@ -186,4 +188,12 @@ class TestBinanceUs:
         response = self.binance_us.get_trades(pair)
         assert (len(response) > 0)
         TestBinanceUs.check_trades(response)
+    
+    def test_get_precisions(self, mocker):
+        pair = "ETH-BTC"
+        mocker.patch("requests.request", side_effect=self.binaceUsMockServer.handle_request)
+        quote_asset_precision, base_asset_precision = self.binance_us.get_precisions(pair)
+
+        assert quote_asset_precision == 8
+        assert base_asset_precision == 10
 
