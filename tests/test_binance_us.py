@@ -192,8 +192,8 @@ class TestBinanceUs:
     def test_get_precisions(self, mocker):
         pair = "ETH-BTC"
         mocker.patch("requests.request", side_effect=self.binaceUsMockServer.handle_request)
-        quote_asset_precision, base_asset_precision = self.binance_us.get_precisions(pair)
+        quote_asset_precision, quote_precision = self.binance_us.get_precision(pair)
 
-        assert quote_asset_precision == 8
-        assert base_asset_precision == 10
+        assert quote_asset_precision == 10
+        assert quote_precision == 9
 
