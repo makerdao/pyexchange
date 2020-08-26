@@ -45,8 +45,8 @@ print(binance_us.get_balances())
 print('get ETH balance')
 print(binance_us.get_balance('ETH'))
 
-print('Place order')
-order_id = binance_us.place_order('ETH-USD', False, price=Wad.from_number(420), amount=Wad.from_number(1))
+# print('Place order')
+# order_id = binance_us.place_order('ETH-USD', False, price=Wad.from_number(420), amount=Wad.from_number(1))
 
 # print('Cancel order')
 # print(binance_us.cancel_order(order_id, pair="ETHUSD"))

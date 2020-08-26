@@ -80,6 +80,17 @@ class BinanceUsApi(PyexAPI):
         self.secret_key = secret_key
         self.timeout = timeout
 
+    def get_precision(self, pair):
+        assert(isinstance(pair, str))
+        symbols = self._http_authenticated("GET", "/api/v3/exchangeInfo", {})['symbols']
+        pair = self._fix_pair(pair)
+
+        for symbol_data in symbols:
+            if pair == symbol_data['symbol']:
+                return symbol_data['quoteAssetPrecision'], symbol_data['quotePrecision']
+        else:
+            raise ValueError(f'Not supported pair {pair} on Binance US.')
+
     def get_balances(self):
         balances = self._http_authenticated("GET", f"/api/v3/account", {})['balances']
 
@@ -107,6 +118,8 @@ class BinanceUsApi(PyexAPI):
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
+        pair = self._fix_pair(pair)
+        
         data = {
             'symbol': pair,
             'side': "SELL" if is_sell else "BUY",
