@@ -72,8 +72,8 @@ class TestUniswapV2(Contract):
         self.token_usdc = Token("USDC", self.ds_usdc.address, 6)
         self.token_weth = Token("WETH", self.weth_address, 18)
 
-        self.dai_usdc_uniswap = UniswapV2(self.web3, self.token_dai, self.token_usdc, self.router_address, self.factory_address)
-        self.dai_eth_uniswap = UniswapV2(self.web3, self.token_dai, self.token_weth, self.router_address, self.factory_address)
+        self.dai_usdc_uniswap = UniswapV2(self.web3, self.token_dai, self.token_usdc, self.our_address, self.router_address, self.factory_address)
+        self.dai_eth_uniswap = UniswapV2(self.web3, self.token_dai, self.token_weth, self.our_address, self.router_address, self.factory_address)
         
         ## Useful for debugging failing transactions
         logger = logging.getLogger('eth')
