@@ -46,7 +46,7 @@ class UniswapV2(Contract):
     factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
     factory_bin = Contract._load_bin(__name__, 'abi/UniswapV2Factory.bin')
 
-    def __init__(self, web3: Web3, token_a: Token, token_b: Token, router_address: Address, factory_address: Address):
+    def __init__(self, web3: Web3, token_a: Token, token_b: Token, keeper_address: Address, router_address: Address, factory_address: Address):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
@@ -56,6 +56,7 @@ class UniswapV2(Contract):
         self.web3 = web3
         self.token_a = token_a
         self.token_b = token_b
+        self.keeper_address = keeper_address
         self.router_address = router_address
         self.factory_address = factory_address
         self._router_contract = self._get_contract(web3, self.Irouter_abi, self.router_address)
@@ -66,7 +67,7 @@ class UniswapV2(Contract):
         if not self.is_new_pool:
             self.set_and_approve_pair_token(self.pair_address)
 
-        self.account_address = Address(self.web3.eth.defaultAccount)
+        self.account_address = Address(self.keeper_address)
 
     def set_and_approve_pair_token(self, pair_address: Address):
         self.pair_address = pair_address
