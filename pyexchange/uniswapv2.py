@@ -50,6 +50,7 @@ class UniswapV2(Contract):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
+        assert (isinstance(keeper_address, Address))
         assert (isinstance(router_address, Address))
         assert (isinstance(factory_address, Address))
 
