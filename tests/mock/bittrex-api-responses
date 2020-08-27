@@ -1,0 +1,7 @@
+allTrades|[ { "id": "606bde3c-03c8-4ae7-ac1c-936e2778c148", "executedAt": "2020-08-27T09:46:31.14Z", "quantity": "12.82419751", "rate": "0.00262595", "takerSide": "SELL" }, { "id": "84226176-a8b3-4a95-b646-a8d89142e9e9", "executedAt": "2020-08-27T09:38:15.1Z", "quantity": "16.36729007", "rate": "0.00262595", "takerSide": "SELL" }, { "id": "219792d5-66e7-4e29-861c-e628eed29177", "executedAt": "2020-08-27T02:59:15.93Z", "quantity": "5.61964820", "rate": "0.00281486", "takerSide": "BUY" }]
+closedOrders|
+openOrders|
+balances|
+markets|[{ "symbol": "DAI-BTC", "baseCurrencySymbol": "DAI", "quoteCurrencySymbol": "BTC", "minTradeSize": "3.00000000", "precision": 8, "status": "ONLINE", "createdAt": "2019-06-18T17:30:28.737Z", "prohibitedIn": [ ] }, { "symbol": "DAI-ETH", "baseCurrencySymbol": "DAI", "quoteCurrencySymbol": "ETH", "minTradeSize": "3.00000000", "precision": 8, "status": "ONLINE", "createdAt": "2019-06-18T17:30:45.057Z", "prohibitedIn": [ ] }, { "symbol": "DAI-USD", "baseCurrencySymbol": "DAI", "quoteCurrencySymbol": "USD", "minTradeSize": "3.00000000", "precision": 8, "status": "ONLINE", "createdAt": "2020-03-06T18:00:02.013Z", "prohibitedIn": [ ] }, { "symbol": "DAI-USDT", "baseCurrencySymbol": "DAI", "quoteCurrencySymbol": "USDT", "minTradeSize": "3.00000000", "precision": 8, "status": "ONLINE", "createdAt": "2019-06-18T17:30:58.083Z", "notice": "", "prohibitedIn": [ ] }]
+placeOrder|
+deleteOrder|
