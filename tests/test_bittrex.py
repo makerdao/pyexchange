@@ -91,7 +91,8 @@ class TestBittrex:
             pair="DAI-ETH",
             is_sell=False,
             price=price,
-            amount=amount
+            amount=amount,
+            fill_amount=Wad.from_number(1)
         )
         assert (order.price == order.sell_to_buy_price)
         assert (order.price == order.buy_to_sell_price)

@@ -35,6 +35,10 @@ from pymaker.util import http_response_summary
 
 
 class Order(BaseOrder):
+    def __init__(self, fill_amount, *args, **kwargs):
+        super(Order, self).__init__(*args, **kwargs)
+        self.fill_amount = fill_amount
+
 
     @staticmethod
     def to_order(item):
@@ -42,8 +46,7 @@ class Order(BaseOrder):
                      pair=item['marketSymbol'],
                      is_sell=True if item['direction'] == 'SELL' else False,
                      price=Wad.from_number(item['limit']),
-                     amount=Wad.from_number(item['quantity']),
-                     remaining_amount=Wad.from_number(item['fillQuantity']))
+                     amount=Wad.from_number(item['quantity']))
 
 
 class BittrexApi(PyexAPI):
@@ -162,7 +165,7 @@ class BittrexApi(PyexAPI):
 
         timestamp = str(int(time.time()))
         content = json.dumps(body) if body else ""
-        content_hash = hashlib.sha512(content).hexdigest()
+        content_hash = hashlib.sha512(content.encode()).hexdigest()
         url = f"{self.api_server}{resource}"
 
         message = f"{timestamp}{url}{method}{content_hash}"
