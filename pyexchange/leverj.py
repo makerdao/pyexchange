@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2019 grandizzy
+# Copyright (C) 2020 mitakash
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -343,12 +343,12 @@ class LeverjAPI(PyexAPI):
 
     def _result(self, result) -> Optional[dict]:
         if not result.ok:
-            raise Exception(f"Leverj API invalid HTTP response: {http_response_summary(result)}")
+            raise RuntimeError(f"Leverj API invalid HTTP response: {http_response_summary(result)}")
 
         try:
             data = result.json()
         except Exception:
-            raise Exception(f"Leverj API invalid JSON response: {http_response_summary(result)}")
+            raise ValueError(f"Leverj API invalid JSON response: {http_response_summary(result)}")
 
         return data
 
