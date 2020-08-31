@@ -1,12 +1,18 @@
 #!/bin/sh
 
-# start local web3 rpc server for use in dydx unit tests
-py-testrpc -p 8889 &
+# Remove existing container if tests not gracefully stopped
+docker-compose down
+
+# Start ganache
+docker-compose up -d ganache
+
+# Wait to initialize
+sleep 2
 
 PYTHONPATH=$PYTHONPATH:./lib/pymaker py.test -x --cov=pyexchange --cov-report=term --cov-append tests/
 TEST_RESULT=$?
 
-# kill the local server upon completion of tests
-pid=$(lsof -i:8889 -t); kill -TERM $pid || kill -KILL $pid
+# Cleanup local node
+docker-compose down
 
 exit $TEST_RESULT

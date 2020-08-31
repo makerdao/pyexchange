@@ -20,7 +20,7 @@ import re
 from pprint import pformat
 from typing import Optional
 
-from pymaker import Wad
+from pymaker import Wad, Address
 
 
 class Candle:
@@ -115,7 +115,7 @@ class Trade:
         assert(isinstance(amount, Wad))
 
         # Ensure that pair schema matches expectations from sync-trades
-        assert(re.match('[a-zA-Z0-9]+\-[a-zA-Z0-9]+', pair))
+        assert(re.match(r'[a-zA-Z0-9]+\-[a-zA-Z0-9]+', pair))
 
         self.trade_id = trade_id
         self.timestamp = timestamp
@@ -152,3 +152,19 @@ class Trade:
                      is_sell=True if item['side'] == 'sell' else False,
                      price=Wad.from_number(item['price']),
                      amount=Wad.from_number(item['amount']))
+
+
+class Pair:
+    def __init__(self, sell_token_address: Address, sell_token_decimals: int, buy_token_address: Address, buy_token_decimals: int):
+        assert(isinstance(sell_token_address, Address))
+        assert(isinstance(sell_token_decimals, int))
+        assert(isinstance(buy_token_address, Address))
+        assert(isinstance(buy_token_decimals, int))
+
+        self.sell_token_address = sell_token_address
+        self.sell_token_decimals = sell_token_decimals
+        self.buy_token_address = buy_token_address
+        self.buy_token_decimals = buy_token_decimals
+
+        self.sell_asset = ERC20Asset(sell_token_address)
+        self.buy_asset = ERC20Asset(buy_token_address)

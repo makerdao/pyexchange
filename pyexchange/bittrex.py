@@ -237,6 +237,8 @@ class BittrexApi(PyexAPI):
         }
 
         result = self._http_request("GET", "/api/v1.1/public/getmarkethistory", params)['result']
+        if result is None:
+            return []
 
         return list(map(lambda item: Trade(trade_id=item['Uuid'],
                                            timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
