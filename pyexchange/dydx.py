@@ -79,7 +79,6 @@ class DydxApi(PyexAPI):
         assert (isinstance(node, str))
         assert (isinstance(private_key, str))
 
-        # TODO: Ensure account number can be properly written to the account
         self.client = Client(private_key=private_key, node=node, account_number=consts.ACCOUNT_NUMBERS_SPOT)
 
         public_key = keys.PrivateKey(decode_hex(private_key)).public_key
