@@ -143,7 +143,7 @@ class DydxApi(PyexAPI):
 
         return balance_list
 
-    def get_balances(self, market: str) -> List:
+    def get_balances(self) -> List:
         return self._balances_to_list(self.client.get_balances(self.address, consts.ACCOUNT_NUMBERS_SPOT)['balances'])
 
     def get_orders(self, pair: str) -> List[Order]:
