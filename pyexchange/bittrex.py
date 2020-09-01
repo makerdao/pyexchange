@@ -163,7 +163,7 @@ class BittrexApi(PyexAPI):
         assert(isinstance(resource, str))
         assert(isinstance(body, dict) or (body is None))
 
-        timestamp = str(int(time.time()))
+        timestamp = str(int(time.time() * 1000))
         content = json.dumps(body) if body else ""
         content_hash = hashlib.sha512(content.encode()).hexdigest()
         url = f"{self.api_server}{resource}"
