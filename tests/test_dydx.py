@@ -56,7 +56,7 @@ class DydxMockServer:
         return MockedResponse(text=DydxMockServer.responses["markets"]).json()
 
     @staticmethod
-    def handle_get_balances(**kwargs):
+    def handle_get_balances(*args, **kwargs):
         return MockedResponse(text=DydxMockServer.responses["balances"]).json()
 
     @staticmethod
@@ -104,7 +104,7 @@ class TestDydx:
         assert(order.price == order.buy_to_sell_price)
 
     def test_get_balances(self, mocker):
-        mocker.patch("dydx.client.Client.get_my_balances", side_effect=DydxMockServer.handle_get_balances)
+        mocker.patch("dydx.client.Client.get_balances", side_effect=DydxMockServer.handle_get_balances)
         response = self.dydx.get_balances()
         assert(len(response) > 0)
         for balance in response:

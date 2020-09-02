@@ -24,7 +24,7 @@ dydx = DydxApi(sys.argv[1], sys.argv[2])
 # print(dydx.get_markets())
 # print(dydx.get_pair("WETH-DAI"))
 
-# print(dydx.get_balances())
+print(dydx.get_balances())
 
 # print(dydx.deposit_funds("USDC", 1.0))
 

@@ -21,7 +21,8 @@ import dateutil.parser
 from decimal import Decimal
 from pprint import pformat
 from typing import List, Optional
-from eth_utils import from_wei
+from eth_keys import keys
+from eth_utils import decode_hex, from_wei
 from web3.types import TxReceipt
 from web3._utils.threads import Timeout
 
@@ -78,7 +79,10 @@ class DydxApi(PyexAPI):
         assert (isinstance(node, str))
         assert (isinstance(private_key, str))
 
-        self.client = Client(private_key=private_key, node=node)
+        self.client = Client(private_key=private_key, node=node, account_number=consts.ACCOUNT_NUMBERS_SPOT)
+
+        public_key = keys.PrivateKey(decode_hex(private_key)).public_key
+        self.address = public_key.to_checksum_address()
 
         self.market_info = self.get_markets()
 
@@ -138,13 +142,17 @@ class DydxApi(PyexAPI):
 
         return balance_list
 
-    def get_balances(self):
-        return self._balances_to_list(self.client.get_my_balances()['balances'])
+    def get_balances(self) -> List:
+        return self._balances_to_list(self.client.get_balances(self.address, consts.ACCOUNT_NUMBERS_SPOT)['balances'])
 
     def get_orders(self, pair: str) -> List[Order]:
         assert (isinstance(pair, str))
 
-        orders = self.client.get_my_orders(market=[pair], limit=None, startingBefore=None)
+        orders = self.client.get_my_orders(
+            market=[pair], 
+            limit=None,
+            startingBefore=None
+        )
         open_orders = filter(lambda order: order['status'] == 'OPEN', orders['orders'])
 
         market_info = self.market_info[pair]
