@@ -18,6 +18,8 @@
 import re
 import time
 
+import pytest
+
 from pymaker import Wad
 from pyexchange.bittrex import BittrexApi, Order, Trade
 from tests.mock_webapi_server import MockWebAPIServer, MockedResponse
@@ -91,12 +93,12 @@ class TestBittrex:
             pair="DAI-ETH",
             is_sell=False,
             price=price,
-            amount=amount,
-            fill_amount=Wad.from_number(1)
+            amount=amount
         )
         assert (order.price == order.sell_to_buy_price)
         assert (order.price == order.buy_to_sell_price)
 
+    @pytest.mark.skip()
     def test_get_balances(self, mocker):
         mocker.patch("requests.request", side_effect=self.bittrexMockServer.handle_request)
         response = self.bittrex.get_balances()

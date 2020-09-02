@@ -35,14 +35,10 @@ from pymaker.util import http_response_summary
 
 
 class Order(BaseOrder):
-    def __init__(self, fill_amount, *args, **kwargs):
-        super(Order, self).__init__(*args, **kwargs)
-        self.fill_amount = fill_amount
-
-
     @staticmethod
     def to_order(item):
         return Order(order_id=item['id'],
+                     timestamp=int(dateutil.parser.parse(item['createdAt'] + 'Z').timestamp()),
                      pair=item['marketSymbol'],
                      is_sell=True if item['direction'] == 'SELL' else False,
                      price=Wad.from_number(item['limit']),
@@ -82,9 +78,11 @@ class BittrexApi(PyexAPI):
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        orders = self._http_authenticated_request("GET", "/v3/orders/open?marketSymbol={pair}")
+        self.logger.debug(f"Current pair: {pair}")
+        orders = self._http_authenticated_request("GET", "/v3/orders/open")
 
-        return list(map(lambda item: Order.to_order(item), orders))
+        return list(map(lambda item: Order.to_order(item), 
+                        filter(lambda order: order['marketSymbol'] == pair, orders)))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert(isinstance(pair, str))
@@ -122,14 +120,15 @@ class BittrexApi(PyexAPI):
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        result = self._http_authenticated_request("GET", f"/v3/orders/closed?marketSymbol={pair}")
+        trades = self._http_authenticated_request("GET", f"/v3/orders/closed")
 
         return list(map(lambda item: Trade(trade_id=item['id'],
                                            timestamp=int(dateutil.parser.parse(item['createdAt'] + 'Z').timestamp()),
                                            pair=item['marketSymbol'],
                                            is_sell=True if item['direction'] == 'SELL' else False,
                                            price=Wad.from_number(item['limit']),
-                                           amount=Wad.from_number(item['fillQuantity'], result))))
+                                           amount=Wad.from_number(item['fillQuantity'])), 
+                        filter(lambda trade: trade['marketSymbol'] == pair, trades)))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
@@ -143,7 +142,8 @@ class BittrexApi(PyexAPI):
                                            pair=pair,
                                            is_sell=True if item['takerSide'] == "SELL" else False,
                                            price=Wad.from_number(item['rate']),
-                                           amount=Wad.from_number(item['quantity'])), result))
+                                           amount=Wad.from_number(item['quantity'])), 
+                        result))
 
     def _http_request(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
