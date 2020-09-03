@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
+import json
 from pprint import pformat
 from typing import Optional, List
 
@@ -67,6 +68,10 @@ class BittrexApi(PyexAPI):
 
     def get_markets(self):
         return self._http_request("GET", "/v3/markets", {})
+    
+    def get_precision(self, pair: str):
+        assert(isinstance(pair, str))
+        return self._http_request("GET", f"/v3/markets/{pair}", {})["precision"]
 
     def get_pair(self, pair: str):
         assert(isinstance(pair, str))
@@ -78,11 +83,9 @@ class BittrexApi(PyexAPI):
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        self.logger.debug(f"Current pair: {pair}")
-        orders = self._http_authenticated_request("GET", "/v3/orders/open")
+        orders = self._http_authenticated_request("GET", f"/v3/orders/open?marketSymbol={pair}")
 
-        return list(map(lambda item: Order.to_order(item), 
-                        filter(lambda order: order['marketSymbol'] == pair, orders)))
+        return list(map(lambda item: Order.to_order(item), orders))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
         assert(isinstance(pair, str))
@@ -94,13 +97,15 @@ class BittrexApi(PyexAPI):
             'marketSymbol': pair,
             'direction': "SELL" if is_sell else "BUY",
             'quantity': float(price),
-            'limit': float(price)
+            'limit': float(price),
+            'timeInForce': 'GOOD_TIL_CANCELLED',
+            'type': 'LIMIT'
         }
 
         self.logger.info(f"Placing order ({body['direction']}, amount {body['quantity']} of {pair},"
                          f" price {body['limit']})...")
 
-        order_id = self._http_authenticated_request("POST", f"/v3/market/orders", body)['id']
+        order_id = self._http_authenticated_request("POST", f"/v3/orders", body)['id']
 
         self.logger.info(f"Placed order type {body['direction']}, id #{order_id}")
 
@@ -120,7 +125,7 @@ class BittrexApi(PyexAPI):
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        trades = self._http_authenticated_request("GET", f"/v3/orders/closed")
+        trades = self._http_authenticated_request("GET", f"/v3/orders/closed?marketSymbol={pair}")
 
         return list(map(lambda item: Trade(trade_id=item['id'],
                                            timestamp=int(dateutil.parser.parse(item['createdAt'] + 'Z').timestamp()),
@@ -128,7 +133,7 @@ class BittrexApi(PyexAPI):
                                            is_sell=True if item['direction'] == 'SELL' else False,
                                            price=Wad.from_number(item['limit']),
                                            amount=Wad.from_number(item['fillQuantity'])), 
-                        filter(lambda trade: trade['marketSymbol'] == pair, trades)))
+                        trades))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
@@ -164,8 +169,11 @@ class BittrexApi(PyexAPI):
         assert(isinstance(body, dict) or (body is None))
 
         timestamp = str(int(time.time() * 1000))
+
         content = json.dumps(body) if body else ""
+        
         content_hash = hashlib.sha512(content.encode()).hexdigest()
+
         url = f"{self.api_server}{resource}"
 
         message = f"{timestamp}{url}{method}{content_hash}"
@@ -182,7 +190,7 @@ class BittrexApi(PyexAPI):
 
         return self._result(requests.request(method=method,
                                              url=url,
-                                             data=body,
+                                             data=content,
                                              headers =headers,
                                              timeout=self.timeout))
 

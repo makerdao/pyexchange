@@ -37,9 +37,9 @@ class BittrexMockServer(MockWebAPIServer):
         if method == "GET":
             return self.handle_get(url)
         elif method == "POST":
-            return self.handle_post(url, kwargs["params"])
+            return self.handle_post(url, kwargs["data"])
         elif method == "DELETE":
-            return self.handle_delete(url, kwargs["params"])
+            return self.handle_delete(url, kwargs["data"])
         else:
             raise ValueError("Unable to match HTTP method")
 
@@ -53,6 +53,8 @@ class BittrexMockServer(MockWebAPIServer):
             return MockedResponse(text=self.responses["openOrders"])
         elif re.search(r"\/v3\/balances", url):
             return MockedResponse(text=self.responses["balances"])
+        elif re.search(r"\/v3\/markets\/(\w){3,}-(\w){3,}", url):
+            return MockedResponse(text=self.responses["precision"])
         elif re.search(r"\/v3\/markets", url):
             return MockedResponse(text=self.responses["markets"])
         else:
@@ -98,13 +100,19 @@ class TestBittrex:
         assert (order.price == order.sell_to_buy_price)
         assert (order.price == order.buy_to_sell_price)
 
-    @pytest.mark.skip()
     def test_get_balances(self, mocker):
         mocker.patch("requests.request", side_effect=self.bittrexMockServer.handle_request)
         response = self.bittrex.get_balances()
+        
+        eth_balance = list(filter(lambda b: b['currencySymbol'] == "ETH", response))[0]
+        dai_balance = list(filter(lambda b: b['currencySymbol'] == "DAI", response))[0]
+
         assert (len(response) > 0)
-        assert (float(response["BTC"]["free"]) > 0)
-        assert(float(response["BTC"]["locked"]) == 0)
+        assert (float(dai_balance['total']) > 100)
+        assert(float(dai_balance["available"]) > 80)
+
+        assert (float(eth_balance['total']) > 17)
+        assert(float(eth_balance["available"]) > 10)
 
     @staticmethod
     def check_orders(orders):
@@ -149,7 +157,7 @@ class TestBittrex:
         order_id = self.bittrex.place_order(pair, True, Wad.from_number(241700), Wad.from_number(10))
         assert (isinstance(order_id, str))
         assert (order_id is not None)
-        cancel_result = self.bittrex.cancel_order(order_id, pair)
+        cancel_result = self.bittrex.cancel_order(order_id)
         assert (cancel_result == True)
 
     @staticmethod
@@ -188,3 +196,9 @@ class TestBittrex:
         assert (len(response) > 0)
         TestBittrex.check_trades(response)
     
+    def test_get_precisions(self, mocker):
+        pair = "DAI-USD"
+        mocker.patch("requests.request", side_effect=self.bittrexMockServer.handle_request)
+        response = self.bittrex.get_precision(pair)
+        assert (isinstance(response, int))
+        assert (response == 8)
