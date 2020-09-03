@@ -96,8 +96,8 @@ class BittrexApi(PyexAPI):
         body = {
             'marketSymbol': pair,
             'direction': "SELL" if is_sell else "BUY",
-            'quantity': float(price),
-            'limit': float(price),
+            'quantity': str(amount),
+            'limit': str(price),
             'timeInForce': 'GOOD_TIL_CANCELLED',
             'type': 'LIMIT'
         }
