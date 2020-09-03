@@ -235,6 +235,10 @@ class LeverjFuturesAPI(PyexAPI):
         assert(isinstance(pair, str))
         return self.get_config()['instruments'][pair]
 
+    def get_tickSize(self, pair: str):
+        assert(isinstance(pair, str))
+        return self.get_product(pair)["tickSize"]
+
     def get_info(self):
         return self._http_authenticated("GET", "/futures/api/v1", "/all/info", None)
 
