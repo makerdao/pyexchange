@@ -21,7 +21,7 @@ import requests
 
 from typing import Optional
 from json import JSONDecodeError
-from lib.pymaker.pymaker.util import http_response_summary
+from lib.pyflex.pyflex.util import http_response_summary
 
 
 class GraphClient:

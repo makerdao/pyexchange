@@ -20,7 +20,7 @@ import re
 from pprint import pformat
 from typing import Optional
 
-from pymaker import Wad, Address
+from pyflex import Wad, Address
 
 
 class Candle:

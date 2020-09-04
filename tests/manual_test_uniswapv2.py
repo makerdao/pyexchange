@@ -19,9 +19,9 @@ import sys
 import time
 
 from web3 import Web3, HTTPProvider
-from pymaker import Address, Wad, Transact
-from pymaker.model import Token
-from pymaker.keys import register_private_key, register_key
+from pyflex import Address, Wad, Transact
+from pyflex.model import Token
+from pyflex.keys import register_private_key, register_key
 from pyexchange.uniswapv2 import UniswapV2
 
 USDC_KOVAN_ADDRESS = Address("0x198419c5c340e8de47ce4c0e4711a03664d42cb2")

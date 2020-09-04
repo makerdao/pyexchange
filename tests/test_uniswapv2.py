@@ -29,13 +29,13 @@ import eth_tester.backends.pyevm.main as py_evm_main
 
 from pyexchange.uniswapv2 import UniswapV2
 from pyexchange.model import Pair
-from pymaker import Address, Contract, Receipt, Transact
-from pymaker.approval import directly
-from pymaker.deployment import deploy_contract
-from pymaker.numeric import Wad
-from pymaker.token import DSToken, ERC20Token
-from pymaker.model import Token
-from pymaker.keys import register_keys, register_private_key
+from pyflex import Address, Contract, Receipt, Transact
+from pyflex.approval import directly
+from pyflex.deployment import deploy_contract
+from pyflex.numeric import Wad
+from pyflex.token import DSToken, ERC20Token
+from pyflex.model import Token
+from pyflex.keys import register_keys, register_private_key
 
 class TestUniswapV2(Contract):
     """
@@ -66,14 +66,14 @@ class TestUniswapV2(Contract):
         self.router_address = self._deploy(self.web3, self.router_abi, self.router_bin, [self.factory_address.address, self.weth_address.address])
         self._weth_contract = self._get_contract(self.web3, self.weth_abi, self.weth_address)
 
-        self.ds_dai = DSToken.deploy(self.web3, 'DAI')
+        self.ds_systemcoin = DSToken.deploy(self.web3, 'SystemCoin')
         self.ds_usdc = DSToken.deploy(self.web3, 'USDC')
-        self.token_dai = Token("DAI", self.ds_dai.address, 18)
+        self.token_systemcoin = Token("SystemCoin", self.ds_systemcoin.address, 18)
         self.token_usdc = Token("USDC", self.ds_usdc.address, 6)
         self.token_weth = Token("WETH", self.weth_address, 18)
 
-        self.dai_usdc_uniswap = UniswapV2(self.web3, self.token_dai, self.token_usdc, self.our_address, self.router_address, self.factory_address)
-        self.dai_eth_uniswap = UniswapV2(self.web3, self.token_dai, self.token_weth, self.our_address, self.router_address, self.factory_address)
+        self.systemcoin_usdc_uniswap = UniswapV2(self.web3, self.token_systemcoin, self.token_usdc, self.our_address, self.router_address, self.factory_address)
+        self.systemcoin_eth_uniswap = UniswapV2(self.web3, self.token_systemcoin, self.token_weth, self.our_address, self.router_address, self.factory_address)
         
         ## Useful for debugging failing transactions
         logger = logging.getLogger('eth')
@@ -81,10 +81,10 @@ class TestUniswapV2(Contract):
         # Transact.gas_estimate_for_bad_txs = 210000
 
     def add_liquidity_tokens(self) -> Receipt:
-        self.ds_dai.mint(Wad(17 * 10**18)).transact(from_address=self.our_address)
+        self.ds_systemcoin.mint(Wad(17 * 10**18)).transact(from_address=self.our_address)
         self.ds_usdc.mint(self.token_usdc.unnormalize_amount(Wad.from_number(9))).transact(from_address=self.our_address)
-        self.dai_usdc_uniswap.approve(self.token_dai)
-        self.dai_usdc_uniswap.approve(self.token_usdc)
+        self.systemcoin_usdc_uniswap.approve(self.token_systemcoin)
+        self.systemcoin_usdc_uniswap.approve(self.token_usdc)
 
         add_liquidity_tokens_args = {
             "amount_a_desired": Wad.from_number(1.9),
@@ -93,12 +93,12 @@ class TestUniswapV2(Contract):
             "amount_b_min": self.token_usdc.unnormalize_amount(Wad.from_number(1.9))
         }
 
-        return self.dai_usdc_uniswap.add_liquidity(add_liquidity_tokens_args, self.token_dai, self.token_usdc).transact(from_address=self.our_address)
+        return self.systemcoin_usdc_uniswap.add_liquidity(add_liquidity_tokens_args, self.token_systemcoin, self.token_usdc).transact(from_address=self.our_address)
 
     def add_liquidity_eth(self) -> Receipt:
-        self.ds_dai.mint(Wad(300 * 10**18)).transact(from_address=self.our_address)
-        self.dai_eth_uniswap.approve(self.token_dai)
-        self.dai_eth_uniswap.approve(self.token_weth)
+        self.ds_systemcoin.mint(Wad(300 * 10**18)).transact(from_address=self.our_address)
+        self.systemcoin_eth_uniswap.approve(self.token_systemcoin)
+        self.systemcoin_eth_uniswap.approve(self.token_weth)
 
         add_liquidity_eth_args = {
             "amount_b_desired": Wad.from_number(28),
@@ -107,29 +107,29 @@ class TestUniswapV2(Contract):
             "amount_a_min": Wad.from_number(0.01)
         }
 
-        return self.dai_eth_uniswap.add_liquidity_eth(add_liquidity_eth_args, self.token_dai, 0).transact(from_address=self.our_address)
+        return self.systemcoin_eth_uniswap.add_liquidity_eth(add_liquidity_eth_args, self.token_systemcoin, 0).transact(from_address=self.our_address)
 
     def test_approval(self):
         # given
-        assert self.ds_dai.allowance_of(self.our_address, self.router_address) == Wad(0)
+        assert self.ds_systemcoin.allowance_of(self.our_address, self.router_address) == Wad(0)
 
         # when
-        self.dai_usdc_uniswap.approve(self.token_dai)
+        self.systemcoin_usdc_uniswap.approve(self.token_systemcoin)
 
         # then
-        assert self.ds_dai.allowance_of(self.our_address, self.router_address) > Wad(0)
+        assert self.ds_systemcoin.allowance_of(self.our_address, self.router_address) > Wad(0)
 
     def test_getting_token_balances(self):
         # given
-        self.ds_dai.mint(Wad(17 * 10**18)).transact()
+        self.ds_systemcoin.mint(Wad(17 * 10**18)).transact()
         self.ds_usdc.mint(self.token_usdc.unnormalize_amount(Wad.from_number(9))).transact()
 
         # when
-        balance_dai = self.dai_usdc_uniswap.get_account_token_balance(self.token_dai)
-        balance_usdc = self.dai_usdc_uniswap.get_account_token_balance(self.token_usdc)
+        balance_systemcoin = self.systemcoin_usdc_uniswap.get_account_token_balance(self.token_systemcoin)
+        balance_usdc = self.systemcoin_usdc_uniswap.get_account_token_balance(self.token_usdc)
 
         # then
-        assert balance_dai == Wad.from_number(17)
+        assert balance_systemcoin == Wad.from_number(17)
         assert balance_usdc == Wad.from_number(9)
 
     def test_add_liquidity_tokens(self):
@@ -140,10 +140,10 @@ class TestUniswapV2(Contract):
         assert add_liquidity.successful == True
 
         # when
-        self.dai_usdc_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
+        self.systemcoin_usdc_uniswap.set_and_approve_pair_token(self.systemcoin_usdc_uniswap.get_pair_address(self.token_systemcoin.address, self.token_usdc.address))
 
         # then
-        assert self.dai_usdc_uniswap.get_current_liquidity() > Wad.from_number(0)
+        assert self.systemcoin_usdc_uniswap.get_current_liquidity() > Wad.from_number(0)
 
     def test_add_liquidity_eth(self):
         # when
@@ -153,20 +153,20 @@ class TestUniswapV2(Contract):
         assert add_liquidity_eth.successful == True
 
         # when
-        self.dai_eth_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_weth.address))
+        self.systemcoin_eth_uniswap.set_and_approve_pair_token(self.systemcoin_usdc_uniswap.get_pair_address(self.token_systemcoin.address, self.token_weth.address))
 
         # then
-        assert self.dai_eth_uniswap.get_current_liquidity() > Wad.from_number(0)
+        assert self.systemcoin_eth_uniswap.get_current_liquidity() > Wad.from_number(0)
 
     def test_remove_liquidity_tokens(self):
         # given
         add_liquidity = self.add_liquidity_tokens()
-        self.dai_usdc_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
+        self.systemcoin_usdc_uniswap.set_and_approve_pair_token(self.systemcoin_usdc_uniswap.get_pair_address(self.token_systemcoin.address, self.token_usdc.address))
 
-        current_liquidity = self.dai_usdc_uniswap.get_current_liquidity()
-        total_liquidity = self.dai_usdc_uniswap.get_total_liquidity()
-        dai_exchange_balance = self.dai_usdc_uniswap.get_exchange_balance(self.token_dai, self.dai_usdc_uniswap.pair_address)
-        usdc_exchange_balance = self.token_usdc.unnormalize_amount(self.dai_usdc_uniswap.get_exchange_balance(self.token_usdc, self.dai_usdc_uniswap.pair_address))
+        current_liquidity = self.systemcoin_usdc_uniswap.get_current_liquidity()
+        total_liquidity = self.systemcoin_usdc_uniswap.get_total_liquidity()
+        systemcoin_exchange_balance = self.systemcoin_usdc_uniswap.get_exchange_balance(self.token_systemcoin, self.systemcoin_usdc_uniswap.pair_address)
+        usdc_exchange_balance = self.token_usdc.unnormalize_amount(self.systemcoin_usdc_uniswap.get_exchange_balance(self.token_usdc, self.systemcoin_usdc_uniswap.pair_address))
 
         # then
         assert current_liquidity > Wad.from_number(0)
@@ -174,7 +174,7 @@ class TestUniswapV2(Contract):
         assert total_liquidity > current_liquidity
 
         # given
-        amount_a_min = current_liquidity * dai_exchange_balance / total_liquidity
+        amount_a_min = current_liquidity * systemcoin_exchange_balance / total_liquidity
         amount_b_min = current_liquidity * usdc_exchange_balance / total_liquidity
         remove_liquidity_tokens_args = {
             "liquidity": current_liquidity,
@@ -183,21 +183,21 @@ class TestUniswapV2(Contract):
         }
 
         # when
-        remove_liquidity = self.dai_usdc_uniswap.remove_liquidity(remove_liquidity_tokens_args, self.token_dai, self.token_usdc).transact(from_address=self.our_address)
+        remove_liquidity = self.systemcoin_usdc_uniswap.remove_liquidity(remove_liquidity_tokens_args, self.token_systemcoin, self.token_usdc).transact(from_address=self.our_address)
 
         # then
         assert remove_liquidity.successful == True
-        assert self.dai_usdc_uniswap.get_current_liquidity() == Wad.from_number(0)
+        assert self.systemcoin_usdc_uniswap.get_current_liquidity() == Wad.from_number(0)
 
     def test_remove_liquidity_eth(self):
         # given
         add_liquidity_eth = self.add_liquidity_eth()
-        self.dai_eth_uniswap.set_and_approve_pair_token(self.dai_eth_uniswap.get_pair_address(self.token_dai.address, self.token_weth.address))
+        self.systemcoin_eth_uniswap.set_and_approve_pair_token(self.systemcoin_eth_uniswap.get_pair_address(self.token_systemcoin.address, self.token_weth.address))
 
-        current_liquidity = self.dai_eth_uniswap.get_current_liquidity()
-        total_liquidity = self.dai_eth_uniswap.get_total_liquidity()
-        dai_exchange_balance = self.dai_eth_uniswap.get_exchange_balance(self.token_dai, self.dai_eth_uniswap.pair_address)
-        weth_exchange_balance = self.dai_eth_uniswap.get_exchange_balance(self.token_weth, self.dai_eth_uniswap.pair_address)
+        current_liquidity = self.systemcoin_eth_uniswap.get_current_liquidity()
+        total_liquidity = self.systemcoin_eth_uniswap.get_total_liquidity()
+        systemcoin_exchange_balance = self.systemcoin_eth_uniswap.get_exchange_balance(self.token_systemcoin, self.systemcoin_eth_uniswap.pair_address)
+        weth_exchange_balance = self.systemcoin_eth_uniswap.get_exchange_balance(self.token_weth, self.systemcoin_eth_uniswap.pair_address)
 
         # then
         assert current_liquidity > Wad.from_number(0)
@@ -206,7 +206,7 @@ class TestUniswapV2(Contract):
         
         # given
         amount_a_min = current_liquidity * weth_exchange_balance / total_liquidity
-        amount_b_min = current_liquidity * dai_exchange_balance / total_liquidity
+        amount_b_min = current_liquidity * systemcoin_exchange_balance / total_liquidity
         remove_liquidity_eth_args = {
             "liquidity": current_liquidity,
             "amountBMin": amount_b_min,
@@ -214,27 +214,27 @@ class TestUniswapV2(Contract):
         }
 
         # when
-        remove_liquidity = self.dai_eth_uniswap.remove_liquidity_eth(remove_liquidity_eth_args, self.token_dai, 0).transact(from_address=self.our_address)
+        remove_liquidity = self.systemcoin_eth_uniswap.remove_liquidity_eth(remove_liquidity_eth_args, self.token_systemcoin, 0).transact(from_address=self.our_address)
 
         # then
         assert remove_liquidity.successful == True
-        assert self.dai_eth_uniswap.get_current_liquidity() == Wad.from_number(0)
+        assert self.systemcoin_eth_uniswap.get_current_liquidity() == Wad.from_number(0)
 
     def test_tokens_swap(self):
         # given
         add_liquidity = self.add_liquidity_tokens()
 
-        balance_dai_before_swap = self.dai_usdc_uniswap.get_account_token_balance(self.token_dai)
-        balance_usdc_before_swap = self.dai_usdc_uniswap.get_account_token_balance(self.token_usdc)
+        balance_systemcoin_before_swap = self.systemcoin_usdc_uniswap.get_account_token_balance(self.token_systemcoin)
+        balance_usdc_before_swap = self.systemcoin_usdc_uniswap.get_account_token_balance(self.token_usdc)
 
         # when
-        swap = self.dai_usdc_uniswap.swap_exact_tokens_for_tokens(Wad.from_number(.4), self.token_usdc.unnormalize_amount(Wad.from_number(.3)), [self.ds_dai.address.address, self.ds_usdc.address.address]).transact(from_address=self.our_address)
+        swap = self.systemcoin_usdc_uniswap.swap_exact_tokens_for_tokens(Wad.from_number(.4), self.token_usdc.unnormalize_amount(Wad.from_number(.3)), [self.ds_systemcoin.address.address, self.ds_usdc.address.address]).transact(from_address=self.our_address)
         
         # then
         assert swap.successful == True
 
-        balance_dai_after_swap = self.dai_usdc_uniswap.get_account_token_balance(self.token_dai)
-        balance_usdc_after_swap = self.dai_usdc_uniswap.get_account_token_balance(self.token_usdc)
+        balance_systemcoin_after_swap = self.systemcoin_usdc_uniswap.get_account_token_balance(self.token_systemcoin)
+        balance_usdc_after_swap = self.systemcoin_usdc_uniswap.get_account_token_balance(self.token_usdc)
 
-        assert balance_dai_after_swap < balance_dai_before_swap
+        assert balance_systemcoin_after_swap < balance_systemcoin_before_swap
         assert balance_usdc_before_swap < balance_usdc_after_swap

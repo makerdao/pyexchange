@@ -20,11 +20,11 @@ import time
 from web3 import Web3
 from typing import List, Tuple
 
-from pymaker import Contract, Address, Transact, Wad
-from pymaker.token import ERC20Token
-from pymaker.util import http_response_summary
-from pymaker.model import Token
-from pymaker.approval import directly
+from pyflex import Contract, Address, Transact, Wad
+from pyflex.token import ERC20Token
+from pyflex.util import http_response_summary
+from pyflex.model import Token
+from pyflex.approval import directly
 from pyexchange.graph import GraphClient
 from pyexchange.model import Trade
 
@@ -193,7 +193,7 @@ class UniswapV2(Contract):
             token_a: First token in the pool
             token_b: Second token in the pool
         Returns:
-            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+            A :py:class:`pyflex.Transact` instance, which can be used to trigger the transaction.
         """
         assert (isinstance(amounts, dict))
         assert (isinstance(token_a, Token))
@@ -222,7 +222,7 @@ class UniswapV2(Contract):
             amounts: dictionary[Wad, Wad, Wad, Wad]
             token_b: Token side of the pool
         Returns:
-            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+            A :py:class:`pyflex.Transact` instance, which can be used to trigger the transaction.
         """
         assert (isinstance(amounts, dict))
         assert (isinstance(token, Token))
@@ -259,7 +259,7 @@ class UniswapV2(Contract):
             token_b: Address of pool token B.
             amounts: dictionary[uint256, uint256, uint256]
         Returns:
-            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+            A :py:class:`pyflex.Transact` instance, which can be used to trigger the transaction.
         """
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
@@ -288,7 +288,7 @@ class UniswapV2(Contract):
             token_a: Address of pool token.
             amounts: dictionary[uint256, uint256, uint256]
         Returns:
-            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+            A :py:class:`pyflex.Transact` instance, which can be used to trigger the transaction.
         """
         assert (isinstance(amounts, dict))
         assert (isinstance(token, Token))
@@ -326,7 +326,7 @@ class UniswapV2(Contract):
             min_amount_out: Minimum amount of output token to set price
             path: array of token addresses used to form swap route
         Returns:
-            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+            A :py:class:`pyflex.Transact` instance, which can be used to trigger the transaction.
         """
         assert (isinstance(eth_to_swap, Wad))
         assert (isinstance(min_amount_out, Wad))
@@ -352,7 +352,7 @@ class UniswapV2(Contract):
             min_amount_out: Minimum amount of output token to set price
             path: array of token addresses used to form swap route
         Returns:
-            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+            A :py:class:`pyflex.Transact` instance, which can be used to trigger the transaction.
         """
         assert (isinstance(tokens_to_swap, Wad))
         assert (isinstance(min_amount_out, Wad))
