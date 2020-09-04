@@ -66,18 +66,18 @@ class BittrexApi(PyexAPI):
         self.secret_key = secret_key
         self.timeout = timeout
 
-    def get_markets(self):
+    def get_markets(self) -> List[dict]:
         return self._http_request("GET", "/v3/markets", {})
     
-    def get_precision(self, pair: str):
+    def get_precision(self, pair: str) -> int:
         assert(isinstance(pair, str))
         return self._http_request("GET", f"/v3/markets/{pair}", {})["precision"]
 
-    def get_pair(self, pair: str):
+    def get_pair(self, pair: str) -> dict:
         assert(isinstance(pair, str))
         return next(filter(lambda market: market['symbol'] == pair, self.get_markets()))
 
-    def get_balances(self):
+    def get_balances(self) -> dict:
         return self._http_authenticated_request("GET", "/v3/balances")
 
     def get_orders(self, pair: str) -> List[Order]:
