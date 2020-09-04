@@ -29,6 +29,26 @@ from pyexchange.graph import GraphClient
 from pyexchange.model import Trade
 
 
+class UniswapTrade(Trade):
+    @staticmethod
+    def from_message(trade: dict, pair: str) -> Trade:
+        # assuming prices are denominated in quote token
+        swap_price = Wad.from_number(trade['token1Price'])
+
+        # assuming that we are always long the base token, and short quote
+        # if the amount of TokenA is 0, then we are essentially buying additional base token in exchange for quote token
+        is_sell = trade['amount0In'] != "0"
+
+        # assuming that amounts are always denominated in the base token
+        amount = Wad.from_number(trade['amount0Out'])
+
+        return Trade(trade_id=trade['id'],
+                     timestamp=int(trade['timestamp']),
+                     pair=pair,
+                     is_sell=is_sell,
+                     price=swap_price,
+                     amount=amount)
+
 class UniswapV2(Contract):
     """
     UniswapV2 Python Client
@@ -46,14 +66,16 @@ class UniswapV2(Contract):
     factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
     factory_bin = Contract._load_bin(__name__, 'abi/UniswapV2Factory.bin')
 
-    def __init__(self, web3: Web3, token_a: Token, token_b: Token, keeper_address: Address, router_address: Address, factory_address: Address):
+    def __init__(self, web3: Web3, token_a: Token, token_b: Token, keeper_address: Address, router_address: Address, factory_address: Address, graph_url: str = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2"):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
         assert (isinstance(keeper_address, Address))
         assert (isinstance(router_address, Address))
         assert (isinstance(factory_address, Address))
+        assert (isinstance(graph_url, str))
 
+        self.graph_client = GraphClient(graph_url)
         self.web3 = web3
         self.token_a = token_a
         self.token_b = token_b
@@ -141,9 +163,34 @@ class UniswapV2(Contract):
         approval_function = directly()
         return approval_function(erc20_token, self.router_address, 'UniswapV2Router02')
 
-    @staticmethod
-    def _to_32byte_hex(val):
-        return Web3.toHex(Web3.toBytes(val).rjust(32, b'\0'))
+    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
+        get_swaps_query = """query ($pair: PAIR!)
+        {
+            swaps(where: {pair: $pair}) {
+                id
+                pair {
+                    id
+                    totalSupply
+                }
+                transaction {
+                    id
+                }
+                timestamp
+                amount0In
+                amount1In
+                amount0Out
+                amount1Out
+            }
+        }
+        """
+        variables = {
+            'pair': self.pair_address.address
+        }
+
+        result = self.graph_client.query_request(get_swaps_query, variables)
+        swaps_list = result['swaps']
+
+        return list(map(lambda: item: UniswapTrade.from_message(item), swaps_list))
 
     def get_amounts_out(self, amount_in: Wad, tokens: List[Token]) -> List[Wad]:
         """ Calculate maximum output amount of a given input.
