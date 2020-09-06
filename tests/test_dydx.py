@@ -17,14 +17,16 @@
 
 import json
 import os
-import re
 import time
-from datetime import datetime, timezone
 
-from pymaker import Wad
-from pyexchange.bitso import BitsoApi, Order, Trade, iso8601_to_unix
+from pyflex import Wad
+from pyexchange.dydx import DydxApi, Order, Trade
 
-# Models HTTP response, produced by BitsoMockServer
+# Even though DyDx is a Decentralized Exchange,
+# supporting infrastructure required for the orderbook is only available on mainnet.
+# Therefore, mock data was used.
+
+# Models HTTP response, produced by DydxMockServer
 class MockedResponse:
     def __init__(self, text: str, status_code=200):
         assert (isinstance(text, str))
@@ -37,12 +39,12 @@ class MockedResponse:
     def json(self, **kwargs):
         return json.loads(self.text)
 
-# Determines response to provide based on the requested URL
-class BitsoMockServer:
+# Determines response based upon the DyDx Client method used
+class DydxMockServer:
     # Read JSON responses from a pipe-delimited file, avoiding JSON-inside-JSON parsing complexities
     responses = {}
     cwd = os.path.dirname(os.path.realpath(__file__))
-    response_file_path = os.path.join(cwd, "mock/bitso-api-responses")
+    response_file_path = os.path.join(cwd, "mock/dydx-api-responses")
     with open(response_file_path, 'r') as file:
         for line in file:
             kvp = line.split("|")
@@ -50,68 +52,41 @@ class BitsoMockServer:
             responses[kvp[0]] = kvp[1]
 
     @staticmethod
-    def handle_request(**kwargs):
-        assert("url" in kwargs)
-        url = kwargs["url"]
-        method = kwargs["method"]
-        if method == "GET":
-            return BitsoMockServer.handle_get(url)
-        elif method == "POST":
-            return BitsoMockServer.handle_post(url, kwargs["json"])
-        else:
-            return BitsoMockServer.handle_delete(url)
+    def handle_get_pairs(**kwargs):
+        return MockedResponse(text=DydxMockServer.responses["markets"]).json()
 
     @staticmethod
-    def handle_get(url: str):
-        # Parse the URL to determine which piece of canned data to return
-        if re.search(r"v3\/available_books", url):
-            return MockedResponse(text=BitsoMockServer.responses["markets"])
-        elif re.search(r"v3\/balance", url):
-            return MockedResponse(text=BitsoMockServer.responses["balances"])
-        elif re.search(r"v3\/open_orders", url):
-            return MockedResponse(text=BitsoMockServer.responses["orders"])
-        elif re.search(r"v3\/user_trades", url):
-            return MockedResponse(text=BitsoMockServer.responses["trades"])
-        else:
-            raise ValueError("Unable to match HTTP GET request to canned response", url)
+    def handle_get_balances(*args, **kwargs):
+        return MockedResponse(text=DydxMockServer.responses["balances"]).json()
 
     @staticmethod
-    def handle_post(url: str, data):
-        assert(data is not None)
-        if re.search(r"v3\/orders", url):
-            return MockedResponse(text=BitsoMockServer.responses["place_order"])
-        else:
-            raise ValueError("Unable to match HTTP POST request to canned response", url, data)
+    def handle_get_orders(**kwargs):
+        return MockedResponse(text=DydxMockServer.responses["orders"]).json()
 
-    
     @staticmethod
-    def handle_delete(url: str):
-        if re.search(r"v3\/orders\/[\w\-_]+", url):
-            return MockedResponse(text=BitsoMockServer.responses["cancel_order"])
-        else:
-            raise ValueError("Unable to match HTTP DELETE request to canned response", url)
+    def handle_place_order(**kwargs):
+        return MockedResponse(text=DydxMockServer.responses["place_order"]).json()
 
-class TestBitso:
+    @staticmethod
+    def handle_cancel_order(**kwargs):
+        return MockedResponse(text=DydxMockServer.responses["cancel_order"]).json()
+
+    @staticmethod
+    def handle_get_trades(**kwargs):
+        return MockedResponse(text=DydxMockServer.responses["trades"]).json()
+
+class TestDydx:
     def setup_method(self):
-        self.bitso = BitsoApi(
-            api_server = "localhost",
-            api_key = "00000000-0000-0000-0000-000000000000",
-            secret_key = "bitsosecretkey",
-            timeout = 15.5
+        self.dydx = DydxApi(
+            "http://localhost:8555",
+            "dcba44978751342a68e81b0e487de87e52720f6f94792cc237045bce0f9d05fc"
         )
 
-    def test_convert_iso_to_unix(self):
-        iso_timestamp = datetime.now(tz=timezone.utc).isoformat()
-        assert(isinstance(iso_timestamp, str))
-
-        unix_timestamp = iso8601_to_unix(iso_timestamp)
-        assert(isinstance(unix_timestamp, int))
-
     def test_get_markets(self, mocker):
-        mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
-        response = self.bitso.get_markets()
+        mocker.patch("dydx.client.Client.get_markets", side_effect=DydxMockServer.handle_get_pairs)
+        response = self.dydx.get_markets()
         assert(len(response) > 0)
-        assert(any(x["book"] == "eth_mxn" for x in response))
+        assert("WETH-DAI" in response)
 
     def test_order(self):
         price = Wad.from_number(4.8765)
@@ -119,8 +94,8 @@ class TestBitso:
         remaining_amount = Wad.from_number(0.153)
         order = Order(
             order_id="153153",
-            timestamp=iso8601_to_unix(datetime.now(tz=timezone.utc).isoformat()),
-            pair="eth_mxn",
+            timestamp=int(time.time()),
+            pair="WETH-DAI",
             is_sell=False,
             price=price,
             amount=amount
@@ -129,19 +104,19 @@ class TestBitso:
         assert(order.price == order.buy_to_sell_price)
 
     def test_get_balances(self, mocker):
-        mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
-        response = self.bitso.get_balances()
+        mocker.patch("dydx.client.Client.get_balances", side_effect=DydxMockServer.handle_get_balances)
+        response = self.dydx.get_balances()
         assert(len(response) > 0)
         for balance in response:
-            if "eth" in balance["currency"]:
-                assert(float(balance["total"]) > 0)
+            if "ETH" in balance["currency"]:
+                assert(float(balance["wei"]) > 0)
 
     @staticmethod
     def check_orders(orders):
         by_oid = {}
         duplicate_count = 0
         duplicate_first_found = -1
-        current_time = iso8601_to_unix(datetime.now(tz=timezone.utc).isoformat())
+        current_time = int(time.time())
         for index, order in enumerate(orders):
             assert(isinstance(order, Order))
             assert(order.order_id is not None)
@@ -163,23 +138,24 @@ class TestBitso:
         assert(duplicate_count == 0)
         
     def test_get_orders(self, mocker):
-        instrument_id = "eth_mxn"
-        mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
-        response = self.bitso.get_orders(instrument_id)
+        instrument_id = "WETH-DAI"
+        mocker.patch("dydx.client.Client.get_my_orders", side_effect=DydxMockServer.handle_get_orders)
+        response = self.dydx.get_orders(instrument_id)
         assert (len(response) > 0)
         for order in response:
             assert(isinstance(order.is_sell, bool))
             assert(Wad(order.price) > Wad(0))
-        TestBitso.check_orders(response)
+        TestDydx.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        instrument_id = "eth_mxn"
+        instrument_id = "WETH-DAI"
         side = "sell"
-        mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
-        order_id = self.bitso.place_order(instrument_id, side, 4400.000, .01)
+        mocker.patch("dydx.client.Client.place_order", side_effect=DydxMockServer.handle_place_order)
+        mocker.patch("dydx.client.Client.cancel_order", side_effect=DydxMockServer.handle_cancel_order)
+        order_id = self.dydx.place_order(instrument_id, False, 135.000, 0.1)
         assert(isinstance(order_id, str))
         assert(order_id is not None)
-        cancel_result = self.bitso.cancel_order(order_id)
+        cancel_result = self.dydx.cancel_order(order_id)
         assert(cancel_result is True)
 
     @staticmethod
@@ -212,8 +188,8 @@ class TestBitso:
         assert(missorted_found is False)
 
     def test_get_trades(self, mocker):
-        instrument_id = "eth_mxn"
-        mocker.patch("requests.request", side_effect=BitsoMockServer.handle_request)
-        response = self.bitso.get_trades(instrument_id)
+        instrument_id = "WETH-DAI"
+        mocker.patch("dydx.client.Client.get_my_fills", side_effect=DydxMockServer.handle_get_trades)
+        response = self.dydx.get_trades(instrument_id)
         assert (len(response) > 0)
-        TestBitso.check_trades(response)
+        TestDydx.check_trades(response)
