@@ -19,7 +19,7 @@ import json
 import os
 import time
 
-from pymaker import Wad
+from pyflex import Wad
 from pyexchange.dydx import DydxApi, Order, Trade
 
 # Even though DyDx is a Decentralized Exchange,

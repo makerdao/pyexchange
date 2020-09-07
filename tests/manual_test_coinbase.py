@@ -19,7 +19,7 @@ import logging
 import sys
 
 from pyexchange.coinbase import CoinbaseApi
-from pymaker import Address, Wad
+from pyflex import Address, Wad
 
 logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=logging.INFO)
 logging.getLogger('urllib3').setLevel(logging.INFO)

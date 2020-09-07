@@ -19,10 +19,10 @@ import logging
 from pprint import pformat
 from typing import List
 
-import pymaker
-from pymaker import Wad, Address
-from pymaker.token import ERC20Token
-from pymaker.zrx import ZrxExchange
+import pyflex
+from pyflex import Wad, Address
+from pyflex.token import ERC20Token
+from pyflex.zrx import ZrxExchange
 
 
 class Order:
@@ -31,13 +31,13 @@ class Order:
                  is_sell: bool,
                  price: Wad,
                  amount: Wad,
-                 zrx_order: pymaker.zrx.Order):
+                 zrx_order: pyflex.zrx.Order):
 
         assert(isinstance(order_id, int))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
-        assert(isinstance(zrx_order, pymaker.zrx.Order))
+        assert(isinstance(zrx_order, pyflex.zrx.Order))
 
         self.order_id = order_id
         self.is_sell = is_sell
@@ -154,7 +154,7 @@ class ZrxApi:
 
         return result
 
-    def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad, expiration: int) -> pymaker.zrx.Order:
+    def place_order(self, pair: Pair, is_sell: bool, price: Wad, amount: Wad, expiration: int) -> pyflex.zrx.Order:
         assert(isinstance(pair, Pair))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))

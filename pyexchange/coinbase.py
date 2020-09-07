@@ -27,8 +27,8 @@ import json
 
 import dateutil.parser
 
-from pymaker import Address, Wad
-from pymaker.util import http_response_summary
+from pyflex import Address, Wad
+from pyflex.util import http_response_summary
 from typing import Optional, List
 
 

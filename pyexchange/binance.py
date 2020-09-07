@@ -24,8 +24,8 @@ import time
 import hmac
 import hashlib
 
-from pymaker.numeric import Wad
-from pymaker.util import http_response_summary
+from pyflex.numeric import Wad
+from pyflex.util import http_response_summary
 
 
 class Trade:

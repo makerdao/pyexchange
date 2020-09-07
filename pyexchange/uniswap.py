@@ -18,8 +18,8 @@
 import time
 from web3 import Web3
 
-from pymaker import Contract, Address, Transact, Wad
-from pymaker.token import ERC20Token
+from pyflex import Contract, Address, Transact, Wad
+from pyflex.token import ERC20Token
 
 
 class Uniswap(Contract):
@@ -99,7 +99,7 @@ class Uniswap(Contract):
             eth_sold: Amount of ETH to swap for token.
 
         Returns:
-            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+            A :py:class:`pyflex.Transact` instance, which can be used to trigger the transaction.
         """
         return Transact(self, self.web3, self.abi, self.exchange, self._contract,
                         'ethToTokenSwapInput', [1, self._deadline()], {'value': eth_sold.value})
@@ -111,7 +111,7 @@ class Uniswap(Contract):
             eth_sold: Amount of token to swap for ETH.
 
         Returns:
-            A :py:class:`pymaker.Transact` instance, which can be used to trigger the transaction.
+            A :py:class:`pyflex.Transact` instance, which can be used to trigger the transaction.
         """
         return Transact(self, self.web3, self.abi, self.exchange, self._contract,
                         'tokenToEthSwapInput', [tokens_sold.value, 1, self._deadline()])

@@ -18,7 +18,7 @@
 import re
 import time
 
-from pymaker import Wad
+from pyflex import Wad
 from pyexchange.binance_us import BinanceUsApi, BinanceUsOrder as Order, BinanceUsTrade as Trade
 from tests.mock_webapi_server import MockWebAPIServer, MockedResponse as BaseMockedResponse
 

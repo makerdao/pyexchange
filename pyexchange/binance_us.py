@@ -25,8 +25,8 @@ import json
 
 from urllib.parse import urlencode
 
-from pymaker import Address, Wad
-from pymaker.util import http_response_summary
+from pyflex import Address, Wad
+from pyflex.util import http_response_summary
 from pyexchange.model import Order, Trade
 from typing import Optional, List
 

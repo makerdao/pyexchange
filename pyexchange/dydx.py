@@ -32,7 +32,7 @@ import dydx.util as utils
 
 from pyexchange.api import PyexAPI
 from pyexchange.model import Order, Trade
-from pymaker import Wad
+from pyflex import Wad
 
 
 class DydxOrder(Order):

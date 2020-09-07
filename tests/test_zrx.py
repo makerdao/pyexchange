@@ -24,11 +24,11 @@ from eth_tester import EthereumTester, PyEVMBackend
 import eth_tester.backends.pyevm.main as py_evm_main
 
 from pyexchange.zrx import Pair, ZrxApi
-from pymaker import Address
-from pymaker.deployment import deploy_contract
-from pymaker.numeric import Wad
-from pymaker.token import DSToken, ERC20Token
-from pymaker.zrx import ZrxExchange
+from pyflex import Address
+from pyflex.deployment import deploy_contract
+from pyflex.numeric import Wad
+from pyflex.token import DSToken, ERC20Token
+from pyflex.zrx import ZrxExchange
 
 
 class TestZrxApi:
@@ -41,7 +41,7 @@ class TestZrxApi:
         self.zrx_token = ERC20Token(web3=self.web3, address=deploy_contract(self.web3, 'ZRXToken'))
         self.token_transfer_proxy_address = deploy_contract(self.web3, 'TokenTransferProxy')
         self.exchange = ZrxExchange.deploy(self.web3, self.zrx_token.address, self.token_transfer_proxy_address)
-        self.web3.eth.contract(abi=json.loads(pkg_resources.resource_string('pymaker.deployment', f'abi/TokenTransferProxy.abi')))(address=self.token_transfer_proxy_address.address).functions.addAuthorizedAddress(self.exchange.address.address).transact()
+        self.web3.eth.contract(abi=json.loads(pkg_resources.resource_string('pyflex.deployment', f'abi/TokenTransferProxy.abi')))(address=self.token_transfer_proxy_address.address).functions.addAuthorizedAddress(self.exchange.address.address).transact()
 
         self.zrx_api = ZrxApi(self.exchange)
 

@@ -17,9 +17,9 @@
 
 import sys
 
-from pymaker import Address, Wad
+from pyflex import Address, Wad
 from web3 import Web3, HTTPProvider
-from pymaker.keys import register_key
+from pyflex.keys import register_key
 from pyexchange.uniswap import Uniswap
 
 DAI_ADDRESS = Address("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359")

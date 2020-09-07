@@ -12,9 +12,9 @@ Python API wrappers for some cryptocurrency exchanges.
 Run the following commands:
 ```
 git submodule update --init --recursive
-source _virtualenv/bin/activate
+#source _virtualenv/bin/activate
 bash ./install.sh
-export PYTHONPATH=$PYTHONPATH:$PWD:$PWD/lib/pymaker
+export PYTHONPATH=$PYTHONPATH:$PWD:$PWD/lib/pyflex
 ```
 
 ## Key facts
@@ -25,8 +25,8 @@ export PYTHONPATH=$PYTHONPATH:$PWD:$PWD/lib/pymaker
   Due to it they cover most only order placement, order cancellation, reading balances and open orders,
   and retrieving past trade history.
 
-* This library depends on `pymaker` because IDEX integration involves interacting with its smart contract.
-  In addition to that, other exchange APIs use the `Wad` class which is defined `pymaker`.
+* This library depends on `pyflex` because IDEX integration involves interacting with its smart contract.
+  In addition to that, other exchange APIs use the `Wad` class which is defined `pyflex`.
 
 * There is almost no test coverage as of today. The exception is some part of the IDEX API.
 
@@ -37,7 +37,7 @@ export PYTHONPATH=$PYTHONPATH:$PWD:$PWD/lib/pymaker
 
 ## License
 
-See [COPYING](https://github.com/makerdao/pyexchange/blob/master/COPYING) file.
+See [COPYING](https://github.com/reflexer-labs/pyexchange/blob/master/COPYING) file.
 
 ### Testing
 Run the following commands within a virtualenv
