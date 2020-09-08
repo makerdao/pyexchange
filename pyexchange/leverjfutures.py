@@ -335,8 +335,11 @@ class LeverjFuturesAPI(PyexAPI):
         triggerPrice = str(triggerPrice)
         quantity = str(amount)
         order = self.createNewOrder(side, price, triggerPrice, quantity, orderInstrument, orderType)
-        self.logger.info(f'LEVERJ: order is {order}')
-        return self._http_authenticated("POST", "/futures/api/v1", "/order", [order])[0]['uuid']
+        order_quantity = order['quantity']
+        if order_quantity > 0:
+            self.logger.info(f'order_quantity: {order_quantity}')
+            self.logger.info(f'LEVERJ: order is {order}')
+            return self._http_authenticated("POST", "/futures/api/v1", "/order", [order])[0]['uuid']
 
     def cancel_order(self, order_id: str) -> bool:
         assert(isinstance(order_id, str))
