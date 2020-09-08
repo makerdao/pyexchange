@@ -77,10 +77,6 @@ class UniswapV2(Contract):
 
         self.graph_client = GraphClient(graph_url)
 
-        # set these variables in 
-        self.mint_timestamp = 0
-        self.burn_timestamp = 1000000000
-
         self.web3 = web3
         self.token_a = token_a
         self.token_b = token_b
@@ -168,15 +164,18 @@ class UniswapV2(Contract):
         approval_function = directly()
         return approval_function(erc20_token, self.router_address, 'UniswapV2Router02')
 
-    def get_position_creation_timestamp(self) -> int:
-        get_position_time_query = """query ($pair: Pair!, $to: Bytes!)
+    def get_our_mint_txs(self) -> dict:
+        get_our_mint_txs_query = """query ($pair: Pair!, $to: Bytes!)
             {
-                mints {
+                mints (where: {pair: $pair, to: $to}) {
+                    amount0
+                    amount1
                     id
                     to
                     sender
                     timestamp
                     pair {
+                        id
                         token0 {
                             id
                         }
@@ -195,57 +194,115 @@ class UniswapV2(Contract):
             'to': self.account_address.address
         }
 
-        result = self.graph_client.query_request(get_position_time_query, variables)['mints']
+        result = self.graph_client.query_request(get_our_mint_txs_query, variables)['mints']
 
         sorted_mints = sorted(result, key=lambda mint: mint['timestamp'], True)
-        return int(sorted_mints['timestamp'])
+        return sorted_mints
 
-    def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        # TODO: add check of timestamp to ensure that we only calculate trades
-        # that occured after we've added liquidity
-        # TODO: figure out how to store timestamp...
-
-        # Two stage trades: one type of trade to monitor mint and burn;
-        # one trade to monitor other's swaps while we have liquidity in the pool
-
-        if self.get_current_liquidity() == Wad.from_number(0):
-            return []
-        else:
-            # TODO: set timestamps here based on when position was created
-            self.mint_timestamp = self.get_position_creation_timestamp()
-
-        get_swaps_query = """query ($pair: Pair!, $timestamp: BigInt!)
-        {
-            swaps(where: {pair: $pair, timestamp_gt: $timestamp}) {
-                id
-                pair {
+    def get_our_burn_txs(self) -> List:
+        get_our_burn_txs_query = """query ($pair: Pair!, $to: Bytes!)
+            {
+                burns (where: {pair: $pair, to: $to}) {
                     id
-                    totalSupply
-                    reserve0
-                    reserve1
-                    token0Price
-                    token1Price
+                    to
+                    timestamp
+                    pair {
+                        id
+                        token0 {
+                            id
+                        }
+                        token1 {
+                            id
+                        }
+                    }
+                    transaction {
+                        id
+                    }
                 }
-                transaction {
-                    id
-                }
-                timestamp
-                amount0In
-                amount1In
-                amount0Out
-                amount1Out
             }
-        }
         """
         variables = {
             'pair': self.pair_address.address,
-            'timestamp': self.mint_timestamp
+            'to': self.account_address.address
         }
 
-        result = self.graph_client.query_request(get_swaps_query, variables)
-        swaps_list = result['swaps']
+        result = self.graph_client.query_request(get_our_burn_txs_query, variables)['burns']
 
-        return list(map(lambda: item: UniswapTrade.from_message(item), swaps_list))
+        sorted_burns = sorted(result, key=lambda burn: burn['timestamp'], True)
+        return sorted_burns
+
+    def get_trades(self, pair: str, page_number: int = 100) -> List[Trade]:
+        """
+            Assuming that previous mints and swaps have been recorded successfully,
+            and won't double write given unique identification of each trade
+
+            Two stage trades: one type of trade to monitor mint and burn;
+
+            get a list of mint and burn transaction timestamps for each pair
+
+            append set of swaps for the pair between timestamps to larger list of trades
+
+            restrict amount of querying to conduct with the page number
+
+            TODO: determine how/if to measure mints and burns amounts + price
+            TODO: add check to see if we've already retrieved the list of timestamps
+        """
+
+        trades_list = []
+
+        mint_events = self.get_our_mint_txs()
+        burn_events = self.get_our_burn_txs()
+
+        number_of_mints = len(mint_events)
+        number_of_burns = len(burn_events)
+
+        # construct an object of symmetric mint and burn events and append to list of events to iterate over
+        liquidity_events = {
+            'mints': mint_events,
+            'burns': burn_events
+        }
+
+        # iterate between each pair of mint and burn timestamps to query all swaps between those events
+        # if there's unbalance mints and burns, assume we've added but not removed liquidity, and set less than value to current timestamp
+        for index, mint  in enumerate(liquidity_events['mints']):
+            mint_timestamp = mint['timestamp']
+            burn_timestamp = liquidity_events['burns'][index] if number_of_mints == number_of_burns else int(time.time())
+
+            get_swaps_query = """query ($pair: Pair!, $timestamp_mint: BigInt!, $timestamp_burn)
+            {
+                swaps(where: {pair: $pair, timestamp_gte: $timestamp_mint, timestamp_lte: $timestamp_burn}) {
+                    id
+                    pair {
+                        id
+                        totalSupply
+                        reserve0
+                        reserve1
+                        token0Price
+                        token1Price
+                    }
+                    transaction {
+                        id
+                    }
+                    timestamp
+                    amount0In
+                    amount1In
+                    amount0Out
+                    amount1Out
+                }
+            }
+            """
+            variables = {
+                'pair': self.pair_address.address,
+                'timestamp_mint': self.mint_timestamp,
+                'timestamp_burn': self.burn_timestamp
+            }
+
+            result = self.graph_client.query_request(get_swaps_query, variables)
+            swaps_list = result['swaps']
+
+            trades_list = trades_list.extend(list(map(lambda: item: UniswapTrade.from_message(item), swaps_list)))
+
+        return trades_list
 
     def get_amounts_out(self, amount_in: Wad, tokens: List[Token]) -> List[Wad]:
         """ Calculate maximum output amount of a given input.
