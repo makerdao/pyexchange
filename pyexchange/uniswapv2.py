@@ -76,6 +76,11 @@ class UniswapV2(Contract):
         assert (isinstance(graph_url, str))
 
         self.graph_client = GraphClient(graph_url)
+
+        # set these variables in 
+        self.mint_timestamp = 0
+        self.burn_timestamp = 1000000000
+
         self.web3 = web3
         self.token_a = token_a
         self.token_b = token_b
@@ -163,14 +168,63 @@ class UniswapV2(Contract):
         approval_function = directly()
         return approval_function(erc20_token, self.router_address, 'UniswapV2Router02')
 
+    def get_position_creation_timestamp(self) -> int:
+        get_position_time_query = """query ($pair: Pair!, $to: Bytes!)
+            {
+                mints {
+                    id
+                    to
+                    sender
+                    timestamp
+                    pair {
+                        token0 {
+                            id
+                        }
+                        token1 {
+                            id
+                        }
+                    }
+                    transaction {
+                        id
+                    }
+                }
+            }
+        """
+        variables = {
+            'pair': self.pair_address.address,
+            'to': self.account_address.address
+        }
+
+        result = self.graph_client.query_request(get_position_time_query, variables)['mints']
+
+        sorted_mints = sorted(result, key=lambda mint: mint['timestamp'], True)
+        return int(sorted_mints['timestamp'])
+
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        get_swaps_query = """query ($pair: PAIR!)
+        # TODO: add check of timestamp to ensure that we only calculate trades
+        # that occured after we've added liquidity
+        # TODO: figure out how to store timestamp...
+
+        # Two stage trades: one type of trade to monitor mint and burn;
+        # one trade to monitor other's swaps while we have liquidity in the pool
+
+        if self.get_current_liquidity() == Wad.from_number(0):
+            return []
+        else:
+            # TODO: set timestamps here based on when position was created
+            self.mint_timestamp = self.get_position_creation_timestamp()
+
+        get_swaps_query = """query ($pair: Pair!, $timestamp: BigInt!)
         {
-            swaps(where: {pair: $pair}) {
+            swaps(where: {pair: $pair, timestamp_gt: $timestamp}) {
                 id
                 pair {
                     id
                     totalSupply
+                    reserve0
+                    reserve1
+                    token0Price
+                    token1Price
                 }
                 transaction {
                     id
@@ -184,7 +238,8 @@ class UniswapV2(Contract):
         }
         """
         variables = {
-            'pair': self.pair_address.address
+            'pair': self.pair_address.address,
+            'timestamp': self.mint_timestamp
         }
 
         result = self.graph_client.query_request(get_swaps_query, variables)
