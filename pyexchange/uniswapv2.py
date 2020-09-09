@@ -33,7 +33,7 @@ class UniswapTrade(Trade):
     @staticmethod
     def from_message(trade: dict, pair: str) -> Trade:
         # assuming prices are denominated in quote token
-        swap_price = Wad.from_number(trade['token1Price'])
+        swap_price = Wad.from_number(trade['pair']['token1Price'])
 
         # assuming that we are always long the base token, and short quote
         # if the amount of TokenA is 0, then we are essentially buying additional base token in exchange for quote token
@@ -84,7 +84,6 @@ class UniswapV2(Contract):
         self._factory_contract = self._get_contract(web3, self.Ifactory_abi, self.factory_address)
 
         self.account_address = keeper_address
-        print(self._router_contract.functions.WETH().call())
 
         self.pair_address = self.get_pair_address(self.token_a.address, self.token_b.address)
         self.is_new_pool = self.pair_address == Address("0x0000000000000000000000000000000000000000")
@@ -165,7 +164,7 @@ class UniswapV2(Contract):
         return approval_function(erc20_token, self.router_address, 'UniswapV2Router02')
 
     def get_our_mint_txs(self) -> dict:
-        get_our_mint_txs_query = """query ($pair: Pair!, $to: Bytes!)
+        get_our_mint_txs_query = """query ($pair: Bytes!, $to: Bytes!)
             {
                 mints (where: {pair: $pair, to: $to}) {
                     amount0
@@ -190,8 +189,8 @@ class UniswapV2(Contract):
             }
         """
         variables = {
-            'pair': self.pair_address.address,
-            'to': self.account_address.address
+            'pair': self.pair_address.address.lower(),
+            'to': self.account_address.address.lower()
         }
 
         result = self.graph_client.query_request(get_our_mint_txs_query, variables)['mints']
@@ -200,7 +199,7 @@ class UniswapV2(Contract):
         return sorted_mints
 
     def get_our_burn_txs(self) -> List:
-        get_our_burn_txs_query = """query ($pair: Pair!, $to: Bytes!)
+        get_our_burn_txs_query = """query ($pair: Bytes!, $to: Bytes!)
             {
                 burns (where: {pair: $pair, to: $to}) {
                     id
@@ -222,8 +221,8 @@ class UniswapV2(Contract):
             }
         """
         variables = {
-            'pair': self.pair_address.address,
-            'to': self.account_address.address
+            'pair': self.pair_address.address.lower(),
+            'to': self.account_address.address.lower()
         }
 
         result = self.graph_client.query_request(get_our_burn_txs_query, variables)['burns']
@@ -268,7 +267,7 @@ class UniswapV2(Contract):
             mint_timestamp = mint['timestamp']
             burn_timestamp = liquidity_events['burns'][index] if number_of_mints == number_of_burns else int(time.time())
 
-            get_swaps_query = """query ($pair: Pair!, $timestamp_mint: BigInt!, $timestamp_burn)
+            get_swaps_query = """query ($pair: Bytes!, $timestamp_mint: BigInt!, $timestamp_burn: BigInt!)
             {
                 swaps(where: {pair: $pair, timestamp_gte: $timestamp_mint, timestamp_lte: $timestamp_burn}) {
                     id
@@ -292,15 +291,16 @@ class UniswapV2(Contract):
             }
             """
             variables = {
-                'pair': self.pair_address.address,
-                'timestamp_mint': self.mint_timestamp,
-                'timestamp_burn': self.burn_timestamp
+                'pair': self.pair_address.address.lower(),
+                'timestamp_mint': mint_timestamp,
+                'timestamp_burn': burn_timestamp
             }
 
             result = self.graph_client.query_request(get_swaps_query, variables)
             swaps_list = result['swaps']
 
-            trades_list = trades_list.extend(list(map(lambda item: UniswapTrade.from_message(item), swaps_list)))
+            trades = list(map(lambda item: UniswapTrade.from_message(item, pair), swaps_list))
+            trades_list.extend(trades)
 
         return trades_list
 

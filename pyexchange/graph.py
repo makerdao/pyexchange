@@ -56,7 +56,7 @@ class GraphClient:
 
     def query_request(self, query: str, variables: dict = None) -> dict:
         assert (isinstance(query, str))
-        assert (isinstance(variables, str) or isinstance(variables, None))
+        assert (isinstance(variables, dict) or isinstance(variables, None))
 
         headers = {'Accept': 'application/json',
                    'Content-Type': 'application/json'}

@@ -51,11 +51,10 @@ usdc_kovan = Token("USDC", USDC_KOVAN_ADDRESS, 6)
 usdc_mainnet = Token("USDC", USDC_MAINNET_ADDRESS, 6)
 
 wbtc = Token('WBTC', Address("0xe0c9275e44ea80ef17579d33c55136b7da269aeb"), 8)
-uniswap = UniswapV2(web3, weth_mainnet, usdc_mainnet, Address(web3.eth.defaultAccount), Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"), Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"))
+uniswap = UniswapV2(web3, weth_mainnet, usdc_mainnet, Address(web3.eth.defaultAccount), Address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"), Address("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"))
 
 # dai_weth_pair = Token("POOL", uniswap.get_pair_address(DAI_KOVAN_ADDRESS, WETH_KOVAN_ADDRESS), 18)
 weth_usdc_mainnet_pair = Token("POOL", uniswap.get_pair_address(WETH_ADDRESS, USDC_MAINNET_ADDRESS), 18)
-
 
 # amounts_in = uniswap.get_amounts_in(web3.toWei(0.5, 'ether'), [DAI_KOVAN_ADDRESS.address, MKR_KOVAN_ADDRESS.address])
 # print(amounts_in)
