@@ -61,10 +61,8 @@ class UniswapV2(Contract):
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
     Irouter_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')['abi']
     router_abi = Contract._load_abi(__name__, 'abi/UniswapV2Router02.abi')
-    router_bin = Contract._load_bin(__name__, 'abi/UniswapV2Router02.bin')
     Ifactory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')['abi']
     factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
-    factory_bin = Contract._load_bin(__name__, 'abi/UniswapV2Factory.bin')
 
     def __init__(self, web3: Web3, token_a: Token, token_b: Token, keeper_address: Address, router_address: Address, factory_address: Address, graph_url: str = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2"):
         assert (isinstance(web3, Web3))
@@ -85,12 +83,14 @@ class UniswapV2(Contract):
         self._router_contract = self._get_contract(web3, self.Irouter_abi, self.router_address)
         self._factory_contract = self._get_contract(web3, self.Ifactory_abi, self.factory_address)
 
+        self.account_address = keeper_address
+        print(self._router_contract.functions.WETH().call())
+
         self.pair_address = self.get_pair_address(self.token_a.address, self.token_b.address)
         self.is_new_pool = self.pair_address == Address("0x0000000000000000000000000000000000000000")
         if not self.is_new_pool:
             self.set_and_approve_pair_token(self.pair_address)
 
-        self.account_address = keeper_address
 
     def set_and_approve_pair_token(self, pair_address: Address):
         self.pair_address = pair_address
@@ -154,7 +154,7 @@ class UniswapV2(Contract):
         assert (isinstance(token_a_address, Address))
         assert (isinstance(token_b_address, Address))
 
-        return Address(self._factory_contract.functions.getPair(token_a_address.address, token_b_address.address).call())
+        return Address(self._factory_contract.functions.getPair(token_a_address.address, token_b_address.address).call({"from": self.account_address.address}))
 
     def approve(self, token: Token):
         assert (isinstance(token, Token))
@@ -196,7 +196,7 @@ class UniswapV2(Contract):
 
         result = self.graph_client.query_request(get_our_mint_txs_query, variables)['mints']
 
-        sorted_mints = sorted(result, key=lambda mint: mint['timestamp'], True)
+        sorted_mints = sorted(result, key=lambda mint: mint['timestamp'], reverse=True)
         return sorted_mints
 
     def get_our_burn_txs(self) -> List:
@@ -228,7 +228,7 @@ class UniswapV2(Contract):
 
         result = self.graph_client.query_request(get_our_burn_txs_query, variables)['burns']
 
-        sorted_burns = sorted(result, key=lambda burn: burn['timestamp'], True)
+        sorted_burns = sorted(result, key=lambda burn: burn['timestamp'], reverse=True)
         return sorted_burns
 
     def get_trades(self, pair: str, page_number: int = 100) -> List[Trade]:
@@ -300,7 +300,7 @@ class UniswapV2(Contract):
             result = self.graph_client.query_request(get_swaps_query, variables)
             swaps_list = result['swaps']
 
-            trades_list = trades_list.extend(list(map(lambda: item: UniswapTrade.from_message(item), swaps_list)))
+            trades_list = trades_list.extend(list(map(lambda item: UniswapTrade.from_message(item), swaps_list)))
 
         return trades_list
 
