@@ -245,6 +245,8 @@ class LeverjFuturesAPI(PyexAPI):
         return self.get_product(pair)["tickSize"]
 
     def get_minimum_order_quantity(self, pair: str):
+        #Reads the instrument configuration to get the smallest possible order quantity for the given instrument.
+        #The base significant digit value decides the smallest possible order quantity.
         assert(isinstance(pair, str))
         orderInstrument = self.get_product(pair)
         base_significant_digits = orderInstrument['baseSignificantDigits']
