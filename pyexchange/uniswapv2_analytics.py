@@ -31,6 +31,7 @@ from pyexchange.model import Trade
 
 
 class UniswapTrade(Trade):
+
     @staticmethod
     def from_message(trade: dict, pair: str, token_a: Token, token_b: Token) -> Trade:
         """
@@ -52,15 +53,22 @@ class UniswapTrade(Trade):
         if trade['pair']['token0']['id'] == token_a.address.address:
             swap_price = Wad.from_number(trade['pair']['token1Price'])
 
-            is_sell = trade['amount0In'] != "0"
+            is_sell = trade['amount0In'] != '0'
 
-            amount = Wad.from_number(trade['amountOut'])
+            if is_sell:
+                amount = Wad.from_number(trade['amount1Out']) / Wad.from_number(trade['pair']['token1Price'])
+            else:
+                amount = Wad.from_number(trade['amount0Out'])
+
         else:
             swap_price = Wad.from_number(trade['pair']['token0Price'])
 
-            is_sell = trade['amount0In'] != "0"
+            is_sell = trade['amount1In'] != "0"
 
-            amount = Wad.from_number(trade['amountOut'])
+            if is_sell:
+                amount = Wad.from_number(trade['amount0Out']) / Wad.from_number(trade['pair']['token0Price'])
+            else:
+                amount = Wad.from_number(trade['amount1Out'])
 
         return Trade(trade_id=trade['id'],
                      timestamp=int(trade['timestamp']),
@@ -68,6 +76,7 @@ class UniswapTrade(Trade):
                      is_sell=is_sell,
                      price=swap_price,
                      amount=amount)
+
 
 class UniswapV2Analytics(Contract):
     """
@@ -269,7 +278,7 @@ class UniswapV2Analytics(Contract):
         token_a = list(filter(lambda token: token.name == token_a_name, self.token_config))[0]
         token_b = list(filter(lambda token: token.name == token_b_name, self.token_config))[0]
 
-        pair_address = self.get_pair_address(token_a, token_b)
+        pair_address = self.get_pair_address(token_a.address, token_b.address)
 
         mint_events = self.get_our_mint_txs(pair_address)
         burn_events = self.get_our_burn_txs(pair_address)
@@ -329,7 +338,7 @@ class UniswapV2Analytics(Contract):
             result = self.graph_client.query_request(get_swaps_query, variables)
             swaps_list = result['swaps']
 
-            trades = list(map(lambda item: UniswapTrade.from_message(item, pair), swaps_list))
+            trades = list(map(lambda item: UniswapTrade.from_message(item, pair, token_a, token_b), swaps_list))
             trades_list.extend(trades)
 
         return trades_list

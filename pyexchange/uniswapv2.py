@@ -25,29 +25,7 @@ from pymaker.token import ERC20Token
 from pymaker.util import http_response_summary
 from pymaker.model import Token
 from pymaker.approval import directly
-from pyexchange.graph import GraphClient
-from pyexchange.model import Trade
 
-
-class UniswapTrade(Trade):
-    @staticmethod
-    def from_message(trade: dict, pair: str) -> Trade:
-        # assuming prices are denominated in quote token
-        swap_price = Wad.from_number(trade['pair']['token1Price'])
-
-        # assuming that we are always long the base token, and short quote
-        # if the amount of TokenA is 0, then we are essentially buying additional base token in exchange for quote token
-        is_sell = trade['amount0In'] != "0"
-
-        # assuming that amounts are always denominated in the base token
-        amount = Wad.from_number(trade['amount0Out'])
-
-        return Trade(trade_id=trade['id'],
-                     timestamp=int(trade['timestamp']),
-                     pair=pair,
-                     is_sell=is_sell,
-                     price=swap_price,
-                     amount=amount)
 
 class UniswapV2(Contract):
     """
@@ -64,16 +42,13 @@ class UniswapV2(Contract):
     Ifactory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')['abi']
     factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
 
-    def __init__(self, web3: Web3, token_a: Token, token_b: Token, keeper_address: Address, router_address: Address, factory_address: Address, graph_url: str = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2"):
+    def __init__(self, web3: Web3, token_a: Token, token_b: Token, keeper_address: Address, router_address: Address, factory_address: Address):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_a, Token))
         assert (isinstance(token_b, Token))
         assert (isinstance(keeper_address, Address))
         assert (isinstance(router_address, Address))
         assert (isinstance(factory_address, Address))
-        assert (isinstance(graph_url, str))
-
-        self.graph_client = GraphClient(graph_url)
 
         self.web3 = web3
         self.token_a = token_a
@@ -162,147 +137,6 @@ class UniswapV2(Contract):
 
         approval_function = directly()
         return approval_function(erc20_token, self.router_address, 'UniswapV2Router02')
-
-    def get_our_mint_txs(self) -> dict:
-        get_our_mint_txs_query = """query ($pair: Bytes!, $to: Bytes!)
-            {
-                mints (where: {pair: $pair, to: $to}) {
-                    amount0
-                    amount1
-                    id
-                    to
-                    sender
-                    timestamp
-                    pair {
-                        id
-                        token0 {
-                            id
-                        }
-                        token1 {
-                            id
-                        }
-                    }
-                    transaction {
-                        id
-                    }
-                }
-            }
-        """
-        variables = {
-            'pair': self.pair_address.address.lower(),
-            'to': self.account_address.address.lower()
-        }
-
-        result = self.graph_client.query_request(get_our_mint_txs_query, variables)['mints']
-
-        sorted_mints = sorted(result, key=lambda mint: mint['timestamp'], reverse=True)
-        return sorted_mints
-
-    def get_our_burn_txs(self) -> List:
-        get_our_burn_txs_query = """query ($pair: Bytes!, $to: Bytes!)
-            {
-                burns (where: {pair: $pair, to: $to}) {
-                    id
-                    to
-                    timestamp
-                    pair {
-                        id
-                        token0 {
-                            id
-                        }
-                        token1 {
-                            id
-                        }
-                    }
-                    transaction {
-                        id
-                    }
-                }
-            }
-        """
-        variables = {
-            'pair': self.pair_address.address.lower(),
-            'to': self.account_address.address.lower()
-        }
-
-        result = self.graph_client.query_request(get_our_burn_txs_query, variables)['burns']
-
-        sorted_burns = sorted(result, key=lambda burn: burn['timestamp'], reverse=True)
-        return sorted_burns
-
-    def get_trades(self, pair: str, page_number: int = 100) -> List[Trade]:
-        """
-            Assuming that previous mints and swaps have been recorded successfully,
-            and won't double write given unique identification of each trade
-
-            Two stage trades: one type of trade to monitor mint and burn;
-
-            get a list of mint and burn transaction timestamps for each pair
-
-            append set of swaps for the pair between timestamps to larger list of trades
-
-            restrict amount of querying to conduct with the page number
-
-            TODO: determine how/if to measure mints and burns amounts + price
-            TODO: add check to see if we've already retrieved the list of timestamps
-        """
-
-        trades_list = []
-
-        mint_events = self.get_our_mint_txs()
-        burn_events = self.get_our_burn_txs()
-
-        number_of_mints = len(mint_events)
-        number_of_burns = len(burn_events)
-
-        # construct an object of symmetric mint and burn events and append to list of events to iterate over
-        liquidity_events = {
-            'mints': mint_events,
-            'burns': burn_events
-        }
-
-        # iterate between each pair of mint and burn timestamps to query all swaps between those events
-        # if there's unbalance mints and burns, assume we've added but not removed liquidity, and set less than value to current timestamp
-        for index, mint  in enumerate(liquidity_events['mints']):
-            mint_timestamp = mint['timestamp']
-            burn_timestamp = liquidity_events['burns'][index] if number_of_mints == number_of_burns else int(time.time())
-
-            get_swaps_query = """query ($pair: Bytes!, $timestamp_mint: BigInt!, $timestamp_burn: BigInt!)
-            {
-                swaps(where: {pair: $pair, timestamp_gte: $timestamp_mint, timestamp_lte: $timestamp_burn}) {
-                    id
-                    pair {
-                        id
-                        totalSupply
-                        reserve0
-                        reserve1
-                        token0Price
-                        token1Price
-                    }
-                    transaction {
-                        id
-                    }
-                    timestamp
-                    amount0In
-                    amount1In
-                    amount0Out
-                    amount1Out
-                }
-            }
-            """
-            variables = {
-                'pair': self.pair_address.address.lower(),
-                'timestamp_mint': mint_timestamp,
-                'timestamp_burn': burn_timestamp
-            }
-
-            result = self.graph_client.query_request(get_swaps_query, variables)
-            swaps_list = result['swaps']
-
-            trades = list(map(lambda item: UniswapTrade.from_message(item, pair), swaps_list))
-            trades_list.extend(trades)
-
-        return trades_list
 
     def get_amounts_out(self, amount_in: Wad, tokens: List[Token]) -> List[Wad]:
         """ Calculate maximum output amount of a given input.
