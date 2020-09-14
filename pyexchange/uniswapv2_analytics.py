@@ -35,15 +35,15 @@ class UniswapTrade(Trade):
     @staticmethod
     def from_message(trade: dict, pair: str, token_a: Token, token_b: Token) -> Trade:
         """
-        TODO: use the token objects to identify position in the pair for price + amount determinations
+        Assumptions:
+            Prices are denominated in quote token
+            Aounts are denominated in the base token
 
-        assuming prices are denominated in quote token
+            We are always long the base token, and short quote
+            if the amount of TokenA is 0, then we are essentially buying additional base token in exchange for quote token
 
-        assuming that we are always long the base token, and short quote
-        if the amount of TokenA is 0, then we are essentially buying additional base token in exchange for quote token
-
-        assuming that amounts are always denominated in the base token
-
+        Uniswap pairs can occasionally differ in base-quote terms from our expectations and price feeds.
+        This requires a check to ensure that we are properly comparing asset pairs.
        """
         assert (isinstance(trade, dict))
         assert (isinstance(pair, str))
@@ -116,6 +116,8 @@ class UniswapV2Analytics(Contract):
         self._last_config_dict = None
         self._last_config = None
         self.token_config = self.get_token_config().tokens
+
+        self.last_mint_timestamp = Wad.from_number(0)
         
     def get_account_token_balance(self, token: Token) -> Wad:
         assert (isinstance(token, Token))
@@ -253,24 +255,17 @@ class UniswapV2Analytics(Contract):
 
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         """
-            Assuming that previous mints and swaps have been recorded successfully,
-            and won't double write given unique identification of each trade.
+            It is assumed that our liquidity in a pool will be added or removed all at once.
 
-            It is also assumed that our liquidity in a pool will be added or removed all at once.
-
-            Two stage trades: one type of trade to monitor mint and burn;
-
-            get a list of mint and burn transaction timestamps for each pair
-
-            append set of swaps for the pair between timestamps to larger list of trades
-
-            restrict amount of querying to conduct with the page number
+            Two stage information retrieval:
+                get list mint and burn events for our address;
+                get a list of mint and burn transaction timestamps for each pair;
+                append set of swaps for the pair between timestamps to larger list of trades
 
             Graph Protocol doesn't currently accept queries using Checksum addresses,
             so all addresses must be lowercased prior to submission.
 
-            TODO: determine how/if to measure mints and burns amounts + price
-            TODO: add check to see if we've already retrieved the list of timestamps
+            Check to see if we've already retrieved the list of timestamps to avoid overloading Graph node
         """
 
         token_a_name = 'WETH' if pair.split('-')[0] == 'ETH' or pair.split('-')[0] == 'WETH' else pair.split('-')[0]
@@ -293,6 +288,9 @@ class UniswapV2Analytics(Contract):
             'mints': mint_events,
             'burns': burn_events
         }
+
+        if self.last_mint_timestamp == Wad.from_number(mint_events[-1]['timestamp']):
+            return trades_list
 
         # iterate between each pair of mint and burn timestamps to query all swaps between those events
         # if there's unbalance mints and burns, assume we've added but not removed liquidity, and set less than value to current timestamp
@@ -340,6 +338,8 @@ class UniswapV2Analytics(Contract):
 
             trades = list(map(lambda item: UniswapTrade.from_message(item, pair, token_a, token_b), swaps_list))
             trades_list.extend(trades)
+
+        self.last_mint_timestamp = Wad.from_number(mint_events[-1]['timestamp'])
 
         return trades_list
 
