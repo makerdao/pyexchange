@@ -97,8 +97,8 @@ class UniswapV2Analytics(Contract):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_config_path, str))
         assert (isinstance(keeper_address, Address))
-        assert (isinstance(router_address, Address))
-        assert (isinstance(factory_address, Address))
+        assert (isinstance(router_address, Address) or router_address is None)
+        assert (isinstance(factory_address, Address) or factory_address is None)
         assert (isinstance(graph_url, str))
 
         self.graph_client = GraphClient(graph_url)
@@ -107,15 +107,17 @@ class UniswapV2Analytics(Contract):
 
         self.router_address = router_address
         self.factory_address = factory_address
-        self._router_contract = self._get_contract(web3, self.Irouter_abi, self.router_address)
-        self._factory_contract = self._get_contract(web3, self.Ifactory_abi, self.factory_address)
-
         self.account_address = keeper_address
 
-        self.reloadable_config = ReloadableConfig(token_config_path)
-        self._last_config_dict = None
-        self._last_config = None
-        self.token_config = self.get_token_config().tokens
+        # check to ensure that this isn't a mock instance before attempting to retrieve contracts
+        if router_address is not None and factory_address is not None:
+            self._router_contract = self._get_contract(web3, self.Irouter_abi, self.router_address)
+            self._factory_contract = self._get_contract(web3, self.Ifactory_abi, self.factory_address)
+
+            self.reloadable_config = ReloadableConfig(token_config_path)
+            self._last_config_dict = None
+            self._last_config = None
+            self.token_config = self.get_token_config().tokens
 
         self.last_mint_timestamp = Wad.from_number(0)
         
