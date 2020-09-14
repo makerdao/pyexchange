@@ -182,6 +182,16 @@ class UniswapV2Analytics(Contract):
 
         return self._last_config
 
+    def instantiate_tokens(self, pair: str) -> Tuple[Token, Token]:
+        assert (isinstance(pair, str))
+
+        token_a_name = 'WETH' if pair.split('-')[0] == 'ETH' or pair.split('-')[0] == 'WETH' else pair.split('-')[0]
+        token_b_name = 'WETH' if pair.split('-')[1] == 'ETH' or pair.split('-')[1] == 'WETH' else pair.split('-')[1]
+        token_a = list(filter(lambda token: token.name == token_a_name, self.token_config))[0]
+        token_b = list(filter(lambda token: token.name == token_b_name, self.token_config))[0]
+
+        return token_a, token_b
+
     def get_our_mint_txs(self, pair_address: Address) -> dict:
         assert (isinstance(pair_address, Address))
 
@@ -267,11 +277,10 @@ class UniswapV2Analytics(Contract):
 
             Check to see if we've already retrieved the list of timestamps to avoid overloading Graph node
         """
+        assert (isinstance(pair, str))
+        assert (isinstance(page_number, int))
 
-        token_a_name = 'WETH' if pair.split('-')[0] == 'ETH' or pair.split('-')[0] == 'WETH' else pair.split('-')[0]
-        token_b_name = 'WETH' if pair.split('-')[1] == 'ETH' or pair.split('-')[1] == 'WETH' else pair.split('-')[1]
-        token_a = list(filter(lambda token: token.name == token_a_name, self.token_config))[0]
-        token_b = list(filter(lambda token: token.name == token_b_name, self.token_config))[0]
+        token_a, token_b = self.instantiate_tokens(pair)
 
         pair_address = self.get_pair_address(token_a.address, token_b.address)
 
@@ -342,6 +351,53 @@ class UniswapV2Analytics(Contract):
         self.last_mint_timestamp = Wad.from_number(mint_events[-1]['timestamp'])
 
         return trades_list
+
+    def get_all_trades(self, pair: str, page_number: int=1) -> List[Trade]:
+        """
+        """
+        assert (isinstance(pair, str))
+        assert (isinstance(page_number, int))
+
+        token_a, token_b = self.instantiate_tokens(pair)
+
+        get_swaps_query = """query ($pair: Bytes!)
+        {
+            swaps(where: {pair: $pair}) {
+                id
+                pair {
+                    id
+                    token0 {
+                        id
+                    }
+                    token1 {
+                        id
+                    }
+                    totalSupply
+                    reserve0
+                    reserve1
+                    token0Price
+                    token1Price
+                }
+                transaction {
+                    id
+                }
+                timestamp
+                amount0In
+                amount1In
+                amount0Out
+                amount1Out
+            }
+        }
+        """
+        variables = {
+            'pair': pair_address.address.lower()
+        }
+
+        result = self.graph_client.query_request(get_swaps_query, variables)
+        swaps_list = result['swaps']
+
+        trades = list(map(lambda item: UniswapTrade.from_message(item, pair, token_a, token_b), swaps_list))
+        return trades
 
     def _deadline(self) -> int:
         """Get a predefined deadline."""
