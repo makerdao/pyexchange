@@ -361,6 +361,7 @@ class UniswapV2Analytics(Contract):
         assert (isinstance(page_number, int))
 
         token_a, token_b = self.instantiate_tokens(pair)
+        pair_address = self.get_pair_address(token_a.address, token_b.address)
 
         get_swaps_query = """query ($pair: Bytes!)
         {
