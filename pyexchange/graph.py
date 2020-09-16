@@ -37,7 +37,7 @@ class GraphClient:
 
     def mutation_request(self, mutation: str, variables: dict = None) -> dict:
         assert (isinstance(mutation, str))
-        assert (isinstance(variables, dict) or isinstance(variables, None))
+        assert (isinstance(variables, dict) or variables is None)
 
         headers = {'Accept': 'application/json',
                    'Content-Type': 'application/json'}
@@ -56,7 +56,7 @@ class GraphClient:
 
     def query_request(self, query: str, variables: dict = None) -> dict:
         assert (isinstance(query, str))
-        assert (isinstance(variables, dict) or isinstance(variables, None))
+        assert (isinstance(variables, dict) or variables is None)
 
         headers = {'Accept': 'application/json',
                    'Content-Type': 'application/json'}

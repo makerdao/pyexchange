@@ -80,18 +80,12 @@ class UniswapTrade(Trade):
 
 class UniswapV2Analytics(Contract):
     """
-    UniswapV2 Python Client
-
-    Each UniswapV2 instance is intended to be used with a single pool at a time.
-
-    Documentation is available here: https://uniswap.org/docs/v2/
+    UniswapV2 Graph Protocol Client
+    Graph Protocol Explorer is available here: https://thegraph.com/explorer/subgraph/graphprotocol/uniswap
     """
 
-    pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
     Irouter_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')['abi']
-    router_abi = Contract._load_abi(__name__, 'abi/UniswapV2Router02.abi')
     Ifactory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')['abi']
-    factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
 
     def __init__(self, web3: Web3, token_config_path: str, keeper_address: Address, router_address: Address, factory_address: Address, graph_url: str = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2"):
         assert (isinstance(web3, Web3))
@@ -117,7 +111,7 @@ class UniswapV2Analytics(Contract):
             self.reloadable_config = ReloadableConfig(token_config_path)
             self._last_config_dict = None
             self._last_config = None
-            self.token_config = self.get_token_config().tokens
+            self.token_config = self.get_token_config().token_config
 
         self.last_mint_timestamp = Wad.from_number(0)
         
@@ -187,10 +181,16 @@ class UniswapV2Analytics(Contract):
     def instantiate_tokens(self, pair: str) -> Tuple[Token, Token]:
         assert (isinstance(pair, str))
 
+        def get_address(value) -> Address:
+            return Address(value['tokenAddress']) if 'tokenAddress' in value else None
+
+        def get_decimals(value) -> int:
+            return value['tokenDecimals'] if 'tokenDecimals' in value else 18
+
         token_a_name = 'WETH' if pair.split('-')[0] == 'ETH' or pair.split('-')[0] == 'WETH' else pair.split('-')[0]
         token_b_name = 'WETH' if pair.split('-')[1] == 'ETH' or pair.split('-')[1] == 'WETH' else pair.split('-')[1]
-        token_a = list(filter(lambda token: token.name == token_a_name, self.token_config))[0]
-        token_b = list(filter(lambda token: token.name == token_b_name, self.token_config))[0]
+        token_a = Token(token_a_name, get_address(self.token_config[token_a_name]), get_decimals(self.token_config[token_a_name]))
+        token_b = Token(token_b_name, get_address(self.token_config[token_b_name]), get_decimals(self.token_config[token_b_name]))
 
         return token_a, token_b
 
@@ -354,7 +354,7 @@ class UniswapV2Analytics(Contract):
 
         return trades_list
 
-    def get_all_trades(self, pair: str, page_number: int=1) -> List[Trade]:
+    def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         """
         """
         assert (isinstance(pair, str))
