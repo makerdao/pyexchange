@@ -35,9 +35,9 @@ class GraphClient:
         self.graph_url = graph_url
         self.timeout = timeout
 
-    def mutation_request(self, mutation: str, variables: dict = None):
+    def mutation_request(self, mutation: str, variables: dict = None) -> dict:
         assert (isinstance(mutation, str))
-        assert (isinstance(variables, dict) or isinstance(variables, None))
+        assert (isinstance(variables, dict) or variables is None)
 
         headers = {'Accept': 'application/json',
                    'Content-Type': 'application/json'}
@@ -52,12 +52,11 @@ class GraphClient:
                                                json=json,
                                                timeout=self.timeout))
 
-        logging.info(f"Executed mutation and received response: {result}")
         return result['data']
 
     def query_request(self, query: str, variables: dict = None) -> dict:
         assert (isinstance(query, str))
-        assert (isinstance(variables, str) or isinstance(variables, None))
+        assert (isinstance(variables, dict) or variables is None)
 
         headers = {'Accept': 'application/json',
                    'Content-Type': 'application/json'}
@@ -72,7 +71,6 @@ class GraphClient:
                                                json=json,
                                                timeout=self.timeout))
 
-        logging.info(f"Executed query and received response: {result}")
         return result['data']
 
     def _result(self, result) -> Optional[dict]:

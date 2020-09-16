@@ -25,8 +25,6 @@ from pymaker.token import ERC20Token
 from pymaker.util import http_response_summary
 from pymaker.model import Token
 from pymaker.approval import directly
-from pyexchange.graph import GraphClient
-from pyexchange.model import Trade
 
 
 class UniswapV2(Contract):
@@ -41,10 +39,8 @@ class UniswapV2(Contract):
     pair_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Pair.abi')
     Irouter_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')['abi']
     router_abi = Contract._load_abi(__name__, 'abi/UniswapV2Router02.abi')
-    router_bin = Contract._load_bin(__name__, 'abi/UniswapV2Router02.bin')
     Ifactory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')['abi']
     factory_abi = Contract._load_abi(__name__, 'abi/UniswapV2Factory.abi')
-    factory_bin = Contract._load_bin(__name__, 'abi/UniswapV2Factory.bin')
 
     def __init__(self, web3: Web3, token_a: Token, token_b: Token, keeper_address: Address, router_address: Address, factory_address: Address):
         assert (isinstance(web3, Web3))
@@ -62,12 +58,13 @@ class UniswapV2(Contract):
         self._router_contract = self._get_contract(web3, self.Irouter_abi, self.router_address)
         self._factory_contract = self._get_contract(web3, self.Ifactory_abi, self.factory_address)
 
+        self.account_address = keeper_address
+
         self.pair_address = self.get_pair_address(self.token_a.address, self.token_b.address)
         self.is_new_pool = self.pair_address == Address("0x0000000000000000000000000000000000000000")
         if not self.is_new_pool:
             self.set_and_approve_pair_token(self.pair_address)
 
-        self.account_address = keeper_address
 
     def set_and_approve_pair_token(self, pair_address: Address):
         self.pair_address = pair_address
@@ -131,7 +128,7 @@ class UniswapV2(Contract):
         assert (isinstance(token_a_address, Address))
         assert (isinstance(token_b_address, Address))
 
-        return Address(self._factory_contract.functions.getPair(token_a_address.address, token_b_address.address).call())
+        return Address(self._factory_contract.functions.getPair(token_a_address.address, token_b_address.address).call({"from": self.account_address.address}))
 
     def approve(self, token: Token):
         assert (isinstance(token, Token))
@@ -140,10 +137,6 @@ class UniswapV2(Contract):
 
         approval_function = directly()
         return approval_function(erc20_token, self.router_address, 'UniswapV2Router02')
-
-    @staticmethod
-    def _to_32byte_hex(val):
-        return Web3.toHex(Web3.toBytes(val).rjust(32, b'\0'))
 
     def get_amounts_out(self, amount_in: Wad, tokens: List[Token]) -> List[Wad]:
         """ Calculate maximum output amount of a given input.
