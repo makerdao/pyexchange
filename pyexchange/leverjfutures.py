@@ -187,6 +187,11 @@ class LeverjFuturesAPI(PyexAPI):
             if balances[key]['symbol'] == coin:
                 return balances[key]['available']
 
+    def get_quote_balance(self, quote_asset_address: str) -> str:
+        balances = self.get_balances()
+        quote_balance = balances[quote_asset_address]['available']
+        return quote_balance
+
     def get_pending(self, coin: str):
         assert(isinstance(coin, str))
         balances = self.get_balances()
@@ -238,6 +243,14 @@ class LeverjFuturesAPI(PyexAPI):
     def get_tickSize(self, pair: str):
         assert(isinstance(pair, str))
         return self.get_product(pair)["tickSize"]
+
+    def get_minimum_order_quantity(self, pair: str):
+        #Reads the instrument configuration to get the smallest possible order quantity for the given instrument.
+        #The base significant digit value decides the smallest possible order quantity.
+        assert(isinstance(pair, str))
+        orderInstrument = self.get_product(pair)
+        base_significant_digits = orderInstrument['baseSignificantDigits']
+        return Decimal(1)/(Decimal(pow(Decimal(10), Decimal(base_significant_digits))))
 
     def get_info(self):
         return self._http_authenticated("GET", "/futures/api/v1", "/all/info", None)
@@ -335,11 +348,15 @@ class LeverjFuturesAPI(PyexAPI):
         triggerPrice = str(triggerPrice)
         quantity = str(amount)
         order = self.createNewOrder(side, price, triggerPrice, quantity, orderInstrument, orderType)
-        self.logger.info(f'LEVERJ: order is {order}')
-        return self._http_authenticated("POST", "/futures/api/v1", "/order", [order])[0]['uuid']
+        order_quantity = order['quantity']
+        if order_quantity > 0:
+            self.logger.info(f'order_quantity: {order_quantity}')
+            self.logger.info(f'LEVERJ: order is {order}')
+            return self._http_authenticated("POST", "/futures/api/v1", "/order", [order])[0]['uuid']
 
     def cancel_order(self, order_id: str) -> bool:
         assert(isinstance(order_id, str))
+        self.logger.info(f'cancelled order: {order_id}')
 
         result = self._http_authenticated("DELETE", "/futures/api/v1", f"/order/{order_id}", None)
 

@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2017-2019 reverendus, grandizzy
+# Copyright (C) 2017-2020 reverendus, grandizzy, Exef
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
+import json
 from pprint import pformat
 from typing import Optional, List
 
@@ -28,110 +29,28 @@ import hashlib
 from urllib.parse import urlencode
 
 from pyexchange.api import PyexAPI
+from pyexchange.model import Order as BaseOrder, Trade
 
 from pymaker.numeric import Wad
 from pymaker.util import http_response_summary
 
 
-class Order:
-    def __init__(self,
-                 order_id: str,
-                 pair: str,
-                 is_sell: bool,
-                 price: Wad,
-                 amount: Wad,
-                 remaining_amount: Wad):
-
-        assert(isinstance(pair, str))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
-        assert(isinstance(remaining_amount, Wad))
-
-        self.order_id = order_id
-        self.pair = pair
-        self.is_sell = is_sell
-        self.price = price
-        self.amount = amount
-        self.remaining_amount = remaining_amount
-
-    @property
-    def sell_to_buy_price(self) -> Wad:
-        return self.price
-
-    @property
-    def buy_to_sell_price(self) -> Wad:
-        return self.price
-
-    @property
-    def remaining_buy_amount(self) -> Wad:
-        return self.remaining_amount*self.price if self.is_sell else self.remaining_amount
-
-    @property
-    def remaining_sell_amount(self) -> Wad:
-        return self.remaining_amount if self.is_sell else self.remaining_amount*self.price
-
-    def __repr__(self):
-        return pformat(vars(self))
-
+class Order(BaseOrder):
     @staticmethod
     def to_order(item):
-        return Order(order_id=item['OrderUuid'],
-                     pair=item['Exchange'],
-                     is_sell=True if item['OrderType'] == 'LIMIT_SELL' else False,
-                     price=Wad.from_number(item['Limit']),
-                     amount=Wad.from_number(item['Quantity']),
-                     remaining_amount=Wad.from_number(item['QuantityRemaining']))
-
-
-class Trade:
-    def __init__(self,
-                 trade_id: str,
-                 timestamp: int,
-                 pair: Optional[str],
-                 is_sell: bool,
-                 price: Wad,
-                 amount: Wad):
-        assert(isinstance(trade_id, str))
-        assert(isinstance(timestamp, int))
-        assert(isinstance(pair, str) or (pair is None))
-        assert(isinstance(is_sell, bool))
-        assert(isinstance(price, Wad))
-        assert(isinstance(amount, Wad))
-
-        self.trade_id = trade_id
-        self.timestamp = timestamp
-        self.pair = pair
-        self.is_sell = is_sell
-        self.price = price
-        self.amount = amount
-
-    def __eq__(self, other):
-        assert(isinstance(other, Trade))
-        return self.trade_id == other.trade_id and \
-               self.timestamp == other.timestamp and \
-               self.pair == other.pair and \
-               self.is_sell == other.is_sell and \
-               self.price == other.price and \
-               self.amount == other.amount
-
-    def __hash__(self):
-        return hash((self.trade_id,
-                     self.timestamp,
-                     self.pair,
-                     self.is_sell,
-                     self.price,
-                     self.amount))
-
-    def __repr__(self):
-        return pformat(vars(self))
+        return Order(order_id=item['id'],
+                     timestamp=int(dateutil.parser.parse(item['createdAt'] + 'Z').timestamp()),
+                     pair=item['marketSymbol'],
+                     is_sell=True if item['direction'] == 'SELL' else False,
+                     price=Wad.from_number(item['limit']),
+                     amount=Wad.from_number(item['quantity']))
 
 
 class BittrexApi(PyexAPI):
     """Bittrex API interface.
 
     Developed according to the following manual:
-    <https://bittrex.github.io/api/v1-1>.
+    <https://bittrex.github.io/api/v3>.
     """
 
     logger = logging.getLogger()
@@ -147,24 +66,24 @@ class BittrexApi(PyexAPI):
         self.secret_key = secret_key
         self.timeout = timeout
 
-    def get_markets(self):
-        return self._http_request("GET", "/api/v1.1/public/getmarkets", {})['result']
-
-    def get_pair(self, pair: str):
+    def get_markets(self) -> List[dict]:
+        return self._http_request("GET", "/v3/markets", {})
+    
+    def get_precision(self, pair: str) -> int:
         assert(isinstance(pair, str))
-        return next(filter(lambda symbol: symbol['MarketName'] == pair, self.get_markets()))
+        return self._http_request("GET", f"/v3/markets/{pair}", {})["precision"]
 
-    def get_balances(self):
-        return self._http_authenticated_request("GET", "/api/v1.1/account/getbalances", {})['result']
+    def get_pair(self, pair: str) -> dict:
+        assert(isinstance(pair, str))
+        return next(filter(lambda market: market['symbol'] == pair, self.get_markets()))
+
+    def get_balances(self) -> dict:
+        return self._http_authenticated_request("GET", "/v3/balances")
 
     def get_orders(self, pair: str) -> List[Order]:
         assert(isinstance(pair, str))
 
-        params = {
-            'market': pair
-        }
-
-        orders = self._http_authenticated_request("GET", "/api/v1.1/market/getopenorders", params)['result']
+        orders = self._http_authenticated_request("GET", f"/v3/orders/open?marketSymbol={pair}")
 
         return list(map(lambda item: Order.to_order(item), orders))
 
@@ -174,25 +93,21 @@ class BittrexApi(PyexAPI):
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
 
-        params = {
-            "quantity": str(amount),
-            "rate": str(price),
-            "market": pair
+        body = {
+            'marketSymbol': pair,
+            'direction': "SELL" if is_sell else "BUY",
+            'quantity': str(amount),
+            'limit': str(price),
+            'timeInForce': 'GOOD_TIL_CANCELLED',
+            'type': 'LIMIT'
         }
 
-        order_type = "selllimit" if is_sell else "buylimit"
+        self.logger.info(f"Placing order ({body['direction']}, amount {body['quantity']} of {pair},"
+                         f" price {body['limit']})...")
 
-        self.logger.info(f"Placing order ({order_type}, amount {params['quantity']} of {pair},"
-                         f" price {params['rate']})...")
+        order_id = self._http_authenticated_request("POST", f"/v3/orders", body)['id']
 
-        response = self._http_authenticated_request("GET", f"/api/v1.1/market/{order_type}", params)
-
-        if response['success'] is False:
-            raise Exception(f"Bittrex Failed to place order {response['message']}")
-
-        order_id = response['result']['uuid']
-
-        self.logger.info(f"Placed order type {order_type}, id #{order_id}")
+        self.logger.info(f"Placed order type {body['direction']}, id #{order_id}")
 
         return order_id
 
@@ -201,51 +116,39 @@ class BittrexApi(PyexAPI):
 
         self.logger.info(f"Cancelling order #{order_id}...")
 
-        params = {
-            "uuid": order_id
-        }
+        result = self._http_authenticated_request("DELETE", f"/v3/orders/{order_id}")
 
-        result = self._http_authenticated_request("GET", "/api/v1.1/market/cancel", params)
-
-        return result['success']
+        return "closedAt" in result and result['closedAt'] is not None
 
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        params = {
-            'market': pair
-        }
+        trades = self._http_authenticated_request("GET", f"/v3/orders/closed?marketSymbol={pair}")
 
-        result = self._http_authenticated_request("GET", "/api/v1.1/account/getorderhistory", params)['result']
-
-        return list(map(lambda item: Trade(trade_id=item['OrderUuid'],
-                                           timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
-                                           pair=item['Exchange'],
-                                           is_sell=item['OrderType'] == 'LIMIT_SELL',
-                                           price=Wad.from_number(item['PricePerUnit']),
-                                           amount=Wad.from_number(item['Quantity'] - item['QuantityRemaining'])), result))
+        return list(map(lambda item: Trade(trade_id=item['id'],
+                                           timestamp=int(dateutil.parser.parse(item['createdAt'] + 'Z').timestamp()),
+                                           pair=item['marketSymbol'],
+                                           is_sell=True if item['direction'] == 'SELL' else False,
+                                           price=Wad.from_number(item['limit']),
+                                           amount=Wad.from_number(item['fillQuantity'])), 
+                        trades))
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
         assert(page_number == 1)
 
-        params = {
-            'market': pair
-        }
+        result = self._http_request("GET", f"/v3/markets/{pair}/trades", {})
 
-        result = self._http_request("GET", "/api/v1.1/public/getmarkethistory", params)['result']
-        if result is None:
-            return []
-
-        return list(map(lambda item: Trade(trade_id=item['Uuid'],
-                                           timestamp=int(dateutil.parser.parse(item['TimeStamp'] + 'Z').timestamp()),
+        return list(map(lambda item: Trade(trade_id=item['id'],
+                                           timestamp=int(dateutil.parser.parse(item['executedAt'] + 'Z').timestamp()),
                                            pair=pair,
-                                           is_sell=item['OrderType'] == 'SELL',
-                                           price=Wad.from_number(item['Price']),
-                                           amount=Wad.from_number(item['Quantity'])), result))
+                                           is_sell=True if item['takerSide'] == "SELL" else False,
+                                           price=Wad.from_number(item['rate']),
+                                           amount=Wad.from_number(item['quantity'])), 
+                        result))
 
     def _http_request(self, method: str, resource: str, params: dict):
         assert(isinstance(method, str))
@@ -260,21 +163,35 @@ class BittrexApi(PyexAPI):
                                              url=url,
                                              timeout=self.timeout))
 
-    def _http_authenticated_request(self, method: str, resource: str, params: dict):
+    def _http_authenticated_request(self, method: str, resource: str, body: Optional[dict] = None): 
         assert(isinstance(method, str))
         assert(isinstance(resource, str))
-        assert(isinstance(params, dict) or (params is None))
+        assert(isinstance(body, dict) or (body is None))
 
-        params['apikey'] = self.api_key
-        params['nonce'] = str(int(time.time()))
+        timestamp = str(int(time.time() * 1000))
 
-        url = f"{self.api_server}{resource}?{urlencode(params)}"
+        content = json.dumps(body) if body else ""
+        
+        content_hash = hashlib.sha512(content.encode()).hexdigest()
 
-        signature = hmac.new(self.secret_key.encode(), url.encode(), hashlib.sha512).hexdigest()
+        url = f"{self.api_server}{resource}"
+
+        message = f"{timestamp}{url}{method}{content_hash}"
+
+        signature = hmac.new(self.secret_key.encode(), message.encode(), hashlib.sha512).hexdigest()
+
+        headers = {
+            "Content-Type": "application/json",
+            "Api-Key": self.api_key,
+            "Api-TimeStamp": timestamp,
+            "Api-Content-Hash": content_hash,
+            "Api-Signature": signature,
+        }
 
         return self._result(requests.request(method=method,
                                              url=url,
-                                             headers ={'apisign': signature},
+                                             data=content,
+                                             headers =headers,
                                              timeout=self.timeout))
 
     @staticmethod
