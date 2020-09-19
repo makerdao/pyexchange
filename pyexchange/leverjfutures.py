@@ -187,11 +187,13 @@ class LeverjFuturesAPI(PyexAPI):
                 return balances[key]['available']
 
     def get_quote_balance(self, quote_asset_address: str) -> str:
+        assert(isinstance(quote_asset_address, str))
         balances = self.get_balances()
         quote_balance = balances[quote_asset_address]['available']
         return quote_balance
 
     def get_plasma_balance(self, quote_asset_address: str) -> str:
+        assert(isinstance(quote_asset_address, str))
         balances = self.get_balances()
         quote_balance = balances[quote_asset_address]['plasma']
         return quote_balance
@@ -214,6 +216,7 @@ class LeverjFuturesAPI(PyexAPI):
                 return position['size']
 
     def get_position_in_wad(self, coin: str) -> Wad:
+        assert(isinstance(coin, str))
         position = self.get_position(coin)
         if (coin == 'BTC'):
             decimals = Decimal(10)**Decimal(18)
