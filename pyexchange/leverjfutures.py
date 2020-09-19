@@ -127,7 +127,7 @@ class Trade:
 
     @staticmethod
     def from_our_list(pair, trade):
-        return Trade(trade_id=trade['executionid'],
+        return Trade(trade_id=trade['executionId'],
                      timestamp=int(int(trade['eventTime'])/1000000),
                      pair=pair,
                      is_sell=True if trade['side'] == 'sell' else False,
@@ -165,7 +165,6 @@ class LeverjFuturesAPI(PyexAPI):
         self.timeout = timeout
         self.config = requests.get(url).json()
 
-        self.logger.info(f"LEVERJ: account id is {self.account_id} and web3.eth.default account is {self.web3.eth.defaultAccount}")
 
     def get_account(self):
         return self._http_authenticated("GET", "/futures/api/v1", "/account", None)
@@ -188,8 +187,15 @@ class LeverjFuturesAPI(PyexAPI):
                 return balances[key]['available']
 
     def get_quote_balance(self, quote_asset_address: str) -> str:
+        assert(isinstance(quote_asset_address, str))
         balances = self.get_balances()
         quote_balance = balances[quote_asset_address]['available']
+        return quote_balance
+
+    def get_plasma_balance(self, quote_asset_address: str) -> str:
+        assert(isinstance(quote_asset_address, str))
+        balances = self.get_balances()
+        quote_balance = balances[quote_asset_address]['plasma']
         return quote_balance
 
     def get_pending(self, coin: str):
@@ -210,6 +216,7 @@ class LeverjFuturesAPI(PyexAPI):
                 return position['size']
 
     def get_position_in_wad(self, coin: str) -> Wad:
+        assert(isinstance(coin, str))
         position = self.get_position(coin)
         if (coin == 'BTC'):
             decimals = Decimal(10)**Decimal(18)
@@ -267,6 +274,15 @@ class LeverjFuturesAPI(PyexAPI):
                 result_pair.append(item)
         return list(map(lambda item: Order.from_list(item, pair), result_pair))
 
+    def get_id_from_pair(self, pair: str) -> str:
+        assert(isinstance(pair, str))
+        if pair=="BTCUSD":
+            return "1"
+        elif pair=="ETHUSD":
+            return "2"
+        else:
+            self.logger.info(f'You have passed in an unsupported pair')
+
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
@@ -274,7 +290,7 @@ class LeverjFuturesAPI(PyexAPI):
         result_pair =  []
         result = self._http_authenticated("GET", "/futures/api/v1", f"/account/execution?count={count}", None)
         for item in result:
-            if item['instrument'] == pair:
+            if item['instrument'] == self.get_id_from_pair(pair):
                 result_pair.append(item)
 
         return list(map(lambda item: Trade.from_our_list(pair, item), result_pair))
@@ -282,12 +298,10 @@ class LeverjFuturesAPI(PyexAPI):
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         assert(isinstance(pair, str))
         assert(isinstance(page_number, int))
-        result = self._http_authenticated("GET", "/futures/api/v1", f"/instrument/{pair}/trade", None)
+
+        result = self._http_authenticated("GET", "/futures/api/v1", f"/instrument/{self.get_id_from_pair(pair)}/trade", None)
 
         return list(map(lambda item: Trade.from_all_list(pair, item), result))
-
-    def get_symbol_trades(self, symbol: str):
-        return self._http_authenticated("GET", "/futures/api/v1", f"/instrument/{symbol}/trade", None)
 
     def get_orderbook_symbol(self, symbol: str):
         return self._http_authenticated("GET", "/futures/api/v1", f"/instrument/{symbol}/orderbook", None)
