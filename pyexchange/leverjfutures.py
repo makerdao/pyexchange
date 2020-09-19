@@ -303,9 +303,6 @@ class LeverjFuturesAPI(PyexAPI):
 
         return list(map(lambda item: Trade.from_all_list(pair, item), result))
 
-    def get_symbol_trades(self, symbol: str):
-        return self._http_authenticated("GET", "/futures/api/v1", f"/instrument/{get_id_from_pair(symbol)}/trade", None)
-
     def get_orderbook_symbol(self, symbol: str):
         return self._http_authenticated("GET", "/futures/api/v1", f"/instrument/{symbol}/orderbook", None)
 
