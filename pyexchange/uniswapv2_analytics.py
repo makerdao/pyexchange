@@ -300,57 +300,69 @@ class UniswapV2Analytics(Contract):
             'burns': burn_events
         }
 
-        if self.last_mint_timestamp == Wad.from_number(mint_events[-1]['timestamp']):
-            return trades_list
+        if number_of_mints > 0:
+            if self.last_mint_timestamp == Wad.from_number(mint_events[-1]['timestamp']):
+                return trades_list
 
         # iterate between each pair of mint and burn timestamps to query all swaps between those events
         # if there's unbalance mints and burns, assume we've added but not removed liquidity, and set less than value to current timestamp
         for index, mint  in enumerate(liquidity_events['mints']):
+            final_query = False
+            trades_to_skip = 0
+
             mint_timestamp = mint['timestamp']
             burn_timestamp = liquidity_events['burns'][index] if number_of_mints == number_of_burns else int(time.time())
 
-            get_swaps_query = """query ($pair: Bytes!, $timestamp_mint: BigInt!, $timestamp_burn: BigInt!)
-            {
-                swaps(where: {pair: $pair, timestamp_gte: $timestamp_mint, timestamp_lte: $timestamp_burn}) {
-                    id
-                    pair {
+            while final_query == False:
+                get_swaps_query = """query ($skip: Int!, $pair: Bytes!, $timestamp_mint: BigInt!, $timestamp_burn: BigInt!)
+                {
+                    swaps(first: 1000, skip: $skip, where: {pair: $pair, timestamp_gte: $timestamp_mint, timestamp_lte: $timestamp_burn}) {
                         id
-                        token0 {
+                        pair {
+                            id
+                            token0 {
+                                id
+                            }
+                            token1 {
+                                id
+                            }
+                            totalSupply
+                            reserve0
+                            reserve1
+                            token0Price
+                            token1Price
+                        }
+                        transaction {
                             id
                         }
-                        token1 {
-                            id
-                        }
-                        totalSupply
-                        reserve0
-                        reserve1
-                        token0Price
-                        token1Price
+                        timestamp
+                        amount0In
+                        amount1In
+                        amount0Out
+                        amount1Out
                     }
-                    transaction {
-                        id
-                    }
-                    timestamp
-                    amount0In
-                    amount1In
-                    amount0Out
-                    amount1Out
                 }
-            }
-            """
-            variables = {
-                'pair': pair_address.address.lower(),
-                'timestamp_mint': mint_timestamp,
-                'timestamp_burn': burn_timestamp
-            }
+                """
+                variables = {
+                    'skip': trades_to_skip,
+                    'pair': pair_address.address.lower(),
+                    'timestamp_mint': mint_timestamp,
+                    'timestamp_burn': burn_timestamp
+                }
 
-            result = self.graph_client.query_request(get_swaps_query, variables)
-            swaps_list = result['swaps']
+                result = self.graph_client.query_request(get_swaps_query, variables)
+                swaps_list = result['swaps']
 
-            trades = list(map(lambda item: UniswapTrade.from_message(item, pair, token_a, token_b), swaps_list))
-            trades_list.extend(trades)
+                trades = list(map(lambda item: UniswapTrade.from_message(item, pair, token_a, token_b), swaps_list))
+                trades_to_skip += 1000
 
-        self.last_mint_timestamp = Wad.from_number(mint_events[-1]['timestamp'])
+                if len(trades) < 1000:
+                    final_query = True
+
+                trades_list.extend(trades)
+
+        if number_of_mints > 0:
+            self.last_mint_timestamp = Wad.from_number(mint_events[-1]['timestamp'])
 
         return trades_list
 
