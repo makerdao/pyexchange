@@ -328,8 +328,8 @@ class LeverjFuturesAPI(PyexAPI):
     def createNewOrder(self, side: str, price: str, triggerPrice: str, quantity: str, orderInstrument: dict, orderType: str) -> dict:
         price_precision = orderInstrument.get('quoteSignificantDigits')
         quantity_precision = orderInstrument.get('baseSignificantDigits')
-        #below line ensures leverage of 1, if you want leverage of 2, you would need to subtract by 99
-        max_leverage = orderInstrument['maxLeverage'] - 100
+        #below line means you aren't using any leverage, if you want 5K DAI position to control 10K DAI worth of BTC, use leverage of 1
+        max_leverage = 0
         order = {
                 'accountId': self.account_id,
                 'originator': self.api_key,
