@@ -34,7 +34,7 @@ from pyexchange.model import Trade
 class UniswapTrade(Trade):
 
     @staticmethod
-    def from_message(trade: dict, pair: str, token_a: Token, token_b: Token, our_liquidity_balance: Wad) -> Trade:
+    def from_our_trades_message(trade: dict, pair: str, base_token: Token, our_liquidity_balance: Wad, previous_base_token_reserves: Wad) -> Trade:
         """
         Assumptions:
             Prices are denominated in quote token
@@ -43,38 +43,36 @@ class UniswapTrade(Trade):
             We are always long the base token, and short quote
             if the amount of TokenA is 0, then we are essentially buying additional base token in exchange for quote token
 
-            If the quote_token_volume exceeds the base_token_volume, than the trade is a sale, otherwise its a buy
+            If the base token reserves increase compared to the last block, then the trade is a buy
 
         Uniswap pairs can occasionally differ in base-quote terms from our expectations and price feeds.
         This requires a check to ensure that we are properly comparing asset pairs.
        """
         assert (isinstance(trade, dict))
         assert (isinstance(pair, str))
-        assert (isinstance(token_a, Token))
-        assert (isinstance(token_b, Token))
+        assert (isinstance(base_token, Token))
         assert (isinstance(our_liquidity_balance, Wad))
+        assert (isinstance(previous_base_token_reserves, Wad))
 
         our_pool_share = our_liquidity_balance / Wad.from_number(trade['pair']['totalSupply'])
 
-        if trade['pair']['token0']['id'] == token_a.address.address:
+        if trade['pair']['token0']['id'] == base_token.address.address:
             swap_price = Wad.from_number(trade['reserve1']) / Wad.from_number(trade['reserve0'])
 
             base_token_volume = Wad.from_number(trade['hourlyVolumeToken0']) * swap_price
             quote_token_volume = Wad.from_number(trade['hourlyVolumeToken1']) / swap_price
 
-            is_sell = quote_token_volume > base_token_volume
+            is_sell = Wad.from_number(trade['reserve1']) < previous_base_token_reserves
 
             amount = our_pool_share * Wad.from_number(trade['hourlyVolumeToken0'])
 
         else:
             swap_price = Wad.from_number(trade['reserve0']) / Wad.from_number(trade['reserve1'])
 
-            # base_token_volume = Wad.from_number(trade['hourlyVolumeToken0']) / Wad.from_number(trade['pair']['token0Price'])
-            # quote_token_volume = Wad.from_number(trade['hourlyVolumeToken1']) / Wad.from_number(trade['pair']['token1Price'])
             base_token_volume = Wad.from_number(trade['hourlyVolumeToken0']) / swap_price
             quote_token_volume = Wad.from_number(trade['hourlyVolumeToken1']) * swap_price
 
-            is_sell = quote_token_volume > base_token_volume
+            is_sell = Wad.from_number(trade['reserve0']) < previous_base_token_reserves
 
             amount = our_pool_share * Wad.from_number(trade['hourlyVolumeToken1'])
 
@@ -85,6 +83,40 @@ class UniswapTrade(Trade):
                      price=swap_price,
                      amount=amount)
 
+    @staticmethod
+    def from_all_trades_message(trade: dict, pair: str, base_token: Token, previous_base_token_reserves: Wad) -> Trade:
+        assert (isinstance(trade, dict))
+        assert (isinstance(pair, str))
+        assert (isinstance(base_token, Token))
+        assert (isinstance(our_liquidity_balance, Wad))
+        assert (isinstance(previous_base_token_reserves, Wad))
+
+        if trade['pair']['token0']['id'] == base_token.address.address:
+            swap_price = Wad.from_number(trade['reserve1']) / Wad.from_number(trade['reserve0'])
+
+            base_token_volume = Wad.from_number(trade['hourlyVolumeToken0']) * swap_price
+            quote_token_volume = Wad.from_number(trade['hourlyVolumeToken1']) / swap_price
+
+            is_sell = Wad.from_number(trade['reserve1']) < previous_base_token_reserves
+
+            amount = Wad.from_number(trade['hourlyVolumeToken0'])
+
+        else:
+            swap_price = Wad.from_number(trade['reserve0']) / Wad.from_number(trade['reserve1'])
+
+            base_token_volume = Wad.from_number(trade['hourlyVolumeToken0']) / swap_price
+            quote_token_volume = Wad.from_number(trade['hourlyVolumeToken1']) * swap_price
+
+            is_sell = Wad.from_number(trade['reserve0']) < previous_base_token_reserves
+
+            amount = Wad.from_number(trade['hourlyVolumeToken1'])
+
+        return Trade(trade_id=str(uuid.uuid4()),
+                     timestamp=int(trade['hourStartUnix']),
+                     pair=pair,
+                     is_sell=is_sell,
+                     price=swap_price,
+                     amount=amount)
 
 class UniswapV2Analytics(Contract):
     """
@@ -237,7 +269,7 @@ class UniswapV2Analytics(Contract):
         current_liquidity = self.get_current_liquidity(pair_address)
 
         last_mint_timestamp = int(last_mint_event['timestamp'])
-        two_days_ago_unix = int(time.time() - (48 * 60 * 60))
+        two_days_ago_unix = int(time.time() - (49 * 60 * 60))
 
         if current_liquidity == Wad.from_number(0):
             return trades_list
@@ -277,58 +309,67 @@ class UniswapV2Analytics(Contract):
         result = self.graph_client.query_request(get_pair_hour_datas_query, variables)
         pair_hour_data_list = result['pairHourDatas']
 
-        trades = list(map(lambda item: UniswapTrade.from_message(item, pair, base_token, quote_token, our_liquidity_balance), pair_hour_data_list))
-        trades_list.extend(trades)
+        for index, trade in enumerate(pair_hour_data_list[1:]):
+            if trade['pair']['token0']['id'] == base_token.address.address:
+                previous_base_token_reserves = Wad.from_number(pair_hour_data_list[0]['reserve0'])
+            else:
+                previous_base_token_reserves = Wad.from_number(pair_hour_data_list[index - 1]['reserve0'])
+
+            formatted_trade = UniswapTrade.from_our_trades_message(trade, pair, base_token, our_liquidity_balance, previous_base_token_reserves)
+            trades_list.append(formatted_trade)
 
         return trades_list
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
-        """
-        """
         assert (isinstance(pair, str))
         assert (isinstance(page_number, int))
 
-        token_a, token_b = self.instantiate_tokens(pair)
+        base_token, quote_token = self.instantiate_tokens(pair)
         pair_address = self.get_pair_address(token_a.address, token_b.address)
 
-        get_swaps_query = """query ($pair: Bytes!)
+        trades_list = []
+
+        get_pair_hour_datas_query = """query ($pair: Bytes!, $hourStartUnix: Int!)
         {
-            swaps(where: {pair: $pair}) {
-                id
+            pairHourDatas(where: {pair: $pair, hourStartUnix_gt: $hourStartUnix}) {
                 pair {
                     id
+                    totalSupply
                     token0 {
                         id
                     }
                     token1 {
                         id
                     }
-                    totalSupply
-                    reserve0
-                    reserve1
                     token0Price
                     token1Price
                 }
-                transaction {
-                    id
-                }
-                timestamp
-                amount0In
-                amount1In
-                amount0Out
-                amount1Out
+                hourStartUnix
+                hourlyVolumeToken0
+                hourlyVolumeToken1
+                reserve0
+                reserve1
             }
         }
         """
         variables = {
-            'pair': pair_address.address.lower()
+            'pair': pair_address.address.lower(),
+            'hourStartUnix': int(time.time() - (48 * 60 * 60))
         }
 
-        result = self.graph_client.query_request(get_swaps_query, variables)
-        swaps_list = result['swaps']
+        result = self.graph_client.query_request(get_pair_hour_datas_query, variables)
+        pair_hour_data_list = result['pairHourDatas']
 
-        trades = list(map(lambda item: UniswapTrade.from_message(item, pair, token_a, token_b), swaps_list))
-        return trades
+        for index, trade in enumerate(pair_hour_data_list[1:]):
+            if trade['pair']['token0']['id'] == base_token.address.address:
+                previous_base_token_reserves = Wad.from_number(pair_hour_data_list[0]['reserve0'])
+            else:
+                previous_base_token_reserves = Wad.from_number(pair_hour_data_list[index - 1]['reserve0'])
+
+            formatted_trade = UniswapTrade.from_all_trades_message(trade, pair, base_token, previous_base_token_reserves)
+            trades_list.append(formatted_trade)
+
+        return trades_list
 
     def _deadline(self) -> int:
         """Get a predefined deadline."""
