@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import time
-import uuid
+import hashlib
 
 from web3 import Web3
 from typing import List, Tuple
@@ -77,7 +77,7 @@ class UniswapTrade(Trade):
             amount = our_pool_share * Wad.from_number(trade['hourlyVolumeToken1'])
 
         timestamp = int(trade['hourStartUnix'])
-        trade_id = str(hash(str(timestamp)))
+        trade_id = hashlib.sha256(str(timestamp).encode()).hexdigest()
         return Trade(trade_id=trade_id,
                      timestamp=timestamp,
                      pair=pair,
@@ -113,7 +113,7 @@ class UniswapTrade(Trade):
             amount = Wad.from_number(trade['hourlyVolumeToken1'])
 
         timestamp = int(trade['hourStartUnix'])
-        trade_id = str(hash(str(timestamp)))
+        trade_id = hashlib.sha256(str(timestamp).encode()).hexdigest()
         return Trade(trade_id=trade_id,
                      timestamp=timestamp,
                      pair=pair,
