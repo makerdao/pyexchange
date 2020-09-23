@@ -76,8 +76,10 @@ class UniswapTrade(Trade):
 
             amount = our_pool_share * Wad.from_number(trade['hourlyVolumeToken1'])
 
-        return Trade(trade_id=str(uuid.uuid4()),
-                     timestamp=int(trade['hourStartUnix']),
+        timestamp = int(trade['hourStartUnix'])
+        trade_id = str(hash(str(timestamp)))
+        return Trade(trade_id=trade_id,
+                     timestamp=timestamp,
                      pair=pair,
                      is_sell=is_sell,
                      price=swap_price,
@@ -88,7 +90,6 @@ class UniswapTrade(Trade):
         assert (isinstance(trade, dict))
         assert (isinstance(pair, str))
         assert (isinstance(base_token, Token))
-        assert (isinstance(our_liquidity_balance, Wad))
         assert (isinstance(previous_base_token_reserves, Wad))
 
         if trade['pair']['token0']['id'] == base_token.address.address:
@@ -111,8 +112,10 @@ class UniswapTrade(Trade):
 
             amount = Wad.from_number(trade['hourlyVolumeToken1'])
 
-        return Trade(trade_id=str(uuid.uuid4()),
-                     timestamp=int(trade['hourStartUnix']),
+        timestamp = int(trade['hourStartUnix'])
+        trade_id = str(hash(str(timestamp)))
+        return Trade(trade_id=trade_id,
+                     timestamp=timestamp,
                      pair=pair,
                      is_sell=is_sell,
                      price=swap_price,
@@ -325,7 +328,7 @@ class UniswapV2Analytics(Contract):
         assert (isinstance(page_number, int))
 
         base_token, quote_token = self.instantiate_tokens(pair)
-        pair_address = self.get_pair_address(token_a.address, token_b.address)
+        pair_address = self.get_pair_address(base_token.address, quote_token.address)
 
         trades_list = []
 
@@ -360,7 +363,7 @@ class UniswapV2Analytics(Contract):
         result = self.graph_client.query_request(get_pair_hour_datas_query, variables)
         pair_hour_data_list = result['pairHourDatas']
 
-        for index, trade in enumerate(pair_hour_data_list[1:]):
+        for index, trade in enumerate(pair_hour_data_list):
             if trade['pair']['token0']['id'] == base_token.address.address:
                 previous_base_token_reserves = Wad.from_number(pair_hour_data_list[0]['reserve0'])
             else:
