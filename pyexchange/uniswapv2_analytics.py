@@ -245,14 +245,14 @@ class UniswapV2Analytics(Contract):
             It is assumed that our liquidity in a pool will be added or removed all at once.
 
             Two stage information retrieval:
-                get list mint and burn events for our address;
-                get a list of mint and burn transaction timestamps for each pair;
-                append set of swaps for the pair between timestamps to larger list of trades
+                get list of mint events for our address;
+                sort the mints, and identify the timestamp for the last mit event.
 
+                If the mint was more than 48 hours ago, return the last 48 hours of data.
+                If the mint was less than 48 hours ago, return all data since the mint event.
+                
             Graph Protocol doesn't currently accept queries using Checksum addresses,
             so all addresses must be lowercased prior to submission.
-
-            Check to see if we've already retrieved the list of timestamps to avoid overloading Graph node
         """
         assert (isinstance(pair, str))
         assert (isinstance(page_number, int))
