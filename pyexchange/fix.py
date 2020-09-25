@@ -40,6 +40,7 @@ def fprint(encoded_msg):
     return encoded_msg.replace(b"\x01", b"|")
 
 
+# TODO: add callback based absctration that can be subclassed for various socket listeners
 class FixEngine:
     """Enables interfacing with exchanges using the FIX (Financial Information eXchange) protocol.
     This class shall implement common logic for connection management and fulfill relevant functions from PyexAPI.
@@ -206,6 +207,41 @@ class FixEngine:
     def wait_for_get_orders_response(self) -> List[simplefix.FixMessage]:
         logging.debug(f"waiting for 35={8} Order Mass Status Request response")
         messages = self.caller_loop.run_until_complete(self._wait_for_get_orders_response())
+        return messages
+
+    async def _listen_for_cancellations(self) -> List[simplefix.FixMessage]:
+        """
+            Iterate through application messages and check to see that we haven't received any order cancellation messages.
+            If a message is recieved, it will be queued and checked periodically as part of the keeper lifecycle.
+        """
+        cancellation_messages = []
+
+        cancel_message_types = [simplefix.EXECTYPE_CANCELED, simplefix.EXECTYPE_EXPIRED]
+
+        while True:
+            if not self.application_messages.empty():
+                message = self.application_messages.get()
+                assert isinstance(message, simplefix.FixMessage)
+
+                # handle message cancellation
+                if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
+
+                    if message.get(simplefix.TAG_EXECTYPE) in cancel_message_types:
+                        order_to_cancel_id = f"{message.get(simplefix.TAG_ORDERID)}|{message.get(simplefix.TAG_CLORDID)}"
+
+                        if message.get(b'5001') == '4'.encode('utf-8'):
+                            self.logger.warning(f'Unsolicited Cancellation for order: {order_to_cancel_id}')
+                            cancellation_messages.append(message)
+                        else:
+                            cancellation_messages.append(message)
+
+                await asyncio.sleep(0.3)
+            else:
+                return cancellation_messages
+
+    def listen_for_cancellations(self) -> List[simplefix.FixMessage]:
+        logging.debug(f"waiting for 35={8} Order Execution Report response")
+        messages = self.caller_loop.run_until_complete(self._listen_for_cancellations())
         return messages
 
     def create_message(self, message_type: bytes) -> simplefix.FixMessage:
