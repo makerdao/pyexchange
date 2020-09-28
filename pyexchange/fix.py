@@ -40,7 +40,8 @@ def fprint(encoded_msg):
     return encoded_msg.replace(b"\x01", b"|")
 
 
-# TODO: add callback based absctration that can be subclassed for various socket listeners
+# TODO: add callback based abstraction that can be subclassed for various socket listeners
+# TODO: move wait for listerners to ErisxFix
 class FixEngine:
     """Enables interfacing with exchanges using the FIX (Financial Information eXchange) protocol.
     This class shall implement common logic for connection management and fulfill relevant functions from PyexAPI.

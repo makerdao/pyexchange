@@ -222,10 +222,16 @@ class ErisxApi(PyexAPI):
         self.fix_trading.write(message)
 
         response = self.fix_trading.wait_for_response('8')
-        if response.get(150) is not None:
-            return True if response.get(150).decode('utf-8') == '4' else False
 
-        return False
+        if response.get(150) is not None:
+            if response.get(150).decode('utf-8') == '4':
+                return True
+            else:
+                self.logger.warning(f"Order not cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}, {response.get(102).decode('utf-8')}")
+                return False
+        else:
+            self.logger.warning(f"Order not cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}, {response.get(102).decode('utf-8')}")
+            return False
 
     # Trade information is only retrieved on a per session basis through FIX (Page 20 of Spec)
     def get_trades(self, pair: str, page_number: int = 8) -> List[Trade]:
