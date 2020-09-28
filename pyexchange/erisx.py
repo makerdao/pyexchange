@@ -222,10 +222,16 @@ class ErisxApi(PyexAPI):
         self.fix_trading.write(message)
 
         response = self.fix_trading.wait_for_response('8')
-        if response.get(150) is not None:
-            return True if response.get(150).decode('utf-8') == '4' else False
 
-        return False
+        if response.get(150) is not None:
+            if response.get(150).decode('utf-8') == '4':
+                return True
+            else:
+                self.logger.warning(f"Order not cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}, {response.get(102).decode('utf-8')}")
+                return False
+        else:
+            self.logger.warning(f"Order not cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}, {response.get(102).decode('utf-8')}")
+            return False
 
     # Trade information is only retrieved on a per session basis through FIX (Page 20 of Spec)
     def get_trades(self, pair: str, page_number: int = 8) -> List[Trade]:
@@ -236,37 +242,10 @@ class ErisxApi(PyexAPI):
     def get_all_trades(self, pair, page_number) -> List[Trade]:
        pass
 
-    def get_orderbook(self, pair: str, page_number: int = 1) -> dict:
-        assert (isinstance(pair, str))
-        assert (isinstance(page_number, int))
+    def check_cancellations(self) -> List:
+        cancellations = self.fix_trading.listen_for_cancellations()
 
-        client_request_id = str(uuid.uuid4())
-
-        message = self.fix_marketdata.create_message(simplefix.MSGTYPE_MARKET_DATA_REQUEST)
-
-        message.append_pair(262, client_request_id)
-        message.append_pair(263, 1)
-        message.append_pair(264, 0)
-        message.append_pair(265, 1)  # only required while subscribing
-        message.append_pair(266, 'Y')
-        message.append_pair(267, 2)
-        message.append_pair(269, 0)
-        message.append_pair(269, 1)
-
-        message.append_pair(146, 1)
-        message.append_pair(simplefix.TAG_SYMBOL, self._format_pair_string(pair))
-
-        self.fix_marketdata.write(message)
-
-        # Wait for the EndOfEvent MarketDataIncrementalRefresh
-        empty_book = self.fix_marketdata.wait_for_response('X')
-        trade_vol = self.fix_marketdata.wait_for_response('X')
-        opening_price = self.fix_marketdata.wait_for_response('X')
-        session_low_price = self.fix_marketdata.wait_for_response('X')
-        session_high_price = self.fix_marketdata.wait_for_response('X')
-        all_orders = self.fix_marketdata.wait_for_response('X')
-
-        return ErisxFix.parse_order_book(all_orders)
+        return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(cancellations)))
 
     def _http_get(self, resource: str, params=""):
         assert (isinstance(resource, str))
@@ -403,34 +382,5 @@ class ErisxFix(FixEngine):
                 'created_at': formatted_timestamp
             }
             orders.append(order)
-
-        return orders
-
-    @staticmethod
-    def parse_order_book(message: simplefix.FixMessage) -> dict:
-        order_count = int(message.get(268))
-        buy_orders = []
-        sell_orders = []
-        orders = {}
-        for i in range(1, order_count):
-            side = 'SELL' if message.get(simplefix.TAG_SYMBOL).decode('utf-8') == '1' else 'BUY'
-
-            order = {
-                'time': int(time.time()),  # No timestamp available
-                'side': side,
-                'contract_symbol': message.get(simplefix.TAG_SYMBOL).decode('utf-8'),
-                'qty': message.get(271).decode('utf-8'),
-                'price': message.get(270).decode('utf-8')
-            }
-
-            if side == 'SELL':
-                sell_orders.append(order)
-            else:
-                buy_orders.append(order)
-
-        buy_orders.sort(key=lambda o: float(o['price']))
-        sell_orders.sort(key=lambda o: float(o['price']))
-        orders['buy'] = buy_orders
-        orders['sell'] = sell_orders
 
         return orders
