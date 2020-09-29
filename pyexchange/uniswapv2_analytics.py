@@ -205,6 +205,40 @@ class UniswapV2Analytics(Contract):
 
         return token_a, token_b
 
+    def get_our_burn_txs(self, pair_address: Address) -> List:
+        assert (isinstance(pair_address, Address))
+
+        get_our_burn_txs_query = """query ($pair: Bytes!, $to: Bytes!)
+            {
+                burns (where: {pair: $pair, to: $to}) {
+                    id
+                    to
+                    timestamp
+                    pair {
+                        id
+                        token0 {
+                            id
+                        }
+                        token1 {
+                            id
+                        }
+                    }
+                    transaction {
+                        id
+                    }
+                }
+            }
+        """
+        variables = {
+            'pair': pair_address.address.lower(),
+            'to': self.account_address.address.lower()
+        }
+
+        result = self.graph_client.query_request(get_our_burn_txs_query, variables)['burns']
+
+        sorted_burns = sorted(result, key=lambda burn: burn['timestamp'], reverse=True)
+        return sorted_burns
+
     def get_our_mint_txs(self, pair_address: Address) -> dict:
         assert (isinstance(pair_address, Address))
 
@@ -253,7 +287,12 @@ class UniswapV2Analytics(Contract):
 
                 If the mint was more than 48 hours ago, return the last 48 hours of data.
                 If the mint was less than 48 hours ago, return all data since the mint event.
+
+                When querying, retrieve 49 hours of pair data,
+                with the 49th hour used as a starting point for determing sells and buys
                 
+                All mint events are sorted by descending timestamp.
+
             Graph Protocol doesn't currently accept queries using Checksum addresses,
             so all addresses must be lowercased prior to submission.
         """
@@ -266,24 +305,39 @@ class UniswapV2Analytics(Contract):
         pair_address = self.get_pair_address(base_token.address, quote_token.address)
 
         mint_events = self.get_our_mint_txs(pair_address)
+        burn_events = self.get_our_burn_txs(pair_address)
         last_mint_event = mint_events[0]
+        last_burn_event = mint_events[0]
 
         our_liquidity_balance = Wad.from_number(last_mint_event['liquidity'])
         current_liquidity = self.get_current_liquidity(pair_address)
 
         last_mint_timestamp = int(last_mint_event['timestamp'])
+        last_burn_timestamp = int(last_burn_event['timestamp'])
         two_days_ago_unix = int(time.time() - (49 * 60 * 60))
+        mints_in_last_two_days = list(filter(lambda mint: int(mint['timestamp']) > two_days_ago_unix, mint_events))
 
-        if current_liquidity == Wad.from_number(0):
+        current_time = int(time.time())
+
+        if len(mint_events) == 0:
             return trades_list
-        elif last_mint_timestamp > two_days_ago_unix and len(mint_events) == 1:
-            start_timestamp = last_mint_timestamp
-        else:
+        elif current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
+            start_timestamp = mints_in_last_two_days[-1]['timestamp']
+            end_timestamp = current_time
+        elif current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) == 0:
             start_timestamp = two_days_ago_unix
+            end_timestamp = current_time
+        elif current_liquidity == Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
+            start_timestamp = mints_in_last_two_days[-1]['timestamp']
+            end_timestamp = last_burn_timestamp
+        elif current_liquidity == Wad.from_number(0) and len(mints_in_last_two_days) == 0:
+            return trades_list
+        else:
+            return trades_list
 
-        get_pair_hour_datas_query = """query ($pair: Bytes!, $hourStartUnix: Int!)
+        get_pair_hour_datas_query = """query ($pair: Bytes!, $hourStartUnixStart: Int!, $hourStartUnixEnd: Int!)
         {
-            pairHourDatas(where: {pair: $pair, hourStartUnix_gt: $hourStartUnix}) {
+            pairHourDatas(where: {pair: $pair, hourStartUnix_gt: $hourStartUnixStart, hourStartUnix_lt: $hourStartUnixEnd}) {
                 pair {
                     id
                     totalSupply
@@ -306,7 +360,8 @@ class UniswapV2Analytics(Contract):
         """
         variables = {
             'pair': pair_address.address.lower(),
-            'hourStartUnix': start_timestamp
+            'hourStartUnixStart': start_timestamp,
+            'hourStartUnixEnd': end_timestamp
         }
 
         result = self.graph_client.query_request(get_pair_hour_datas_query, variables)
