@@ -25,7 +25,7 @@ import uuid
 import datetime
 
 from dateutil import parser
-from typing import List
+from typing import List, Tuple
 
 from pyexchange.api import PyexAPI
 from pyexchange.fix import FixEngine
@@ -202,7 +202,12 @@ class ErisxApi(PyexAPI):
 
         return order_id
 
-    def cancel_order(self, order_id: str, pair: str, is_sell: bool) -> bool:
+    def cancel_order(self, order_id: str, pair: str, is_sell: bool) -> Tuple:
+        """
+            Send cancel order request to ErisX, and wait for the response.
+            Returns a Tuple: [Cancellation_Status, Is_Unknown_Order]
+
+        """
         assert (isinstance(order_id, str))
         assert (isinstance(pair, str))
         assert (isinstance(is_sell, bool))
@@ -225,13 +230,16 @@ class ErisxApi(PyexAPI):
 
         if response.get(150) is not None:
             if response.get(150).decode('utf-8') == '4':
-                return True
+                return True, False
             else:
-                self.logger.warning(f"Order not cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}, {response.get(102).decode('utf-8')}")
-                return False
+                self.logger.warning(f"Order not cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}")
+                return False, False
         else:
-            self.logger.warning(f"Order not cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}, {response.get(102).decode('utf-8')}")
-            return False
+            if response.get(102).decode('utf-8') == '1':
+                self.logger.warning(f"Order not found, cancellation failed for id: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}")
+                return False, True
+            else:
+                return False, False
 
     # Trade information is only retrieved on a per session basis through FIX (Page 20 of Spec)
     def get_trades(self, pair: str, page_number: int = 8) -> List[Trade]:
