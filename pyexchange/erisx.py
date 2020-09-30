@@ -328,7 +328,7 @@ class ErisxFix(FixEngine):
     def parse_security_list(m: simplefix.FixMessage) -> dict:
         security_count = int(m.get(146))
         securities = {}
-        for i in range(1, security_count):
+        for i in range(1, security_count + 1):
 
             # Required fields
             symbol = m.get(simplefix.TAG_SYMBOL, i).decode('utf-8')
