@@ -312,14 +312,14 @@ class UniswapV2Analytics(Contract):
 
         if len(mint_events) == 0:
             return trades_list
-        else:
-            last_mint_event = mint_events[0]
-            last_mint_timestamp = int(last_mint_event['timestamp'])
 
-            if len(burn_events) != 0:
-                last_burn_timestamp = int(burn_events[0]['timestamp'])
-            else:
-                last_burn_timestamp = None
+        last_mint_event = mint_events[0]
+        last_mint_timestamp = int(last_mint_event['timestamp'])
+
+        if len(burn_events) != 0:
+            last_burn_timestamp = int(burn_events[0]['timestamp'])
+        else:
+            last_burn_timestamp = None
 
         our_liquidity_balance = Wad.from_number(last_mint_event['liquidity'])
         current_liquidity = self.get_current_liquidity(pair_address)
