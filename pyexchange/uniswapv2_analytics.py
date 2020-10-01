@@ -306,22 +306,27 @@ class UniswapV2Analytics(Contract):
 
         mint_events = self.get_our_mint_txs(pair_address)
         burn_events = self.get_our_burn_txs(pair_address)
+
+        current_time = int(time.time())
+        two_days_ago_unix = int(time.time() - (49 * 60 * 60))
+
+        if len(mint_events) == 0:
+            return trades_list
+
         last_mint_event = mint_events[0]
-        last_burn_event = mint_events[0]
+        last_mint_timestamp = int(last_mint_event['timestamp'])
+
+        if len(burn_events) != 0:
+            last_burn_timestamp = int(burn_events[0]['timestamp'])
+        else:
+            last_burn_timestamp = None
 
         our_liquidity_balance = Wad.from_number(last_mint_event['liquidity'])
         current_liquidity = self.get_current_liquidity(pair_address)
 
-        last_mint_timestamp = int(last_mint_event['timestamp'])
-        last_burn_timestamp = int(last_burn_event['timestamp'])
-        two_days_ago_unix = int(time.time() - (49 * 60 * 60))
         mints_in_last_two_days = list(filter(lambda mint: int(mint['timestamp']) > two_days_ago_unix, mint_events))
 
-        current_time = int(time.time())
-
-        if len(mint_events) == 0:
-            return trades_list
-        elif current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
+        if current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
             start_timestamp = mints_in_last_two_days[-1]['timestamp']
             end_timestamp = current_time
         elif current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) == 0:
@@ -329,9 +334,7 @@ class UniswapV2Analytics(Contract):
             end_timestamp = current_time
         elif current_liquidity == Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
             start_timestamp = mints_in_last_two_days[-1]['timestamp']
-            end_timestamp = last_burn_timestamp
-        elif current_liquidity == Wad.from_number(0) and len(mints_in_last_two_days) == 0:
-            return trades_list
+            end_timestamp = last_burn_timestamp if last_burn_timestamp != None else current_time
         else:
             return trades_list
 
