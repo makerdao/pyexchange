@@ -77,7 +77,8 @@ class UniswapTrade(Trade):
             amount = our_pool_share * Wad.from_number(trade['hourlyVolumeToken1'])
 
         timestamp = int(trade['hourStartUnix'])
-        trade_id = hashlib.sha256(str(timestamp).encode()).hexdigest()
+        unhashed_id = str(trade['id'])
+        trade_id = hashlib.sha256(unhashed_id.encode()).hexdigest()
         return Trade(trade_id=trade_id,
                      timestamp=timestamp,
                      pair=pair,
@@ -113,7 +114,8 @@ class UniswapTrade(Trade):
             amount = Wad.from_number(trade['hourlyVolumeToken1'])
 
         timestamp = int(trade['hourStartUnix'])
-        trade_id = hashlib.sha256(str(timestamp).encode()).hexdigest()
+        unhashed_id = str(trade['id'])
+        trade_id = hashlib.sha256(unhashed_id.encode()).hexdigest()
         return Trade(trade_id=trade_id,
                      timestamp=timestamp,
                      pair=pair,
@@ -353,6 +355,7 @@ class UniswapV2Analytics(Contract):
                     token0Price
                     token1Price
                 }
+                id
                 hourStartUnix
                 hourlyVolumeToken0
                 hourlyVolumeToken1
@@ -405,6 +408,7 @@ class UniswapV2Analytics(Contract):
                     token0Price
                     token1Price
                 }
+                id
                 hourStartUnix
                 hourlyVolumeToken0
                 hourlyVolumeToken1
