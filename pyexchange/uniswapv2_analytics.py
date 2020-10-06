@@ -149,6 +149,9 @@ class UniswapV2Analytics(Contract):
         self.factory_address = factory_address
         self.account_address = keeper_address
 
+        self.our_last_pair_hour_timestamp = 0
+        self.all_last_pair_hour_timestamp = 0
+
         # check to ensure that this isn't a mock instance before attempting to retrieve contracts
         if router_address is not None and factory_address is not None:
             self._router_contract = self._get_contract(web3, self.Irouter_abi, self.router_address)
@@ -329,13 +332,22 @@ class UniswapV2Analytics(Contract):
         mints_in_last_two_days = list(filter(lambda mint: int(mint['timestamp']) > two_days_ago_unix, mint_events))
 
         if current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
-            start_timestamp = mints_in_last_two_days[-1]['timestamp']
+            if self.our_last_pair_hour_timestamp > mints_in_last_two_days[-1]['timestamp']:
+                start_timestamp = self.our_last_pair_hour_timestamp
+            else:
+                start_timestamp = mints_in_last_two_days[-1]['timestamp']
             end_timestamp = current_time
         elif current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) == 0:
-            start_timestamp = two_days_ago_unix
+            if self.our_last_pair_hour_timestamp > two_days_ago_unix:
+                start_timestamp = self.our_last_pair_hour_timestamp
+            else:
+                start_timestamp = two_days_ago_unix
             end_timestamp = current_time
         elif current_liquidity == Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
-            start_timestamp = mints_in_last_two_days[-1]['timestamp']
+            if self.our_last_pair_hour_timestamp > mints_in_last_two_days[-1]['timestamp']:
+                start_timestamp = self.our_last_pair_hour_timestamp
+            else:
+                start_timestamp = mints_in_last_two_days[-1]['timestamp']
             end_timestamp = last_burn_timestamp if last_burn_timestamp != None else current_time
         else:
             return trades_list
@@ -382,6 +394,10 @@ class UniswapV2Analytics(Contract):
             formatted_trade = UniswapTrade.from_our_trades_message(trade, pair, base_token, our_liquidity_balance, previous_base_token_reserves)
             trades_list.append(formatted_trade)
 
+        # Avoid excessively querying the api by storing the timestamp of the last retrieved trade
+        if len(trades_list) > 0:
+            self.our_last_pair_hour_timestamp = int(trades_list[-1].timestamp)
+
         return trades_list
 
     def get_all_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
@@ -392,6 +408,9 @@ class UniswapV2Analytics(Contract):
         pair_address = self.get_pair_address(base_token.address, quote_token.address)
 
         trades_list = []
+
+        two_days_ago_unix = int(time.time() - (48 * 60 * 60))
+        start_time = two_days_ago_unix if two_days_ago_unix > self.all_last_pair_hour_timestamp else self.all_last_pair_hour_timestamp
 
         get_pair_hour_datas_query = """query ($pair: Bytes!, $hourStartUnix: Int!)
         {
@@ -419,7 +438,7 @@ class UniswapV2Analytics(Contract):
         """
         variables = {
             'pair': pair_address.address.lower(),
-            'hourStartUnix': int(time.time() - (48 * 60 * 60))
+            'hourStartUnix': start_time
         }
 
         result = self.graph_client.query_request(get_pair_hour_datas_query, variables)
@@ -433,6 +452,10 @@ class UniswapV2Analytics(Contract):
 
             formatted_trade = UniswapTrade.from_all_trades_message(trade, pair, base_token, previous_base_token_reserves)
             trades_list.append(formatted_trade)
+
+        # Avoid excessively querying the api by storing the timestamp of the last retrieved trade
+        if len(trades_list) > 0:
+            self.all_last_pair_hour_timestamp = int(trades_list[-1].timestamp)
 
         return trades_list
 
