@@ -320,22 +320,13 @@ class UniswapV2Analytics(Contract):
         mints_in_last_two_days = list(filter(lambda mint: int(mint['timestamp']) > two_days_ago_unix, mint_events))
 
         if current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
-            if self.our_last_pair_hour_timestamp > mints_in_last_two_days[-1]['timestamp']:
-                start_timestamp = self.our_last_pair_hour_timestamp
-            else:
-                start_timestamp = mints_in_last_two_days[-1]['timestamp']
+            start_timestamp = max(self.our_last_pair_hour_timestamp, mints_in_last_two_days[-1]['timestamp'])
             end_timestamp = current_time
         elif current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) == 0:
-            if self.our_last_pair_hour_timestamp > two_days_ago_unix:
-                start_timestamp = self.our_last_pair_hour_timestamp
-            else:
-                start_timestamp = two_days_ago_unix
+            start_timestamp = max(our_last_pair_hour_timestamp, two_days_ago_unix)
             end_timestamp = current_time
         elif current_liquidity == Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
-            if self.our_last_pair_hour_timestamp > mints_in_last_two_days[-1]['timestamp']:
-                start_timestamp = self.our_last_pair_hour_timestamp
-            else:
-                start_timestamp = mints_in_last_two_days[-1]['timestamp']
+            start_timestamp = max(self.our_last_pair_hour_timestamp, mints_in_last_two_days[-1]['timestamp'])
             end_timestamp = last_burn_timestamp if last_burn_timestamp != None else current_time
         else:
             return trades_list
