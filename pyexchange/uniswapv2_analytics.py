@@ -323,7 +323,7 @@ class UniswapV2Analytics(Contract):
             start_timestamp = max(self.our_last_pair_hour_timestamp, mints_in_last_two_days[-1]['timestamp'])
             end_timestamp = current_time
         elif current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) == 0:
-            start_timestamp = max(our_last_pair_hour_timestamp, two_days_ago_unix)
+            start_timestamp = max(self.our_last_pair_hour_timestamp, two_days_ago_unix)
             end_timestamp = current_time
         elif current_liquidity == Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
             start_timestamp = max(self.our_last_pair_hour_timestamp, mints_in_last_two_days[-1]['timestamp'])
