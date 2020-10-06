@@ -59,18 +59,12 @@ class UniswapTrade(Trade):
         if trade['pair']['token0']['id'] == base_token.address.address:
             swap_price = Wad.from_number(trade['reserve1']) / Wad.from_number(trade['reserve0'])
 
-            base_token_volume = Wad.from_number(trade['hourlyVolumeToken0']) * swap_price
-            quote_token_volume = Wad.from_number(trade['hourlyVolumeToken1']) / swap_price
-
             is_sell = Wad.from_number(trade['reserve1']) < previous_base_token_reserves
 
             amount = our_pool_share * Wad.from_number(trade['hourlyVolumeToken0'])
 
         else:
             swap_price = Wad.from_number(trade['reserve0']) / Wad.from_number(trade['reserve1'])
-
-            base_token_volume = Wad.from_number(trade['hourlyVolumeToken0']) / swap_price
-            quote_token_volume = Wad.from_number(trade['hourlyVolumeToken1']) * swap_price
 
             is_sell = Wad.from_number(trade['reserve0']) < previous_base_token_reserves
 
@@ -96,18 +90,12 @@ class UniswapTrade(Trade):
         if trade['pair']['token0']['id'] == base_token.address.address:
             swap_price = Wad.from_number(trade['reserve1']) / Wad.from_number(trade['reserve0'])
 
-            base_token_volume = Wad.from_number(trade['hourlyVolumeToken0']) * swap_price
-            quote_token_volume = Wad.from_number(trade['hourlyVolumeToken1']) / swap_price
-
             is_sell = Wad.from_number(trade['reserve1']) < previous_base_token_reserves
 
             amount = Wad.from_number(trade['hourlyVolumeToken0'])
 
         else:
             swap_price = Wad.from_number(trade['reserve0']) / Wad.from_number(trade['reserve1'])
-
-            base_token_volume = Wad.from_number(trade['hourlyVolumeToken0']) / swap_price
-            quote_token_volume = Wad.from_number(trade['hourlyVolumeToken1']) * swap_price
 
             is_sell = Wad.from_number(trade['reserve0']) < previous_base_token_reserves
 
