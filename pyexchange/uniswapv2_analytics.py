@@ -55,8 +55,6 @@ class UniswapTrade(Trade):
         assert (isinstance(previous_base_token_reserves, Wad))
         assert (isinstance(timestamp, int))
 
-        # TODO: avoid unnecessarily sha256 hashing the trade id
-
         our_pool_share = our_liquidity_balance / Wad.from_number(trade['totalSupply'])
 
         if trade['token0']['id'] == base_token.address.address:
@@ -64,16 +62,16 @@ class UniswapTrade(Trade):
 
             is_sell = Wad.from_number(trade['reserve1']) < previous_base_token_reserves
 
-            amount = our_pool_share * Wad.from_number(trade['volumeToken0'])
+            amount = our_pool_share * Wad.from_number(trade['volumeToken1'])
 
         else:
             swap_price = Wad.from_number(trade['reserve0']) / Wad.from_number(trade['reserve1'])
 
             is_sell = Wad.from_number(trade['reserve0']) < previous_base_token_reserves
 
-            amount = our_pool_share * Wad.from_number(trade['volumeToken1'])
+            amount = our_pool_share * Wad.from_number(trade['volumeToken0'])
 
-        unhashed_id = str(trade['id'])
+        unhashed_id = str(timestamp)
         trade_id = hashlib.sha256(unhashed_id.encode()).hexdigest()
         return Trade(trade_id=trade_id,
                      timestamp=timestamp,
@@ -83,28 +81,28 @@ class UniswapTrade(Trade):
                      amount=amount)
 
     @staticmethod
-    def from_all_trades_message(trade: dict, pair: str, base_token: Token, previous_base_token_reserves: Wad) -> Trade:
+    def from_all_trades_message(trade: dict, pair: str, base_token: Token, previous_base_token_reserves: Wad, timestamp: int) -> Trade:
         assert (isinstance(trade, dict))
         assert (isinstance(pair, str))
         assert (isinstance(base_token, Token))
         assert (isinstance(previous_base_token_reserves, Wad))
+        assert (isinstance(timestamp, int))
 
-        if trade['pair']['token0']['id'] == base_token.address.address:
+        if trade['token0']['id'] == base_token.address.address:
             swap_price = Wad.from_number(trade['reserve1']) / Wad.from_number(trade['reserve0'])
 
             is_sell = Wad.from_number(trade['reserve1']) < previous_base_token_reserves
 
-            amount = Wad.from_number(trade['hourlyVolumeToken0'])
+            amount = Wad.from_number(trade['volumeToken1'])
 
         else:
             swap_price = Wad.from_number(trade['reserve0']) / Wad.from_number(trade['reserve1'])
 
             is_sell = Wad.from_number(trade['reserve0']) < previous_base_token_reserves
 
-            amount = Wad.from_number(trade['hourlyVolumeToken1'])
+            amount = Wad.from_number(trade['volumeToken0'])
 
-        timestamp = int(trade['hourStartUnix'])
-        unhashed_id = str(trade['id'])
+        unhashed_id = str(timestamp)
         trade_id = hashlib.sha256(unhashed_id.encode()).hexdigest()
         return Trade(trade_id=trade_id,
                      timestamp=timestamp,
@@ -140,7 +138,7 @@ class UniswapV2Analytics(Contract):
         self.account_address = keeper_address
 
         self.our_last_pair_hour_block = 0
-        self.all_last_pair_hour_timestamp = 0
+        self.all_last_pair_block = 0
 
         # check to ensure that this isn't a mock instance before attempting to retrieve contracts
         if router_address is not None and factory_address is not None:
@@ -313,26 +311,6 @@ class UniswapV2Analytics(Contract):
         result = self.graph_client.query_request(get_pair_data_query, variables)['pairs']
         return result
 
-    # # TODO: add capacity to query seperate subgraph for the block at a given timestamp
-    # def get_block_from_timestamp(self, timestamp_start: int, timestamp_end: int) -> int:
-    #     assert (isinstance(timestamp_start, int))
-    #     assert (isinstance(timestamp_end, int))
-
-    #     get_block_timestamp_query = """query ($timestamp_start: Int!, $timestamp_end: Int!)
-    #         {
-    #             blocks(first: 1, orderBy: timestamp, orderDirection: asc,
-    #                     where: {timestamp_gt: $timestamp_start, timestamp_lt: $timestamp_end}) {
-    #                 id
-    #                 number
-    #                 timestamp
-    #             }
-    #         }
-    #     """
-    #     variables = {
-    #         'timestamp_start': timestamp_start,
-    #         'timestamp_end': timestamp_end
-    #     }
-
     def get_trades(self, pair: str, page_number: int = 1) -> List[Trade]:
         """
             It is assumed that our liquidity in a pool will be added or removed all at once.
@@ -365,7 +343,7 @@ class UniswapV2Analytics(Contract):
 
         # calculate starting block, assuming there's 15 seconds in a given block
         current_block = self.get_current_block()
-        two_day_ago_block = int(current_block - ((4 * 60 * 49) / 15))
+        two_day_ago_block = int(current_block - (4 * 60 * 25))
 
         if len(mint_events) == 0:
             return trades_list
@@ -403,20 +381,14 @@ class UniswapV2Analytics(Contract):
 
             raw_block_trades.append(block_trade)
 
-            if checked_block == start_block:
-                if raw_block_trades[index]['token0']['id'] == base_token.address.address:
-                    previous_base_token_reserves = Wad.from_number(raw_block_trades[index]['reserve0'])
-                else:
-                    previous_base_token_reserves = Wad.from_number(raw_block_trades[index]['reserve1'])
-            else:
+            if checked_block != start_block:
                 if raw_block_trades[index]['token0']['id'] == base_token.address.address:
                     previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 1]['reserve0'])
                 else:
                     previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 1]['reserve1'])
 
-            timestamp = self.web3.eth.getBlock(checked_block).timestamp
+                timestamp = self.web3.eth.getBlock(checked_block).timestamp
 
-            if checked_block != start_block:
                 trades_list.append(UniswapTrade.from_our_trades_message(block_trade, pair, base_token, our_liquidity_balance, previous_base_token_reserves, timestamp))
 
             # assume there's 240 blocks in an hour
@@ -425,7 +397,7 @@ class UniswapV2Analytics(Contract):
 
         # Avoid excessively querying the api by storing the block of the last retrieved trade
         if len(trades_list) > 0:
-            self.our_last_pair_hour_block = checked_block
+            self.our_last_pair_hour_block = end_block
 
         return trades_list
 
@@ -438,53 +410,38 @@ class UniswapV2Analytics(Contract):
 
         trades_list = []
 
-        two_days_ago_unix = int(time.time() - (48 * 60 * 60))
-        start_time = two_days_ago_unix if two_days_ago_unix > self.all_last_pair_hour_timestamp else self.all_last_pair_hour_timestamp
+        # calculate starting block, assuming there's 15 seconds in a given block
+        current_block = self.get_current_block()
+        two_day_ago_block = int(current_block - (4 * 60 * 25))
 
-        get_pair_hour_datas_query = """query ($pair: Bytes!, $hourStartUnix: Int!)
-        {
-            pairHourDatas(where: {pair: $pair, hourStartUnix_gt: $hourStartUnix}) {
-                pair {
-                    id
-                    totalSupply
-                    token0 {
-                        id
-                    }
-                    token1 {
-                        id
-                    }
-                    token0Price
-                    token1Price
-                }
-                id
-                hourStartUnix
-                hourlyVolumeToken0
-                hourlyVolumeToken1
-                reserve0
-                reserve1
-            }
-        }
-        """
-        variables = {
-            'pair': pair_address.address.lower(),
-            'hourStartUnix': start_time
-        }
+        start_block = two_day_ago_block if two_day_ago_block > self.all_last_pair_block else self.all_last_pair_block
+        end_block = current_block
 
-        result = self.graph_client.query_request(get_pair_hour_datas_query, variables)
-        pair_hour_data_list = result['pairHourDatas']
+        raw_block_trades = []
+        index = 0
+        checked_block = start_block
+        while checked_block < end_block:
+            block_trade = self.get_block_trade(pair_address, checked_block)[0]
 
-        for index, trade in enumerate(pair_hour_data_list):
-            if trade['pair']['token0']['id'] == base_token.address.address:
-                previous_base_token_reserves = Wad.from_number(pair_hour_data_list[0]['reserve0'])
-            else:
-                previous_base_token_reserves = Wad.from_number(pair_hour_data_list[index - 1]['reserve0'])
+            raw_block_trades.append(block_trade)
 
-            formatted_trade = UniswapTrade.from_all_trades_message(trade, pair, base_token, previous_base_token_reserves)
-            trades_list.append(formatted_trade)
+            if checked_block != start_block:
+                if raw_block_trades[index]['token0']['id'] == base_token.address.address:
+                    previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 1]['reserve0'])
+                else:
+                    previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 1]['reserve1'])
+
+                timestamp = self.web3.eth.getBlock(checked_block).timestamp
+
+                trades_list.append(UniswapTrade.from_all_trades_message(block_trade, pair, base_token, previous_base_token_reserves, timestamp))
+
+            # assume there's 240 blocks in an hour
+            checked_block += 240
+            index += 1
 
         # Avoid excessively querying the api by storing the timestamp of the last retrieved trade
         if len(trades_list) > 0:
-            self.all_last_pair_hour_timestamp = int(trades_list[-1].timestamp)
+            self.all_last_pair_block = end_block
 
         return trades_list
 
