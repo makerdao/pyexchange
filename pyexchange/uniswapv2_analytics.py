@@ -62,14 +62,14 @@ class UniswapTrade(Trade):
 
             is_sell = Wad.from_number(trade['reserve1']) < previous_base_token_reserves
 
-            amount = our_pool_share * Wad.from_number(trade['volumeToken1'])
+            amount = our_pool_share * abs(Wad.from_number(trade['reserve1']) - previous_base_token_reserves)
 
         else:
             swap_price = Wad.from_number(trade['reserve0']) / Wad.from_number(trade['reserve1'])
 
             is_sell = Wad.from_number(trade['reserve0']) < previous_base_token_reserves
 
-            amount = our_pool_share * Wad.from_number(trade['volumeToken0'])
+            amount = our_pool_share * abs(Wad.from_number(trade['reserve0']) - previous_base_token_reserves)
 
         unhashed_id = str(timestamp)
         trade_id = hashlib.sha256(unhashed_id.encode()).hexdigest()
@@ -93,14 +93,14 @@ class UniswapTrade(Trade):
 
             is_sell = Wad.from_number(trade['reserve1']) < previous_base_token_reserves
 
-            amount = Wad.from_number(trade['volumeToken1'])
+            amount = our_pool_share * abs(Wad.from_number(trade['reserve1']) - previous_base_token_reserves)
 
         else:
             swap_price = Wad.from_number(trade['reserve0']) / Wad.from_number(trade['reserve1'])
 
             is_sell = Wad.from_number(trade['reserve0']) < previous_base_token_reserves
 
-            amount = Wad.from_number(trade['volumeToken0'])
+            amount = our_pool_share * abs(Wad.from_number(trade['reserve0']) - previous_base_token_reserves)
 
         unhashed_id = str(timestamp)
         trade_id = hashlib.sha256(unhashed_id.encode()).hexdigest()
@@ -319,11 +319,11 @@ class UniswapV2Analytics(Contract):
                 get list of mint events for our address;
                 sort the mints, and identify the timestamp for the last mit event.
 
-                If the mint was more than 48 hours ago, return the last 48 hours of data.
-                If the mint was less than 48 hours ago, return all data since the mint event.
+                If the mint was more than 24 hours ago, return the last 24 hours of data.
+                If the mint was less than 24 hours ago, return all data since the mint event.
 
-                When querying, retrieve 49 hours of pair data,
-                with the 49th hour used as a starting point for determing sells and buys
+                When querying, retrieve 25 hours of pair data,
+                with the 25th hour used as a starting point for determing sells and buys
                 
                 All mint events are sorted by descending timestamp.
 
