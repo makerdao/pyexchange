@@ -348,7 +348,6 @@ class UniswapV2Analytics(Contract):
             self.our_last_pair_hour_block = self.start_block
 
         current_block = self.get_current_block()
-
         one_day_ago_block = int(current_block - (4 * 60 * 25))
 
         if len(mint_events) == 0:
@@ -416,11 +415,15 @@ class UniswapV2Analytics(Contract):
 
         trades_list = []
 
+        # use the last retrieved from trade-service as a starting point to avoid duplicate trade syncing
+        if self.start_block != 0:
+            self.all_last_pair_block = self.start_block
+
         # calculate starting block, assuming there's 15 seconds in a given block
         current_block = self.get_current_block()
-        two_day_ago_block = int(current_block - (4 * 60 * 25))
+        one_day_ago_block = int(current_block - (4 * 60 * 25))
 
-        start_block = two_day_ago_block if two_day_ago_block > self.all_last_pair_block else self.all_last_pair_block
+        start_block = one_day_ago_block if one_day_ago_block > self.all_last_pair_block else self.all_last_pair_block
         end_block = current_block
 
         raw_block_trades = []
