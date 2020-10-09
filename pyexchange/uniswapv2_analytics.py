@@ -121,13 +121,14 @@ class UniswapV2Analytics(Contract):
     Irouter_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Router02.abi')['abi']
     Ifactory_abi = Contract._load_abi(__name__, 'abi/IUniswapV2Factory.abi')['abi']
 
-    def __init__(self, web3: Web3, token_config_path: str, keeper_address: Address, router_address: Address, factory_address: Address, graph_url: str = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2"):
+    def __init__(self, web3: Web3, token_config_path: str, keeper_address: Address, router_address: Address, factory_address: Address, graph_url: str = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2", start_block: int):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_config_path, str))
         assert (isinstance(keeper_address, Address))
         assert (isinstance(router_address, Address) or router_address is None)
         assert (isinstance(factory_address, Address) or factory_address is None)
         assert (isinstance(graph_url, str))
+        assert (isinstance(start_block, int))
 
         self.graph_client = GraphClient(graph_url)
 
@@ -139,6 +140,7 @@ class UniswapV2Analytics(Contract):
 
         self.our_last_pair_hour_block = 0
         self.all_last_pair_block = 0
+        self.start_block = start_block
 
         # check to ensure that this isn't a mock instance before attempting to retrieve contracts
         if router_address is not None and factory_address is not None:
@@ -341,9 +343,13 @@ class UniswapV2Analytics(Contract):
         mint_events = self.get_our_mint_txs(pair_address)
         burn_events = self.get_our_burn_txs(pair_address)
 
-        # calculate starting block, assuming there's 15 seconds in a given block
+        # use the last retrieved from trade-service as a starting point to avoid duplicate trade syncing
+        if self.start_block != 0:
+            self.our_last_pair_hour_block = self.start_block
+
         current_block = self.get_current_block()
-        two_day_ago_block = int(current_block - (4 * 60 * 25))
+
+        one_day_ago_block = int(current_block - (4 * 60 * 25))
 
         if len(mint_events) == 0:
             return trades_list
@@ -359,16 +365,16 @@ class UniswapV2Analytics(Contract):
         our_liquidity_balance = Wad.from_number(last_mint_event['liquidity'])
         current_liquidity = self.get_current_liquidity(pair_address)
 
-        mints_in_last_two_days = list(filter(lambda mint: int(mint['transaction']['blockNumber']) > two_day_ago_block, mint_events))
+        mints_in_last_day = list(filter(lambda mint: int(mint['transaction']['blockNumber']) > one_day_ago_block, mint_events))
 
-        if current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
-            start_block = max(self.our_last_pair_hour_block, int(mints_in_last_two_days[-1]['transaction']['blockNumber']))
+        if current_liquidity != Wad.from_number(0) and len(mints_in_last_day) >= 1:
+            start_block = max(self.our_last_pair_hour_block, int(mints_in_last_day[-1]['transaction']['blockNumber']))
             end_block = current_block
-        elif current_liquidity != Wad.from_number(0) and len(mints_in_last_two_days) == 0:
-            start_block = max(self.our_last_pair_hour_block, two_day_ago_block)
+        elif current_liquidity != Wad.from_number(0) and len(mints_in_last_day) == 0:
+            start_block = max(self.our_last_pair_hour_block, one_day_ago_block)
             end_block = current_block
-        elif current_liquidity == Wad.from_number(0) and len(mints_in_last_two_days) >= 1:
-            start_block = max(self.our_last_pair_hour_block, int(mints_in_last_two_days[-1]['transaction']['blockNumber']))
+        elif current_liquidity == Wad.from_number(0) and len(mints_in_last_day) >= 1:
+            start_block = max(self.our_last_pair_hour_block, int(mints_in_last_day[-1]['transaction']['blockNumber']))
             end_block = last_burn_block if last_burn_block != None else current_block
         else:
             return trades_list
