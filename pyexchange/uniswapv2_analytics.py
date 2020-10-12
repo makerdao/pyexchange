@@ -93,14 +93,14 @@ class UniswapTrade(Trade):
 
             is_sell = Wad.from_number(trade['reserve1']) < previous_base_token_reserves
 
-            amount = our_pool_share * abs(Wad.from_number(trade['reserve1']) - previous_base_token_reserves)
+            amount = abs(Wad.from_number(trade['reserve1']) - previous_base_token_reserves)
 
         else:
             swap_price = Wad.from_number(trade['reserve0']) / Wad.from_number(trade['reserve1'])
 
             is_sell = Wad.from_number(trade['reserve0']) < previous_base_token_reserves
 
-            amount = our_pool_share * abs(Wad.from_number(trade['reserve0']) - previous_base_token_reserves)
+            amount = abs(Wad.from_number(trade['reserve0']) - previous_base_token_reserves)
 
         unhashed_id = str(timestamp)
         trade_id = hashlib.sha256(unhashed_id.encode()).hexdigest()
@@ -128,7 +128,7 @@ class UniswapV2Analytics(Contract):
         assert (isinstance(router_address, Address) or router_address is None)
         assert (isinstance(factory_address, Address) or factory_address is None)
         assert (isinstance(graph_url, str))
-        assert (isinstance(start_blocks, {}))
+        assert (isinstance(start_blocks, dict))
 
         self.graph_client = GraphClient(graph_url)
 
@@ -345,7 +345,8 @@ class UniswapV2Analytics(Contract):
 
         # use the last retrieved from trade-service as a starting point to avoid duplicate trade syncing
         if self.start_blocks:
-            self.our_last_pair_hour_block = self.start_blocks[pair]
+            if self.start_blocks[pair] > self.our_last_pair_hour_block:
+                self.our_last_pair_hour_block = self.start_blocks[pair]
 
         current_block = self.get_current_block()
         one_day_ago_block = int(current_block - (4 * 60 * 25))
@@ -416,8 +417,9 @@ class UniswapV2Analytics(Contract):
         trades_list = []
 
         # use the last retrieved from trade-service as a starting point to avoid duplicate trade syncing
-        if self.start_block != 0:
-            self.all_last_pair_block = self.start_block
+        if self.start_blocks:
+            if self.start_blocks[pair] > self.all_last_pair_hour_block:
+                self.all_last_pair_hour_block = self.start_blocks[pair]
 
         # calculate starting block, assuming there's 15 seconds in a given block
         current_block = self.get_current_block()
