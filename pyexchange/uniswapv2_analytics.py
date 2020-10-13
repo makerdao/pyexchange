@@ -298,11 +298,8 @@ class UniswapV2Analytics(Contract):
                     }
                     token0Price
                     token1Price
-                    volumeToken0
-                    volumeToken1
                     reserve0
                     reserve1
-                    txCount
                     id
                 }
             }
