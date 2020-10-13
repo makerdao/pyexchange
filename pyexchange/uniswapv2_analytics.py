@@ -429,31 +429,36 @@ class UniswapV2Analytics(Contract):
 
         # calculate starting block, assuming there's 15 seconds in a given block
         current_block = self.get_current_block()
-        one_day_ago_block = int(current_block - (4 * 60 * 25))
+        one_day_ago_block = int(current_block - (4 * 60 * 24))
 
         start_block = one_day_ago_block if one_day_ago_block > self.all_last_pair_block else self.all_last_pair_block
         end_block = current_block
 
         raw_block_trades = []
-        index = 0
         checked_block = start_block
         while checked_block + self.number_of_blocks_to_check < end_block:
-            block_trade = self.get_block_trade(pair_address, checked_block)[0]
 
+            # Query previous time slice to provide a comparison point for reserve amount changes
+            if len(raw_block_trades) == 0:
+                block_trade = self.get_block_trade(pair_address, checked_block - self.number_of_blocks_to_check)[0]
+                raw_block_trades.append(block_trade)
+
+            block_trade = self.get_block_trade(pair_address, checked_block)[0]
             raw_block_trades.append(block_trade)
 
-            if checked_block != start_block:
-                if raw_block_trades[index]['token0']['id'] == base_token.address.address:
-                    previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 1]['reserve0'])
-                else:
-                    previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 1]['reserve1'])
+            # use len of raw_block_trades to access previous trades
+            index = len(raw_block_trades)
 
-                timestamp = self.web3.eth.getBlock(checked_block).timestamp
+            if raw_block_trades[index - 1]['token0']['id'] == base_token.address.address:
+                previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 2]['reserve1'])
+            else:
+                previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 2]['reserve0'])
 
-                trades_list.append(UniswapTrade.from_all_trades_message(block_trade, pair, base_token, previous_base_token_reserves, timestamp))
+            timestamp = self.web3.eth.getBlock(checked_block).timestamp
+
+            trades_list.append(UniswapTrade.from_all_trades_message(block_trade, pair, base_token, previous_base_token_reserves, timestamp))
 
             checked_block += self.number_of_blocks_to_check
-            index += 1
 
         # Avoid excessively querying the api by storing the timestamp of the last retrieved trade
         if len(trades_list) > 0:
