@@ -82,7 +82,7 @@ class BinanceUsApi(PyexAPI):
 
     def get_precision(self, pair):
         assert(isinstance(pair, str))
-        symbols = self._http_authenticated("GET", "/api/v3/exchangeInfo", {})['symbols']
+        symbols = self._http_unauthenticated("GET", "/api/v3/exchangeInfo", {})['symbols']
         pair = self._fix_pair(pair)
 
         for symbol_data in symbols:
