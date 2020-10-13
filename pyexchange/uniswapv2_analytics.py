@@ -30,7 +30,6 @@ from pymaker.approval import directly
 from pyexchange.graph import GraphClient
 from pyexchange.model import Trade
 
-
 class UniswapTrade(Trade):
 
     @staticmethod
@@ -141,6 +140,9 @@ class UniswapV2Analytics(Contract):
         self.our_last_pair_hour_block = 0
         self.all_last_pair_block = 0
         self.start_blocks = start_blocks
+
+        # assume there's 240 blocks in an hour
+        self.number_of_blocks_to_check = 240
 
         # check to ensure that this isn't a mock instance before attempting to retrieve contracts
         if router_address is not None and factory_address is not None:
@@ -324,10 +326,10 @@ class UniswapV2Analytics(Contract):
                 If the mint was more than 24 hours ago, return the last 24 hours of data.
                 If the mint was less than 24 hours ago, return all data since the mint event.
 
-                When querying, retrieve 25 hours of pair data,
-                with the 25th hour used as a starting point for determing sells and buys
-                
                 All mint events are sorted by descending timestamp.
+
+                When querying, retrieve 24 hours of pair data, with a constructor set periodicity in Blocks.
+                The first new trade retrieved will always travel back one period to create a comparison point for amounts and trade direction.
 
             Graph Protocol doesn't currently accept queries using Checksum addresses,
             so all addresses must be lowercased prior to submission.
@@ -349,7 +351,7 @@ class UniswapV2Analytics(Contract):
                 self.our_last_pair_hour_block = self.start_blocks[pair]
 
         current_block = self.get_current_block()
-        one_day_ago_block = int(current_block - (4 * 60 * 25))
+        one_day_ago_block = int(current_block - (4 * 60 * 24))
 
         if len(mint_events) == 0:
             return trades_list
@@ -380,26 +382,30 @@ class UniswapV2Analytics(Contract):
             return trades_list
 
         raw_block_trades = []
-        index = 0
         checked_block = start_block
-        while checked_block < end_block:
-            block_trade = self.get_block_trade(pair_address, checked_block)[0]
+        while checked_block + self.number_of_blocks_to_check < end_block:
 
+            # Query previous time slice to provide a comparison point for reserve amount changes
+            if len(raw_block_trades) == 0:
+                block_trade = self.get_block_trade(pair_address, checked_block - self.number_of_blocks_to_check)[0]
+                raw_block_trades.append(block_trade)
+
+            block_trade = self.get_block_trade(pair_address, checked_block)[0]
             raw_block_trades.append(block_trade)
 
-            if checked_block != start_block:
-                if raw_block_trades[index]['token0']['id'] == base_token.address.address:
-                    previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 1]['reserve0'])
-                else:
-                    previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 1]['reserve1'])
+            # use len of raw_block_trades to access previous trades
+            index = len(raw_block_trades)
 
-                timestamp = self.web3.eth.getBlock(checked_block).timestamp
+            if raw_block_trades[index - 1]['token0']['id'] == base_token.address.address:
+                previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 2]['reserve1'])
+            else:
+                previous_base_token_reserves = Wad.from_number(raw_block_trades[index - 2]['reserve0'])
 
-                trades_list.append(UniswapTrade.from_our_trades_message(block_trade, pair, base_token, our_liquidity_balance, previous_base_token_reserves, timestamp))
+            timestamp = self.web3.eth.getBlock(checked_block).timestamp
 
-            # assume there's 240 blocks in an hour
-            checked_block += 240
-            index += 1
+            trades_list.append(UniswapTrade.from_our_trades_message(block_trade, pair, base_token, our_liquidity_balance, previous_base_token_reserves, timestamp))
+
+            checked_block += self.number_of_blocks_to_check
 
         # Avoid excessively querying the api by storing the block of the last retrieved trade
         if len(trades_list) > 0:
@@ -431,7 +437,7 @@ class UniswapV2Analytics(Contract):
         raw_block_trades = []
         index = 0
         checked_block = start_block
-        while checked_block < end_block:
+        while checked_block + self.number_of_blocks_to_check < end_block:
             block_trade = self.get_block_trade(pair_address, checked_block)[0]
 
             raw_block_trades.append(block_trade)
@@ -446,8 +452,7 @@ class UniswapV2Analytics(Contract):
 
                 trades_list.append(UniswapTrade.from_all_trades_message(block_trade, pair, base_token, previous_base_token_reserves, timestamp))
 
-            # assume there's 240 blocks in an hour
-            checked_block += 240
+            checked_block += self.number_of_blocks_to_check
             index += 1
 
         # Avoid excessively querying the api by storing the timestamp of the last retrieved trade
