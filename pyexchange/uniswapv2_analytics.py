@@ -138,7 +138,7 @@ class UniswapV2Analytics(Contract):
         self.account_address = keeper_address
 
         self.our_last_pair_hour_block = 0
-        self.all_last_pair_block = 0
+        self.all_last_pair_hour_block = 0
         self.start_blocks = start_blocks
 
         # assume there's 240 blocks in an hour
@@ -428,7 +428,7 @@ class UniswapV2Analytics(Contract):
         current_block = self.get_current_block()
         one_day_ago_block = int(current_block - (4 * 60 * 24))
 
-        start_block = one_day_ago_block if one_day_ago_block > self.all_last_pair_block else self.all_last_pair_block
+        start_block = one_day_ago_block if one_day_ago_block > self.all_last_pair_hour_block else self.all_last_pair_hour_block
         end_block = current_block
 
         raw_block_trades = []
@@ -459,7 +459,7 @@ class UniswapV2Analytics(Contract):
 
         # Avoid excessively querying the api by storing the timestamp of the last retrieved trade
         if len(trades_list) > 0:
-            self.all_last_pair_block = end_block
+            self.all_last_pair_hour_block = end_block
 
         return trades_list
 
