@@ -7,6 +7,8 @@ https://github.com/pypa/sampleproject/blob/master/setup.py
 """
 
 # Always prefer setuptools over distutils
+import os
+
 from setuptools import setup, find_packages
 from os import path
 
@@ -16,9 +18,20 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
+# Read requirements.txt
+with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
+    requirements = f.read().split('\n')
+
+for path, dirs, files in os.walk(here):
+    for filename in files:
+        # check if filename is requirements.txt
+        if filename == 'requirements.txt':
+            fullpath = os.path.join(path, filename)
+        with open(fullpath, 'r') as f:
+                requirements = f.read().split('\n')
+
 # Arguments marked as "Required" below must be included for upload to PyPI.
 # Fields marked as "Optional" may be commented out.
-
 setup(
     name='pyexchange',
 
@@ -48,19 +61,5 @@ setup(
     # https://packaging.python.org/en/latest/requirements.html
     #
     # All packages in pyexchange.requirements.txt and pyexchange/lib/pymaker.requirements.txt
-    install_requires=[
-        'pytz==2017.3',
-        'web3==5.12.0',
-        'requests==2.22.0',
-        'python-dateutil==2.8.1',
-        'websockets==8.1.0',
-        'python-kucoin==2.1.2',
-        'pyjwt==1.7.1',
-        'leverj_ordersigner==0.9.2',
-        'simplefix==1.0.14',
-        'dydx-python==0.11.1',
-        'eth-account==0.5.2',
-        'jsonnet==0.9.5'
-        'eth-keys<0.3.0,>=0.2.1'
-        ],
+    install_requires=requirements
 )

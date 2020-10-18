@@ -161,6 +161,20 @@ class ErisxApi(PyexAPI):
 
         return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(unfiltered_orders)))
 
+    def sync_orders(self, orders: List[Order]) -> List[Order]:
+        """
+        sync keeper order state with erisx order state.
+        If an order has been filled, set it as a trade.
+
+        Only return a list of open and partially filled orders
+        """
+        assert (isinstance(orders, List))
+
+        open_order_ids = self.fix_trading.sync_orders(orders)
+
+        open_orders = list(filter(lambda order: order.order_id in open_order_ids, orders))
+        return open_orders
+
     def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:
         assert (isinstance(pair, str))
         assert (isinstance(is_sell, bool))
@@ -192,7 +206,7 @@ class ErisxApi(PyexAPI):
         # message.append_pair(448, self.fix_trading_user)
 
         self.fix_trading.write(message)
-        new_order = self.fix_trading.wait_for_response('8')
+        new_order = self.fix_trading.wait_for_response('8', client_order_id)
 
         erisx_oid = new_order.get(simplefix.TAG_ORDERID).decode('utf-8')
         client_oid = new_order.get(simplefix.TAG_CLORDID).decode('utf-8')
@@ -206,7 +220,6 @@ class ErisxApi(PyexAPI):
         """
             Send cancel order request to ErisX, and wait for the response.
             Returns a Tuple: [Cancellation_Status, Is_Unknown_Order]
-
         """
         assert (isinstance(order_id, str))
         assert (isinstance(pair, str))
@@ -226,7 +239,7 @@ class ErisxApi(PyexAPI):
 
         self.fix_trading.write(message)
 
-        response = self.fix_trading.wait_for_response('8')
+        response = self.fix_trading.wait_for_response('8', client_oid)
 
         if response.get(150) is not None:
             if response.get(150).decode('utf-8') == '4':
@@ -249,11 +262,6 @@ class ErisxApi(PyexAPI):
     # TODO: Not currently available
     def get_all_trades(self, pair, page_number) -> List[Trade]:
        pass
-
-    def check_cancellations(self) -> List:
-        cancellations = self.fix_trading.listen_for_cancellations()
-
-        return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(cancellations)))
 
     def _http_get(self, resource: str, params=""):
         assert (isinstance(resource, str))

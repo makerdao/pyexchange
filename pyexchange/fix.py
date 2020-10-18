@@ -26,6 +26,7 @@ import ssl
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import List
+from pyexchange.model import Order
 
 
 class FixConnectionState(Enum):
@@ -86,6 +87,9 @@ class FixEngine:
         self.write_queue = queue.Queue()
         self.application_messages = queue.Queue()
 
+        # clientId: Queue
+        self.order_book = {}
+
     async def _read_message(self):
         """Reads the next message from the server"""
         try:
@@ -106,7 +110,7 @@ class FixEngine:
 
             # Handle session messages, queue application messages.
             if not self._handle_session_message(message):
-                self.application_messages.put(message)
+                self._handle_application_message(message)
 
         except asyncio.CancelledError:
             logging.error("client read timed out")
@@ -114,6 +118,28 @@ class FixEngine:
         finally:
             await asyncio.sleep(0.3)
             pass
+
+    def _handle_application_message(self, message: simplefix.FixMessage):
+        """
+            If application message is an order processing message,
+            add it to the order_book keyed by the messages client_order_id.
+
+            Otherwise, add marketdata messages to application_messages queue.
+        """
+        assert isinstance(message, simplefix.FixMessage)
+
+        # handle order processing messages
+        if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
+            client_order_id = f"{message.get(simplefix.TAG_CLORDID)}"
+
+            if client_order_id not in self.order_book[client_order_id]:
+                self.order_book[client_order_id] = queue.Queue
+
+            self.order_book[client_order_id].put(message)
+
+        # keep marketdata messages in application queue
+        else:
+            self.application_messages.put(message)
 
     def _handle_session_message(self, message: simplefix.FixMessage) -> bool:
         assert isinstance(message, simplefix.FixMessage)
@@ -152,32 +178,88 @@ class FixEngine:
         self.write_queue.put(message)
         pass
 
-    async def _wait_for_response(self, message_type: str) -> simplefix.FixMessage:
+    def _get_client_id(self, order_id: str) -> str:
+        """ Retrieve the client_id from an order_id structured as exchange_id|client_id """
+        assert isinstance(order_id, str)
+
+        return order_id.split('|')[1]
+
+    async def _sync_orders(self, message_type: str, orders: List[Order]) -> List[str]:
+        """
+            Iterate through clients list of orders and update according to exchange state.
+
+            If an order has been canceled or completely filled, delete the entry in the order book.
+
+            Finally, return a list of open order ids.
+        """
         assert isinstance(message_type, str)
+        assert isinstance(orders, List)
         assert len(message_type) == 1
+
+        cancel_message_types = [simplefix.EXECTYPE_CANCELED, simplefix.EXECTYPE_EXPIRED]
+        open_orders = []
+
+        await self.lock.acquire()
+
+        for order in orders:
+            client_order_id = self._get_client_id(order.order_id)
+            while not self.order_book[order_id].empty()
+                exchange_order_state = self.order_book[client_order_id].get()
+                order_id = f"{exchange_order_state.get(simplefix.TAG_ORDERID)}|{exchange_order_state.get(simplefix.TAG_CLORDID)}"
+
+                # check for cancellations
+                if exchange_order_state.get(simplefix.TAG_EXECTYPE) in cancel_message_types:
+                    if exchange_order_state.get(b'5001') == '4'.encode('utf-8'):
+                        self.logger.warning(f'Unsolicited Cancellation for order: {order_id}')
+                    del self.order_book[client_order_id]
+
+                # check for fills
+                if exchange_order_state.get(simplefix.TAG_EXECTYPE) == b'F':
+                    if exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_FILLED:
+                        self.logger.info(f'Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}')
+                        del self.order_book[client_order_id]
+                    elif exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_PARTIALLY_FILLED:
+                        self.logger.info(f'Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}')
+                        open_orders.append(order_id)
+
+            # keep open orders in state
+            if client_order_id in self.order_book and order.order_id not in open_orders:
+                open_orders.append(order.order_id)
+
+        self.lock.release()
+        return open_orders
+
+    def sync_orders(self, orders: List[Order]) -> List[str]:
+        logging.info(f"Synchronizing Order state")
+        orders = self.caller_loop.run_until_complete(self._wait_for_response(message_type, orders))
+        return orders
+
+    def _wait_for_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
+        assert isinstance(message_type, str)
+        assert isinstance(client_order_id, str)
 
         reject_message_types = [simplefix.MSGTYPE_BUSINESS_MESSAGE_REJECT, simplefix.MSGTYPE_ORDER_CANCEL_REJECT]
 
         while True:
-            if not self.application_messages.empty():
-                message = self.application_messages.get()
+            if not self.order_book[client_order_id].empty():
+                message = self.order_book[client_order_id].get()
                 assert isinstance(message, simplefix.FixMessage)
 
                 # handle message rejection
                 if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
                     if message.get(102) is not None:
                         logging.error(f"Order cancellation rejected due to {message.get(58).decode('utf-8')}, tag_102 code: {message.get(102).decode('utf-8')}")
-                    return message
-
-                if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
                     if message.get(103) is not None:
                         logging.error(f"Order placement rejected due to {message.get(58).decode('utf-8')}, tag_103 code: {message.get(103).decode('utf-8')}")
                     return message
+
+                if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
+                    return message
             await asyncio.sleep(0.3)
 
-    def wait_for_response(self, message_type: str) -> simplefix.FixMessage:
+    def wait_for_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
         logging.info(f"waiting for 35={message_type} response")
-        message = self.caller_loop.run_until_complete(self._wait_for_response(message_type))
+        message = self.caller_loop.run_until_complete(self._wait_for_response(message_type, client_order_id))
         return message
 
     # Assumes always waiting for message type 8
@@ -208,41 +290,6 @@ class FixEngine:
     def wait_for_get_orders_response(self) -> List[simplefix.FixMessage]:
         logging.debug(f"waiting for 35={8} Order Mass Status Request response")
         messages = self.caller_loop.run_until_complete(self._wait_for_get_orders_response())
-        return messages
-
-    async def _listen_for_cancellations(self) -> List[simplefix.FixMessage]:
-        """
-            Iterate through application messages and check to see that we haven't received any order cancellation messages.
-            If a message is recieved, it will be queued and checked periodically as part of the keeper lifecycle.
-        """
-        cancellation_messages = []
-
-        cancel_message_types = [simplefix.EXECTYPE_CANCELED, simplefix.EXECTYPE_EXPIRED]
-
-        while True:
-            if not self.application_messages.empty():
-                message = self.application_messages.get()
-                assert isinstance(message, simplefix.FixMessage)
-
-                # handle message cancellation
-                if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
-
-                    if message.get(simplefix.TAG_EXECTYPE) in cancel_message_types:
-                        order_to_cancel_id = f"{message.get(simplefix.TAG_ORDERID)}|{message.get(simplefix.TAG_CLORDID)}"
-
-                        if message.get(b'5001') == '4'.encode('utf-8'):
-                            self.logger.warning(f'Unsolicited Cancellation for order: {order_to_cancel_id}')
-                            cancellation_messages.append(message)
-                        else:
-                            cancellation_messages.append(message)
-
-                await asyncio.sleep(0.3)
-            else:
-                return cancellation_messages
-
-    def listen_for_cancellations(self) -> List[simplefix.FixMessage]:
-        logging.debug(f"waiting for 35={8} Order Execution Report response")
-        messages = self.caller_loop.run_until_complete(self._listen_for_cancellations())
         return messages
 
     def create_message(self, message_type: bytes) -> simplefix.FixMessage:
