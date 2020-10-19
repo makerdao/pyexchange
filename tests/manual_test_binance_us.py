@@ -45,6 +45,9 @@ print(binance_us.get_balances())
 print('get ETH balance')
 print(binance_us.get_balance('ETH'))
 
+print("Get ETH-USD rules")
+print(binance_us.get_rules('ETH-USD'))
+
 # print('Place order')
 # order_id = binance_us.place_order('ETH-USD', False, price=Wad.from_number(420), amount=Wad.from_number(1))
 
