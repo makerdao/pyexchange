@@ -26,6 +26,7 @@ import ssl
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import List
+
 from pyexchange.model import Order
 
 
@@ -128,11 +129,15 @@ class FixEngine:
         """
         assert isinstance(message, simplefix.FixMessage)
 
+        # handle ORDER MASS STATUS REQUEST messages
+        if message.get(b'584') != None:
+            self.application_messages.put(message)
+            return
+
         # handle order processing messages
         if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
             client_order_id = f"{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
 
-            # TODO: handle UNKNOWN id messages
             if client_order_id not in self.order_book[client_order_id]:
                 self.order_book[client_order_id] = queue.Queue
 
@@ -185,7 +190,7 @@ class FixEngine:
 
         return order_id.split('|')[1]
 
-    async def _sync_orders(self, message_type: str, orders: List[Order]) -> List[str]:
+    async def _sync_orders(self, orders: List[Order]) -> List[str]:
         """
             Iterate through clients list of orders and update according to exchange state.
 
@@ -193,9 +198,7 @@ class FixEngine:
 
             Finally, return a list of open order ids.
         """
-        assert isinstance(message_type, str)
         assert isinstance(orders, List)
-        assert len(message_type) == 1
 
         cancel_message_types = [simplefix.EXECTYPE_CANCELED, simplefix.EXECTYPE_EXPIRED]
         open_orders = []
@@ -232,7 +235,7 @@ class FixEngine:
 
     def sync_orders(self, orders: List[Order]) -> List[str]:
         logging.info(f"Synchronizing Order state")
-        orders = self.caller_loop.run_until_complete(self._wait_for_response(message_type, orders))
+        orders = self.caller_loop.run_until_complete(self._sync_orders(orders))
         return orders
 
     async def _wait_for_order_processing_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
@@ -242,25 +245,26 @@ class FixEngine:
         reject_message_types = [simplefix.MSGTYPE_BUSINESS_MESSAGE_REJECT, simplefix.MSGTYPE_ORDER_CANCEL_REJECT]
 
         while True:
-            if not self.order_book[client_order_id].empty():
-                message = self.order_book[client_order_id].get()
-                assert isinstance(message, simplefix.FixMessage)
+            if client_order_id in self.order_book:
+                if not self.order_book[client_order_id].empty():
+                    message = self.order_book[client_order_id].get()
+                    assert isinstance(message, simplefix.FixMessage)
 
-                # handle message rejection
-                if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
-                    if message.get(102) is not None:
-                        logging.error(f"Order cancellation rejected due to {message.get(58).decode('utf-8')}, tag_102 code: {message.get(102).decode('utf-8')}")
-                    if message.get(103) is not None:
-                        logging.error(f"Order placement rejected due to {message.get(58).decode('utf-8')}, tag_103 code: {message.get(103).decode('utf-8')}")
-                    return message
+                    # handle message rejection
+                    if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
+                        if message.get(102) is not None:
+                            logging.error(f"Order cancellation rejected due to {message.get(58).decode('utf-8')}, tag_102 code: {message.get(102).decode('utf-8')}")
+                        if message.get(103) is not None:
+                            logging.error(f"Order placement rejected due to {message.get(58).decode('utf-8')}, tag_103 code: {message.get(103).decode('utf-8')}")
+                        return message
 
-                if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
-                    return message
+                    if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
+                        return message
             await asyncio.sleep(0.3)
 
     def wait_for_order_processing_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
         logging.info(f"waiting for 35={message_type} response")
-        message = self.caller_loop.run_until_complete(self._wait_for_response(message_type, client_order_id))
+        message = self.caller_loop.run_until_complete(self._wait_for_order_processing_response(message_type, client_order_id))
         return message
 
     # Assumes always waiting for message type 8

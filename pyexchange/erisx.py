@@ -206,7 +206,7 @@ class ErisxApi(PyexAPI):
         # message.append_pair(448, self.fix_trading_user)
 
         self.fix_trading.write(message)
-        new_order = self.fix_trading.wait_for_order_processing_response('8', client_order_id)
+        new_order = self.fix_trading.wait_for_order_processing_response('8', str(client_order_id))
 
         erisx_oid = new_order.get(simplefix.TAG_ORDERID).decode('utf-8')
         client_oid = new_order.get(simplefix.TAG_CLORDID).decode('utf-8')
@@ -239,7 +239,7 @@ class ErisxApi(PyexAPI):
 
         self.fix_trading.write(message)
 
-        response = self.fix_trading.wait_for_order_processing_response('8', client_oid)
+        response = self.fix_trading.wait_for_order_processing_response('8', str(client_oid))
 
         if response.get(150) is not None:
             if response.get(150).decode('utf-8') == '4':
