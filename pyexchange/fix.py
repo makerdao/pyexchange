@@ -130,8 +130,9 @@ class FixEngine:
 
         # handle order processing messages
         if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
-            client_order_id = f"{message.get(simplefix.TAG_CLORDID)}"
+            client_order_id = f"{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
 
+            # TODO: handle UNKNOWN id messages
             if client_order_id not in self.order_book[client_order_id]:
                 self.order_book[client_order_id] = queue.Queue
 
@@ -203,7 +204,7 @@ class FixEngine:
 
         for order in orders:
             client_order_id = self._get_client_id(order.order_id)
-            while not self.order_book[order_id].empty():
+            while not self.order_book[client_order_id].empty():
                 exchange_order_state = self.order_book[client_order_id].get()
                 order_id = f"{exchange_order_state.get(simplefix.TAG_ORDERID)}|{exchange_order_state.get(simplefix.TAG_CLORDID)}"
 
@@ -234,7 +235,7 @@ class FixEngine:
         orders = self.caller_loop.run_until_complete(self._wait_for_response(message_type, orders))
         return orders
 
-    async def _wait_for_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
+    async def _wait_for_order_processing_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
         assert isinstance(message_type, str)
         assert isinstance(client_order_id, str)
 
@@ -257,7 +258,7 @@ class FixEngine:
                     return message
             await asyncio.sleep(0.3)
 
-    def wait_for_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
+    def wait_for_order_processing_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
         logging.info(f"waiting for 35={message_type} response")
         message = self.caller_loop.run_until_complete(self._wait_for_response(message_type, client_order_id))
         return message
@@ -291,6 +292,34 @@ class FixEngine:
         logging.debug(f"waiting for 35={8} Order Mass Status Request response")
         messages = self.caller_loop.run_until_complete(self._wait_for_get_orders_response())
         return messages
+
+    async def _wait_for_response(self, message_type: str) -> simplefix.FixMessage:
+        assert isinstance(message_type, str)
+        assert len(message_type) == 1
+
+        reject_message_types = [simplefix.MSGTYPE_BUSINESS_MESSAGE_REJECT, simplefix.MSGTYPE_ORDER_CANCEL_REJECT]
+
+        while True:
+            if not self.application_messages.empty():
+                message = self.application_messages.get()
+                assert isinstance(message, simplefix.FixMessage)
+
+                # handle message rejection
+                if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
+                    if message.get(102) is not None:
+                        logging.error(f"Order cancellation rejected due to {message.get(58).decode('utf-8')}, tag_102 code: {message.get(102).decode('utf-8')}")
+                    return message
+
+                if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
+                    if message.get(103) is not None:
+                        logging.error(f"Order placement rejected due to {message.get(58).decode('utf-8')}, tag_103 code: {message.get(103).decode('utf-8')}")
+                    return message
+            await asyncio.sleep(0.3)
+
+    def wait_for_response(self, message_type: str) -> simplefix.FixMessage:
+        logging.info(f"waiting for 35={message_type} response")
+        message = self.caller_loop.run_until_complete(self._wait_for_response(message_type))
+        return message
 
     def create_message(self, message_type: bytes) -> simplefix.FixMessage:
         """Boilerplates a new message which the caller may populate as desired."""
