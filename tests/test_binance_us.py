@@ -144,10 +144,10 @@ class TestBinanceUs:
         TestBinanceUs.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        pair = "ETH-KRW"
+        pair = "ETH-BTC"
         side = "ask"
         mocker.patch("requests.request", side_effect=self.binaceUsMockServer.handle_request)
-        order_id = self.binance_us.place_order(pair, True, Wad.from_number(241700), Wad.from_number(10))
+        order_id = self.binance_us.place_order(pair, True, price=Wad.from_number(30.1), amount=Wad.from_number(100))
         assert (isinstance(order_id, str))
         assert (order_id is not None)
         cancel_result = self.binance_us.cancel_order(order_id, pair)
