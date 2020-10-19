@@ -203,23 +203,23 @@ class FixEngine:
 
         for order in orders:
             client_order_id = self._get_client_id(order.order_id)
-            while not self.order_book[order_id].empty()
+            while not self.order_book[order_id].empty():
                 exchange_order_state = self.order_book[client_order_id].get()
                 order_id = f"{exchange_order_state.get(simplefix.TAG_ORDERID)}|{exchange_order_state.get(simplefix.TAG_CLORDID)}"
 
                 # check for cancellations
                 if exchange_order_state.get(simplefix.TAG_EXECTYPE) in cancel_message_types:
                     if exchange_order_state.get(b'5001') == '4'.encode('utf-8'):
-                        self.logger.warning(f'Unsolicited Cancellation for order: {order_id}')
+                        self.logger.warning(f"Unsolicited Cancellation for order: {order_id}")
                     del self.order_book[client_order_id]
 
                 # check for fills
-                if exchange_order_state.get(simplefix.TAG_EXECTYPE) == b'F':
+                if exchange_order_state.get(simplefix.TAG_EXECTYPE) == simplefix.EXECTYPE_FILL:
                     if exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_FILLED:
-                        self.logger.info(f'Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}')
+                        self.logger.info(f"Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')} at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}")
                         del self.order_book[client_order_id]
                     elif exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_PARTIALLY_FILLED:
-                        self.logger.info(f'Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}')
+                        self.logger.info(f"Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}")
                         open_orders.append(order_id)
 
             # keep open orders in state
@@ -234,7 +234,7 @@ class FixEngine:
         orders = self.caller_loop.run_until_complete(self._wait_for_response(message_type, orders))
         return orders
 
-    def _wait_for_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
+    async def _wait_for_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
         assert isinstance(message_type, str)
         assert isinstance(client_order_id, str)
 
