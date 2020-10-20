@@ -229,6 +229,15 @@ class ErisxApi(PyexAPI):
         self.fix_trading.write(message)
         new_order = self.fix_trading.wait_for_order_processing_response('8', str(client_order_id))
 
+        # Handle order rejections; ErisX will reject orders with 35=8, and 103=<X>
+        # 103 codes are nonstandard. 100 is instrument closed, 23 is balance above limit.
+        if new_order.get(simplefix.TAG_ORDERREJREASON) is not None:
+            if new_order.get(simplefix.TAG_ORDERREJREASON) == b'100':
+                self.logger.warning(f"Failed to place order as instrument is closed")
+            elif new_order.get(simplefix.TAG_ORDERREJREASON) == b'23':
+                self.logger.warning(f"Failed to place order as order would have exceeded balance limits")
+            return ''
+
         erisx_oid = new_order.get(simplefix.TAG_ORDERID).decode('utf-8')
         client_oid = new_order.get(simplefix.TAG_CLORDID).decode('utf-8')
         order_id = f"{erisx_oid}|{client_oid}"
