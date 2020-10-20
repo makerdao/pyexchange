@@ -15,3 +15,6 @@ _virtualenv
 .pytest_cache/
 
 .etoro-unencrypted-key
+
+build/
+dist/
