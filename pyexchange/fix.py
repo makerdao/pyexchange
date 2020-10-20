@@ -138,8 +138,8 @@ class FixEngine:
         if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
             client_order_id = f"{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
 
-            if client_order_id not in self.order_book[client_order_id]:
-                self.order_book[client_order_id] = queue.Queue
+            if client_order_id not in self.order_book:
+                self.order_book[client_order_id] = queue.Queue()
 
             self.order_book[client_order_id].put(message)
 
@@ -190,6 +190,7 @@ class FixEngine:
 
         return order_id.split('|')[1]
 
+    # TODO: return a List[{order_id: amount_remaining}]
     async def _sync_orders(self, orders: List[Order]) -> List[str]:
         """
             Iterate through clients list of orders and update according to exchange state.
@@ -203,10 +204,9 @@ class FixEngine:
         cancel_message_types = [simplefix.EXECTYPE_CANCELED, simplefix.EXECTYPE_EXPIRED]
         open_orders = []
 
-        await self.lock.acquire()
-
         for order in orders:
             client_order_id = self._get_client_id(order.order_id)
+
             while not self.order_book[client_order_id].empty():
                 exchange_order_state = self.order_book[client_order_id].get()
                 order_id = f"{exchange_order_state.get(simplefix.TAG_ORDERID)}|{exchange_order_state.get(simplefix.TAG_CLORDID)}"
@@ -216,12 +216,14 @@ class FixEngine:
                     if exchange_order_state.get(b'5001') == '4'.encode('utf-8'):
                         self.logger.warning(f"Unsolicited Cancellation for order: {order_id}")
                     del self.order_book[client_order_id]
+                    break
 
                 # check for fills
                 if exchange_order_state.get(simplefix.TAG_EXECTYPE) == simplefix.EXECTYPE_FILL:
                     if exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_FILLED:
                         self.logger.info(f"Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')} at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}")
                         del self.order_book[client_order_id]
+                        break
                     elif exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_PARTIALLY_FILLED:
                         self.logger.info(f"Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}")
                         open_orders.append(order_id)
@@ -230,7 +232,6 @@ class FixEngine:
             if client_order_id in self.order_book and order.order_id not in open_orders:
                 open_orders.append(order.order_id)
 
-        self.lock.release()
         return open_orders
 
     def sync_orders(self, orders: List[Order]) -> List[str]:

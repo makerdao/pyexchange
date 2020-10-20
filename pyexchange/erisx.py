@@ -125,9 +125,20 @@ class ErisxApi(PyexAPI):
         message.append_pair(559, 0)
         message.append_pair(simplefix.TAG_SYMBOL, 'NA')
         message.append_pair(460, 2)
+        message.append_pair(1151, 'ALL')
         self.fix_marketdata.write(message)
+
+        security_messages = []
+
         message = self.fix_marketdata.wait_for_response('y')
-        return ErisxFix.parse_security_list(message)
+        security_messages.append(message)
+
+        # continue waiting for the rest of the security list to arrive
+        while message.get(893).decode('utf-8') != 'Y':
+            message = self.fix_marketdata.wait_for_response('y')
+            security_messages.append(message)
+
+        return ErisxFix.parse_security_list(security_messages)
 
     # filter out the response from get markets
     def get_pair(self, pair: str) -> dict:
@@ -171,6 +182,9 @@ class ErisxApi(PyexAPI):
         assert (isinstance(orders, List))
 
         open_order_ids = self.fix_trading.sync_orders(orders)
+
+        # TODO: update amounts in the event that a fill is partial?
+        ## set order amount for that ID to the value in tag 151 leavesqty
 
         open_orders = list(filter(lambda order: order.order_id in open_order_ids, orders))
         return open_orders
@@ -333,30 +347,34 @@ class ErisxFix(FixEngine):
                                        fix_version="FIX.4.4", heartbeat_interval=10)
 
     @staticmethod
-    def parse_security_list(m: simplefix.FixMessage) -> dict:
-        security_count = int(m.get(146))
+    def parse_security_list(messages: List[simplefix.FixMessage]) -> dict:
+        assert (isinstance(messages, List))
+
         securities = {}
-        for i in range(1, security_count + 1):
 
-            # Required fields
-            symbol = m.get(simplefix.TAG_SYMBOL, i).decode('utf-8')
-            securities[symbol] = {
-                "Product": m.get(460, i).decode('utf-8'),
-                "MinPriceIncrement": float(m.get(969, i).decode('utf-8')),
-                "SecurityDesc": m.get(simplefix.TAG_SECURITYDESC, i).decode('utf-8'),
-                "Currency": m.get(simplefix.TAG_CURRENCY, i).decode('utf-8')
-            }
+        for message in messages:
+            security_count = int(message.get(146))
+            for i in range(1, security_count + 1):
 
-            # Optional fields
-            min_trade_vol = m.get(562, i)
-            if min_trade_vol:
-                securities[symbol]["MinTradeVol"] = float(min_trade_vol.decode('utf-8'))
-            max_trade_vol = m.get(1140, i)
-            if max_trade_vol:
-                securities[symbol]["MaxTradeVol"] = float(max_trade_vol.decode('utf-8'))
-            round_lot = m.get(561, i)
-            if round_lot:
-                securities[symbol]["RoundLot"] = float(round_lot.decode('utf-8'))
+                # Required fields
+                symbol = message.get(simplefix.TAG_SYMBOL, i).decode('utf-8')
+                securities[symbol] = {
+                    "Product": message.get(460, i).decode('utf-8'),
+                    "MinPriceIncrement": float(message.get(969, i).decode('utf-8')),
+                    "SecurityDesc": message.get(simplefix.TAG_SECURITYDESC, i).decode('utf-8'),
+                    "Currency": message.get(simplefix.TAG_CURRENCY, i).decode('utf-8')
+                }
+
+                # Optional fields
+                min_trade_vol = message.get(562, i)
+                if min_trade_vol:
+                    securities[symbol]["MinTradeVol"] = float(min_trade_vol.decode('utf-8'))
+                max_trade_vol = message.get(1140, i)
+                if max_trade_vol:
+                    securities[symbol]["MaxTradeVol"] = float(max_trade_vol.decode('utf-8'))
+                round_lot = message.get(561, i)
+                if round_lot:
+                    securities[symbol]["RoundLot"] = float(round_lot.decode('utf-8'))
 
         return securities
 
