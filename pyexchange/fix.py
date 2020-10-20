@@ -191,7 +191,6 @@ class FixEngine:
 
         return order_id.split('|')[1]
 
-    # TODO: return a List[{order_id: amount_remaining}]
     async def _sync_orders(self, orders: List[Order]) -> List[dict]:
         """
             Iterate through clients list of orders and update according to exchange state.
@@ -261,9 +260,9 @@ class FixEngine:
 
                     # handle message rejection
                     if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
-                        if message.get(102) is not None:
+                        if message.get(simplefix.TAG_CXLREJREASON) is not None:
                             logging.error(f"Order cancellation rejected due to {message.get(58).decode('utf-8')}, tag_102 code: {message.get(102).decode('utf-8')}")
-                        if message.get(103) is not None:
+                        if message.get(simplefix.TAG_ORDERREJREASON) is not None:
                             logging.error(f"Order placement rejected due to {message.get(58).decode('utf-8')}, tag_103 code: {message.get(103).decode('utf-8')}")
                         return message
 
