@@ -174,19 +174,26 @@ class ErisxApi(PyexAPI):
 
     def sync_orders(self, orders: List[Order]) -> List[Order]:
         """
-        sync keeper order state with erisx order state.
-        If an order has been filled, set it as a trade.
+        Sync keeper order state with erisx order state.
+        If an order has been filled, it will be recorded as a trade on next trade sync.
 
-        Only return a list of open and partially filled orders
+        Only return a list of open orders.
+
+        If an order has been partially filled,
+        subtract the filled amount from the orders original amount.
         """
         assert (isinstance(orders, List))
 
-        open_order_ids = self.fix_trading.sync_orders(orders)
+        erisx_orders_state = self.fix_trading.sync_orders(orders)
 
-        # TODO: update amounts in the event that a fill is partial?
-        ## set order amount for that ID to the value in tag 151 leavesqty
+        open_orders = []
 
-        open_orders = list(filter(lambda order: order.order_id in open_order_ids, orders))
+        for order in orders:
+            for erisx_order_state in erisx_orders_state:
+                if order.order_id in erisx_order_state:
+                    order.amount = order.amount - erisx_order_state[order.order_id]
+                    open_orders.append(order)
+
         return open_orders
 
     def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:

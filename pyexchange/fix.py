@@ -28,6 +28,7 @@ from enum import Enum
 from typing import List
 
 from pyexchange.model import Order
+from pymaker.numeric import Wad
 
 
 class FixConnectionState(Enum):
@@ -191,13 +192,14 @@ class FixEngine:
         return order_id.split('|')[1]
 
     # TODO: return a List[{order_id: amount_remaining}]
-    async def _sync_orders(self, orders: List[Order]) -> List[str]:
+    async def _sync_orders(self, orders: List[Order]) -> List[dict]:
         """
             Iterate through clients list of orders and update according to exchange state.
 
             If an order has been canceled or completely filled, delete the entry in the order book.
 
-            Finally, return a list of open order ids.
+            Finally, return a list of dictionaries: {order_id: filled_amount}.
+            This enables us to keep amounts in sync in the event of partial fills.
         """
         assert isinstance(orders, List)
 
@@ -206,6 +208,7 @@ class FixEngine:
 
         for order in orders:
             client_order_id = self._get_client_id(order.order_id)
+            order_status_dict = {}
 
             while not self.order_book[client_order_id].empty():
                 exchange_order_state = self.order_book[client_order_id].get()
@@ -226,15 +229,20 @@ class FixEngine:
                         break
                     elif exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_PARTIALLY_FILLED:
                         self.logger.info(f"Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}")
-                        open_orders.append(order_id)
+
+                        order_status_dict[order.order_id] = Wad.from_number(float(exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')))
+
+                        if self.order_book[client_order_id].empty():
+                            open_orders.append(order_status_dict)
 
             # keep open orders in state
             if client_order_id in self.order_book and order.order_id not in open_orders:
-                open_orders.append(order.order_id)
+                order_status_dict[order.order_id] = Wad.from_number(0)
+                open_orders.append(order_status_dict)
 
         return open_orders
 
-    def sync_orders(self, orders: List[Order]) -> List[str]:
+    def sync_orders(self, orders: List[Order]) -> List[dict]:
         logging.info(f"Synchronizing Order state")
         orders = self.caller_loop.run_until_complete(self._sync_orders(orders))
         return orders
