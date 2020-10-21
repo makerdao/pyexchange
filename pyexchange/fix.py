@@ -221,7 +221,7 @@ class FixEngine:
                     break
 
                 # check for fills
-                if exchange_order_state.get(simplefix.TAG_EXECTYPE) == simplefix.EXECTYPE_FILL:
+                if exchange_order_state.get(simplefix.TAG_EXECTYPE) == b'F':
                     if exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_FILLED:
                         self.logger.info(f"Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')} at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}")
                         del self.order_book[client_order_id]
