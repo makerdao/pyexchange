@@ -125,9 +125,20 @@ class ErisxApi(PyexAPI):
         message.append_pair(559, 0)
         message.append_pair(simplefix.TAG_SYMBOL, 'NA')
         message.append_pair(460, 2)
+        message.append_pair(1151, 'ALL')
         self.fix_marketdata.write(message)
+
+        security_messages = []
+
         message = self.fix_marketdata.wait_for_response('y')
-        return ErisxFix.parse_security_list(message)
+        security_messages.append(message)
+
+        # continue waiting for the rest of the security list to arrive
+        while message.get(893).decode('utf-8') != 'Y':
+            message = self.fix_marketdata.wait_for_response('y')
+            security_messages.append(message)
+
+        return ErisxFix.parse_security_list(security_messages)
 
     # filter out the response from get markets
     def get_pair(self, pair: str) -> dict:
@@ -161,6 +172,30 @@ class ErisxApi(PyexAPI):
 
         return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(unfiltered_orders)))
 
+    def sync_orders(self, orders: List[Order]) -> List[Order]:
+        """
+        Sync keeper order state with erisx order state.
+        If an order has been filled, it will be recorded as a trade on next trade sync.
+
+        Only return a list of open orders.
+
+        If an order has been partially filled,
+        subtract the filled amount from the orders original amount.
+        """
+        assert (isinstance(orders, List))
+
+        erisx_orders_state = self.fix_trading.sync_orders(orders)
+
+        open_orders = []
+
+        for order in orders:
+            for erisx_order_state in erisx_orders_state:
+                if order.order_id in erisx_order_state:
+                    order.amount = order.amount - erisx_order_state[order.order_id]
+                    open_orders.append(order)
+
+        return open_orders
+
     def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:
         assert (isinstance(pair, str))
         assert (isinstance(is_sell, bool))
@@ -192,7 +227,16 @@ class ErisxApi(PyexAPI):
         # message.append_pair(448, self.fix_trading_user)
 
         self.fix_trading.write(message)
-        new_order = self.fix_trading.wait_for_response('8')
+        new_order = self.fix_trading.wait_for_order_processing_response('8', str(client_order_id))
+
+        # Handle order rejections; ErisX will reject orders with 35=8, and 103=<X>
+        # 103 codes are nonstandard. 100 is instrument closed, 23 is balance above limit.
+        if new_order.get(simplefix.TAG_ORDERREJREASON) is not None:
+            if new_order.get(simplefix.TAG_ORDERREJREASON) == b'100':
+                self.logger.warning(f"Failed to place order as instrument is closed")
+            elif new_order.get(simplefix.TAG_ORDERREJREASON) == b'23':
+                self.logger.warning(f"Failed to place order as order would have exceeded balance limits")
+            return ''
 
         erisx_oid = new_order.get(simplefix.TAG_ORDERID).decode('utf-8')
         client_oid = new_order.get(simplefix.TAG_CLORDID).decode('utf-8')
@@ -206,7 +250,6 @@ class ErisxApi(PyexAPI):
         """
             Send cancel order request to ErisX, and wait for the response.
             Returns a Tuple: [Cancellation_Status, Is_Unknown_Order]
-
         """
         assert (isinstance(order_id, str))
         assert (isinstance(pair, str))
@@ -226,7 +269,7 @@ class ErisxApi(PyexAPI):
 
         self.fix_trading.write(message)
 
-        response = self.fix_trading.wait_for_response('8')
+        response = self.fix_trading.wait_for_order_processing_response('8', str(client_oid))
 
         if response.get(150) is not None:
             if response.get(150).decode('utf-8') == '4':
@@ -249,11 +292,6 @@ class ErisxApi(PyexAPI):
     # TODO: Not currently available
     def get_all_trades(self, pair, page_number) -> List[Trade]:
        pass
-
-    def check_cancellations(self) -> List:
-        cancellations = self.fix_trading.listen_for_cancellations()
-
-        return list(map(lambda item: ErisxOrder.from_message(item), ErisxFix.parse_orders_list(cancellations)))
 
     def _http_get(self, resource: str, params=""):
         assert (isinstance(resource, str))
@@ -325,30 +363,34 @@ class ErisxFix(FixEngine):
                                        fix_version="FIX.4.4", heartbeat_interval=10)
 
     @staticmethod
-    def parse_security_list(m: simplefix.FixMessage) -> dict:
-        security_count = int(m.get(146))
+    def parse_security_list(messages: List[simplefix.FixMessage]) -> dict:
+        assert (isinstance(messages, List))
+
         securities = {}
-        for i in range(1, security_count + 1):
 
-            # Required fields
-            symbol = m.get(simplefix.TAG_SYMBOL, i).decode('utf-8')
-            securities[symbol] = {
-                "Product": m.get(460, i).decode('utf-8'),
-                "MinPriceIncrement": float(m.get(969, i).decode('utf-8')),
-                "SecurityDesc": m.get(simplefix.TAG_SECURITYDESC, i).decode('utf-8'),
-                "Currency": m.get(simplefix.TAG_CURRENCY, i).decode('utf-8')
-            }
+        for message in messages:
+            security_count = int(message.get(146))
+            for i in range(1, security_count + 1):
 
-            # Optional fields
-            min_trade_vol = m.get(562, i)
-            if min_trade_vol:
-                securities[symbol]["MinTradeVol"] = float(min_trade_vol.decode('utf-8'))
-            max_trade_vol = m.get(1140, i)
-            if max_trade_vol:
-                securities[symbol]["MaxTradeVol"] = float(max_trade_vol.decode('utf-8'))
-            round_lot = m.get(561, i)
-            if round_lot:
-                securities[symbol]["RoundLot"] = float(round_lot.decode('utf-8'))
+                # Required fields
+                symbol = message.get(simplefix.TAG_SYMBOL, i).decode('utf-8')
+                securities[symbol] = {
+                    "Product": message.get(460, i).decode('utf-8'),
+                    "MinPriceIncrement": float(message.get(969, i).decode('utf-8')),
+                    "SecurityDesc": message.get(simplefix.TAG_SECURITYDESC, i).decode('utf-8'),
+                    "Currency": message.get(simplefix.TAG_CURRENCY, i).decode('utf-8')
+                }
+
+                # Optional fields
+                min_trade_vol = message.get(562, i)
+                if min_trade_vol:
+                    securities[symbol]["MinTradeVol"] = float(min_trade_vol.decode('utf-8'))
+                max_trade_vol = message.get(1140, i)
+                if max_trade_vol:
+                    securities[symbol]["MaxTradeVol"] = float(max_trade_vol.decode('utf-8'))
+                round_lot = message.get(561, i)
+                if round_lot:
+                    securities[symbol]["RoundLot"] = float(round_lot.decode('utf-8'))
 
         return securities
 
