@@ -223,19 +223,20 @@ class FixEngine:
                 # check for fills
                 if exchange_order_state.get(simplefix.TAG_EXECTYPE) == b'F':
                     if exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_FILLED:
-                        self.logger.info(f"Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')} at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}")
+                        self.logger.info(f"Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')} at price of {exchange_order_state.get(simplefix.TAG_PRICE).decode('utf-8')}")
+
                         del self.order_book[client_order_id]
                         break
                     elif exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_PARTIALLY_FILLED:
-                        self.logger.info(f"Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {order.get(simplefix.TAG_PRICE).decode('utf-8')}")
+                        self.logger.info(f"Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {exchange_order_state.get(simplefix.TAG_PRICE).decode('utf-8')}")
 
                         order_status_dict[order.order_id] = Wad.from_number(float(exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')))
-
                         if self.order_book[client_order_id].empty():
                             open_orders.append(order_status_dict)
 
             # keep open orders in state
-            if client_order_id in self.order_book and order.order_id not in open_orders:
+            not_in_open_orders = all(map(lambda open_order: order.order_id not in open_order.keys(), open_orders))
+            if client_order_id in self.order_book and not_in_open_orders:
                 order_status_dict[order.order_id] = Wad.from_number(0)
                 open_orders.append(order_status_dict)
 
