@@ -16,5 +16,7 @@ _virtualenv
 
 .etoro-unencrypted-key
 
+# ignore build artifacts
 build/
 dist/
+pyexchange.egg-info/

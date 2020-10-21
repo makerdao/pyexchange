@@ -55,6 +55,6 @@ setup(
     # All packages in pyexchange.requirements.txt and pyexchange/lib/pymaker.requirements.txt
     install_requires=[
         requirements,
-        'repo @ https://github.com/makerdao/pymaker@master#egg=pymaker'
+        'pymaker @ https://github.com/makerdao/pymaker@master#egg=pymaker'
     ]
 )
