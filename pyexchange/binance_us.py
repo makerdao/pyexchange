@@ -215,7 +215,7 @@ class BinanceUsApi(PyexAPI):
 
         self.logger.info(f"Cancelling order #{order_id} on pair {pair}...")
 
-        result = self._http_authenticated("DELETE", "/api/v3/order", {'orderId': order_id, 'pair': pair})
+        result = self._http_authenticated("DELETE", "/api/v3/order", {'orderId': order_id, 'symbol': self._fix_pair(pair)})
 
         return ('status' in result) and (result['status'] == "CANCELED")
     
