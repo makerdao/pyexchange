@@ -15,3 +15,8 @@ _virtualenv
 .pytest_cache/
 
 .etoro-unencrypted-key
+
+# ignore build artifacts
+build/
+dist/
+pyexchange.egg-info/

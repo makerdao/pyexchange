@@ -63,6 +63,30 @@ class BinanceUsTrade(Trade):
                      amount=Wad.from_number(trade['qty']))
 
 
+class BinanceUsRules(object):
+    def __init__(self, *, pair: str, min_price: Wad, max_price: Wad, tick_size: Wad, min_quantity: Wad, max_quantity: Wad, step_size: Wad) -> None:
+        assert(isinstance(pair, str))
+        assert(isinstance(min_price, Wad))
+        assert(isinstance(max_price, Wad))
+        assert(isinstance(tick_size, Wad))
+        assert(isinstance(min_quantity, Wad))
+        assert(isinstance(max_quantity, Wad))
+        assert(isinstance(step_size, Wad))
+
+        self.pair = pair
+
+        self.min_price = min_price
+        self.max_price = max_price
+        self.tick_size = tick_size
+
+        self.min_quantity = min_quantity
+        self.max_quantity = max_quantity
+        self.step_size = step_size
+    
+    def __repr__(self) -> str:
+        return f"Rules(Min price: {self.min_price} Max price: {self.max_price} Tick size: {self.tick_size} Min Qty: {self.min_quantity} Max Qty: {self.max_quantity} Step size: {self.step_size})"
+
+
 class BinanceUsApi(PyexAPI):
     """Binance US API interface.
 
@@ -90,6 +114,45 @@ class BinanceUsApi(PyexAPI):
                 return symbol_data['quoteAssetPrecision'], symbol_data['quotePrecision']
         else:
             raise ValueError(f'Not supported pair {pair} on Binance US.')
+    
+    def get_rules(self, pair):
+        assert(isinstance(pair, str))
+
+        symbols = self._http_unauthenticated("GET", "/api/v3/exchangeInfo", {})['symbols']
+        pair = self._fix_pair(pair)
+
+        for symbol_data in symbols:
+            if pair == symbol_data['symbol']:
+                pair_filters = symbol_data['filters']
+                min_price = 0
+                max_price = 0
+                tick_size = 0
+                min_quantity = 0
+                max_quantity = 0
+                step_size = 0
+                
+                for filter in pair_filters:
+                    type = filter['filterType']
+                    if type == "PRICE_FILTER":
+                        min_price = Wad.from_number(filter['minPrice'])
+                        max_price = Wad.from_number(filter['maxPrice'])
+                        tick_size = Wad.from_number(filter['tickSize'])
+                    elif type == "LOT_SIZE":
+                        min_quantity = Wad.from_number(filter['minQty'])
+                        max_quantity = Wad.from_number(filter['maxQty'] )
+                        step_size = Wad.from_number(filter['stepSize'] )
+
+                return BinanceUsRules(
+                    pair=pair,
+                    min_price=min_price,
+                    max_price=max_price,
+                    tick_size=tick_size,
+                    min_quantity=min_quantity,
+                    max_quantity=max_quantity,
+                    step_size=step_size
+                )
+        else:
+            raise ValueError(f'Not supported pair {pair} on Binance US.')
 
     def get_balances(self):
         balances = self._http_authenticated("GET", f"/api/v3/account", {})['balances']
@@ -113,13 +176,20 @@ class BinanceUsApi(PyexAPI):
 
         return list(map(lambda order: BinanceUsOrder.create(order), orders))
 
-    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
+    def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad, *, rules: Optional[BinanceUsRules] = None) -> str:
         assert(isinstance(pair, str))
         assert(isinstance(is_sell, bool))
         assert(isinstance(price, Wad))
         assert(isinstance(amount, Wad))
+        assert(isinstance(rules, BinanceUsRules) or (rules is None))
+
         pair = self._fix_pair(pair)
+        if rules is None:
+            rules = self.get_rules(pair)
         
+        self.validate_price(rules, price)
+        self.validate_amount(rules, amount)
+
         data = {
             'symbol': pair,
             'side': "SELL" if is_sell else "BUY",
@@ -145,7 +215,7 @@ class BinanceUsApi(PyexAPI):
 
         self.logger.info(f"Cancelling order #{order_id} on pair {pair}...")
 
-        result = self._http_authenticated("DELETE", "/api/v3/order", {'orderId': order_id, 'pair': pair})
+        result = self._http_authenticated("DELETE", "/api/v3/order", {'orderId': order_id, 'symbol': self._fix_pair(pair)})
 
         return ('status' in result) and (result['status'] == "CANCELED")
     
@@ -201,6 +271,20 @@ class BinanceUsApi(PyexAPI):
     @staticmethod
     def _fix_pair(pair) -> str:
         return str.join('', pair.split('-'))
+
+    @staticmethod
+    def validate_price(rules: BinanceUsRules, price: Wad) -> None:
+        if not (price >= rules.min_price 
+                and price <= rules.max_price
+                and (price - rules.min_price) % rules.tick_size == Wad(0)):
+            raise Exception(f"Order (Pair: {rules.pair}, price: {price}) failed check for PRICE_FILTER: min_price={rules.min_price}, max_price={rules.max_price}, tick_size={rules.tick_size}")
+
+    @staticmethod
+    def validate_amount(rules: BinanceUsRules, amount: Wad) -> None:
+        if not (amount >= rules.min_quantity
+                and amount <= rules.max_quantity
+                and (amount - rules.min_quantity) % rules.step_size == Wad(0)):
+            raise Exception(f"Order (Pair: {rules.pair}, amount: {amount}) failed check for LOT_SIZE: min_quantity={rules.min_quantity}, max_quantity={rules.max_quantity}, step_size={rules.step_size}")
 
     @staticmethod
     def _result(result) -> Optional[dict]:
