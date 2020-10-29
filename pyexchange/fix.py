@@ -137,7 +137,7 @@ class FixEngine:
 
         # handle order processing messages
         if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
-            client_order_id = f"{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
+            client_order_id = f"{message.get(simplefix.TAG_ORIGCLORDID).decode('utf-8')}"
 
             if client_order_id not in self.order_book:
                 self.order_book[client_order_id] = queue.Queue()
@@ -209,30 +209,31 @@ class FixEngine:
             client_order_id = self._get_client_id(order.order_id)
             order_status_dict = {}
 
-            while not self.order_book[client_order_id].empty():
-                exchange_order_state = self.order_book[client_order_id].get()
-                order_id = f"{exchange_order_state.get(simplefix.TAG_ORDERID)}|{exchange_order_state.get(simplefix.TAG_CLORDID)}"
+            if client_order_id in self.order_book:
+                while not self.order_book[client_order_id].empty():
+                    exchange_order_state = self.order_book[client_order_id].get()
+                    order_id = f"{exchange_order_state.get(simplefix.TAG_ORDERID)}|{exchange_order_state.get(simplefix.TAG_CLORDID)}"
 
-                # check for cancellations
-                if exchange_order_state.get(simplefix.TAG_EXECTYPE) in cancel_message_types:
-                    if exchange_order_state.get(b'5001') == '4'.encode('utf-8'):
-                        self.logger.warning(f"Unsolicited Cancellation for order: {order_id}")
-                    del self.order_book[client_order_id]
-                    break
-
-                # check for fills
-                if exchange_order_state.get(simplefix.TAG_EXECTYPE) == b'F':
-                    if exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_FILLED:
-                        self.logger.info(f"Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')} at price of {exchange_order_state.get(simplefix.TAG_PRICE).decode('utf-8')}")
-
+                    # check for cancellations
+                    if exchange_order_state.get(simplefix.TAG_EXECTYPE) in cancel_message_types:
+                        if exchange_order_state.get(b'5001') == '4'.encode('utf-8'):
+                            self.logger.warning(f"Unsolicited Cancellation for order: {order_id}")
                         del self.order_book[client_order_id]
                         break
-                    elif exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_PARTIALLY_FILLED:
-                        self.logger.info(f"Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {exchange_order_state.get(simplefix.TAG_PRICE).decode('utf-8')}")
 
-                        order_status_dict[order.order_id] = Wad.from_number(float(exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')))
-                        if self.order_book[client_order_id].empty():
-                            open_orders.append(order_status_dict)
+                    # check for fills
+                    if exchange_order_state.get(simplefix.TAG_EXECTYPE) == b'F':
+                        if exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_FILLED:
+                            self.logger.info(f"Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')} at price of {exchange_order_state.get(simplefix.TAG_PRICE).decode('utf-8')}")
+
+                            del self.order_book[client_order_id]
+                            break
+                        elif exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_PARTIALLY_FILLED:
+                            self.logger.info(f"Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {exchange_order_state.get(simplefix.TAG_PRICE).decode('utf-8')}")
+
+                            order_status_dict[order.order_id] = Wad.from_number(float(exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')))
+                            if self.order_book[client_order_id].empty():
+                                open_orders.append(order_status_dict)
 
             # keep open orders in state
             not_in_open_orders = all(map(lambda open_order: order.order_id not in open_order.keys(), open_orders))
@@ -268,6 +269,9 @@ class FixEngine:
                         return message
 
                     if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
+                        # Remove orders that have been cancelled from the order book
+                        if message.get(simplefix.TAG_EXECTYPE) == simplefix.EXECTYPE_CANCELED:
+                            del self.order_book[client_order_id]
                         return message
             await asyncio.sleep(0.3)
 
