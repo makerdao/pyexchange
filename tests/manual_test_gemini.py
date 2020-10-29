@@ -55,4 +55,4 @@ print(gemini_api.get_balances())
 #   time.sleep(3)
 
 # print('Cancel order')
-# print(gemini_api.cancel_order(order_id, pair="ETHUSD"))
+# print(gemini_api.cancel_order(order_id))

@@ -146,7 +146,7 @@ class TestGemini:
         order_id = self.gemini.place_order(pair, True, Wad.from_number(241700), Wad.from_number(10))
         assert (isinstance(order_id, str))
         assert (order_id is not None)
-        cancel_result = self.gemini.cancel_order(order_id, pair)
+        cancel_result = self.gemini.cancel_order(order_id)
         assert (cancel_result == True)
 
     @staticmethod

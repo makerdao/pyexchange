@@ -127,9 +127,9 @@ class GeminiApi(PyexAPI):
 
     return placed_order["order_id"]
 
-  def cancel_order(self, order_id: str, pair: str) -> bool:
+  def cancel_order(self, order_id: str) -> bool:
     assert(isinstance(order_id, str))
-    self.logger.info(f"Cancelling order #{order_id} on pair {pair}...")
+    self.logger.info(f"Cancelling order #{order_id}...")
 
     canceled_order = self._http_authenticated("POST", "/v1/order/cancel", {"order_id": order_id})
 
