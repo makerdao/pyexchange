@@ -137,7 +137,14 @@ class FixEngine:
 
         # handle order processing messages
         if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
-            client_order_id = f"{message.get(simplefix.TAG_ORIGCLORDID).decode('utf-8')}"
+
+            # ensure the correct client id is used, depending on order execution type
+            use_origclordid_types = [simplefix.EXECTYPE_CANCELED, simplefix.EXECTYPE_REPLACE, simplefix.EXECTYPE_PENDING_CANCEL, simplefix.EXECTYPE_PENDING_REPLACE]
+
+            if message.get(simplefix.TAG_EXECTYPE) in use_origclordid_types:
+                client_order_id = f"{message.get(simplefix.TAG_ORIGCLORDID).decode('utf-8')}"
+            else:
+                client_order_id = f"{message.get(simplefix.TAG_CLORDID).decode('utf-8')}"
 
             if client_order_id not in self.order_book:
                 self.order_book[client_order_id] = queue.Queue()
