@@ -83,19 +83,15 @@ class GeminiApi(PyexAPI):
     self.api_key = api_key
     self.api_secret = api_secret
     self.timeout = timeout
-    self.rules = self._read_rules()
     
   def get_rules(self, pair: str) -> Tuple[Wad, Wad, Wad]:
     assert(isinstance(pair, str))
     pair = self._fix_pair(pair)
+    result = self._http_unauthenticated("GET", f"/v1/symbols/details/{pair}")
 
-    pair_rules = self.rules.get(pair, None)
-    if pair_rules is None:
-      raise Exception(f"Unsupported pair by the Gemini Exchange - {pair}")
-
-    minimum_order_size =  Wad.from_number(pair_rules["minimum_order_size"])
-    tick_size =  Wad.from_number(pair_rules["tick_size"])
-    quote_currency_price_increment =  Wad.from_number(pair_rules["quote_currency_price_increment"])
+    minimum_order_size =  Wad.from_number(result["min_order_size"])
+    tick_size =  Wad.from_number(result["tick_size"])
+    quote_currency_price_increment =  Wad.from_number(result["quote_increment"])
 
     return minimum_order_size, tick_size, quote_currency_price_increment
 
@@ -213,14 +209,6 @@ class GeminiApi(PyexAPI):
   @staticmethod
   def _fix_pair(pair) -> str:
       return str.join('', pair.split('-')).lower()
-
-  @staticmethod
-  def _read_rules() -> dict:
-    dirname = os.path.dirname(__file__)
-    path = os.path.join(dirname, './static/gemini.json')
-    with open(path) as rules_json:
-      rules = json.load(rules_json)
-      return rules
 
   @staticmethod
   def _result(result) -> Optional[dict]:
