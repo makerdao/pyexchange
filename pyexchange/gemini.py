@@ -18,7 +18,7 @@
 import logging
 from logging import error
 
-from pyexchange.api import PyexAPI
+import os
 import hmac
 import requests
 import json
@@ -30,8 +30,9 @@ from urllib.parse import urlencode
 
 from pymaker import Address, Wad
 from pymaker.util import http_response_summary
+from pyexchange.api import PyexAPI
 from pyexchange.model import Order, Trade
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 
 class GeminiTrade(Trade):
@@ -82,6 +83,18 @@ class GeminiApi(PyexAPI):
     self.api_key = api_key
     self.api_secret = api_secret
     self.timeout = timeout
+    
+  def get_rules(self, pair: str) -> Tuple[Wad, Wad, Wad]:
+    assert(isinstance(pair, str))
+    pair = self._fix_pair(pair)
+    result = self._http_unauthenticated("GET", f"/v1/symbols/details/{pair}")
+
+    minimum_order_size =  Wad.from_number(result["min_order_size"])
+    tick_size =  Wad.from_number(result["tick_size"])
+    quote_currency_price_increment =  Wad.from_number(result["quote_increment"])
+
+    return minimum_order_size, tick_size, quote_currency_price_increment
+
 
   def get_balances(self):
     balances = self._http_authenticated("POST", "/v1/balances")
