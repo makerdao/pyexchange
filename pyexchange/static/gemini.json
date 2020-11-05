@@ -1,0 +1,237 @@
+{
+  "btcusd": {
+    "minimum_order_size": "0.00001",
+    "tick_size": "0.00000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "btceur": {
+    "minimum_order_size": "0.00001",
+    "tick_size": "0.00000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "btcgbp": {
+    "minimum_order_size": "0.00001",
+    "tick_size": "0.00000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "ethbtc": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "ethusd": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "etheur": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "ethgbp": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "zecusd": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "zecbtc": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "zeceth": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "zecbch": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "zecltc": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.001"
+  },
+  "bchusd": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "bchbtc": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "bcheth": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "ltcusd": {
+    "minimum_order_size": "0.01",
+    "tick_size": "0.00001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "ltcbtc": {
+    "minimum_order_size": "0.01",
+    "tick_size": "0.00001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "ltceth": {
+    "minimum_order_size": "0.01",
+    "tick_size": "0.00001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "ltcbch": {
+    "minimum_order_size": "0.01",
+    "tick_size": "0.00001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "batusd": {
+    "minimum_order_size": "1.0",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "daiusd": {
+    "minimum_order_size": "0.1",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "linkusd": {
+    "minimum_order_size": "0.1",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "oxtusd": {
+    "minimum_order_size": "1.0",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00000001"
+  },
+  "batbtc": {
+    "minimum_order_size": "1.0",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00000001"
+  },
+  "linkbtc": {
+    "minimum_order_size": "0.1",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00000001"
+  },
+  "bateth": {
+    "minimum_order_size": "1.0",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0000001"
+  },
+  "linketh": {
+    "minimum_order_size": "0.1",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0000001"
+  },
+  "oxteth": {
+    "minimum_order_size": "1.0",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0000001"
+  },
+  "ampusd": {
+    "minimum_order_size": "10.0",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "compusd": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "paxgusd": {
+    "minimum_order_size": "0.0001",
+    "tick_size": "0.00000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "mkrusd": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "zrxusd": {
+    "minimum_order_size": "0.1",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "kncusd": {
+    "minimum_order_size": "0.1",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "manausd": {
+    "minimum_order_size": "1.0",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "storjusd": {
+    "minimum_order_size": "0.1",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "snxusd": {
+    "minimum_order_size": "0.01",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "crvusd": {
+    "minimum_order_size": "0.1",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "balusd": {
+    "minimum_order_size": "0.01",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "uniusd": {
+    "minimum_order_size": "0.01",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "renusd": {
+    "minimum_order_size": "0.00001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.00001"
+  },
+  "umausd": {
+    "minimum_order_size": "0.01",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "yfiusd": {
+    "minimum_order_size": "0.00001",
+    "tick_size": "0.00000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "btcdai": {
+    "minimum_order_size": "0.00001",
+    "tick_size": "0.00000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "ethdai": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.01"
+  },
+  "aaveusd": {
+    "minimum_order_size": "0.001",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  },
+  "filusd": {
+    "minimum_order_size": "0.1",
+    "tick_size": "0.000001",
+    "quote_currency_price_increment": "0.0001"
+  }
+}
