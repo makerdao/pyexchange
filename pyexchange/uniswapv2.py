@@ -63,10 +63,10 @@ class UniswapV2(Contract):
         self.pair_address = self.get_pair_address(self.token_a.address, self.token_b.address)
         self.is_new_pool = self.pair_address == Address("0x0000000000000000000000000000000000000000")
         if not self.is_new_pool:
-            self.set_and_approve_pair_token(self.pair_address)
+            self.set_pair_token(self.pair_address)
 
 
-    def set_and_approve_pair_token(self, pair_address: Address):
+    def set_pair_token(self, pair_address: Address):
         self.pair_address = pair_address
         self._pair_contract = self._get_contract(self.web3, self.pair_abi['abi'], self.pair_address)
         self.pair_token = Token('Liquidity', self.pair_address, 18)
