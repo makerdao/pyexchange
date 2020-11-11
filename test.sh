@@ -9,7 +9,7 @@ docker-compose up -d ganache
 # Wait to initialize
 sleep 2
 
-PYTHONPATH=$PYTHONPATH:./lib/pyflex
+export PYTHONPATH=$PYTHONPATH:./lib/pyflex
 py.test -x --cov=pyexchange --cov-report=term --cov-append tests/$@
 TEST_RESULT=$?
 
