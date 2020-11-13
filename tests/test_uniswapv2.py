@@ -228,7 +228,7 @@ class TestUniswapV2(Contract):
         balance_usdc_before_swap = self.systemcoin_usdc_uniswap.get_account_token_balance(self.token_usdc)
 
         # when
-        swap = self.systemcoin_usdc_uniswap.swap_exact_tokens_for_tokens(Wad.from_number(.4), self.token_usdc.unnormalize_amount(Wad.from_number(.3)), [self.ds_systemcoin.address.address, self.ds_usdc.address.address]).transact(from_address=self.our_address)
+        swap = self.systemcoin_usdc_uniswap.swap_exact_tokens_for_tokens(Wad.from_number(.2), self.token_usdc.unnormalize_amount(Wad.from_number(.01)), [self.ds_systemcoin.address.address, self.ds_usdc.address.address]).transact(from_address=self.our_address)
         
         # then
         assert swap.successful == True
