@@ -50,10 +50,10 @@ class StakingRewards(Contract):
         self.contract_address = contract_address
         self.contract_name = contract_name
 
-    def approve(self, token: Token):
-        assert (isinstance(token, Token))
+    def approve(self, token_address: Address):
+        assert (isinstance(token_address, Address))
 
-        erc20_token = ERC20Token(self.web3, token.address)
+        erc20_token = ERC20Token(self.web3, token_address)
 
         approval_function = directly()
         return approval_function(erc20_token, self.contract_address, self.contract_name)

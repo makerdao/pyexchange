@@ -135,7 +135,7 @@ class TestUniswapStakingRewards(Contract):
 
     def test_staking(self):
         # given
-        self.uniswap_staking_rewards.approve(self.liquidity_token)
+        self.uniswap_staking_rewards.approve(self.liquidity_token.address)
         stake_receipt = self.uniswap_staking_rewards.stake_liquidity(Wad(10)).transact(from_address=self.our_address)
 
         # when
@@ -145,26 +145,9 @@ class TestUniswapStakingRewards(Contract):
         assert balance > Wad.from_number(0)
         # TODO: add tests to check that expected balance is correct
 
-    def test_reward_accumulation(self):
-        # given
-        self.uniswap_staking_rewards.approve(self.liquidity_token)
-        stake_receipt = self.uniswap_staking_rewards.stake_liquidity(Wad(10)).transact(from_address=self.our_address)
-
-        # TODO: stake and check reward balances after a time delay
-        time.sleep(15)
-
-        earned = self.uniswap_staking_rewards.earned()
-        print(earned)
-
-        reward_for_duration = self.uniswap_staking_rewards.get_rewards_for_duration()
-        print("rewards for duration: ", reward_for_duration)
-
-        assert earned > Wad(0)
-        assert True == False
-
     def test_withdraw(self):
         # given
-        self.uniswap_staking_rewards.approve(self.liquidity_token)
+        self.uniswap_staking_rewards.approve(self.liquidity_token.address)
         stake_receipt = self.uniswap_staking_rewards.stake_liquidity(Wad(10)).transact(from_address=self.our_address)
 
         # when
@@ -182,7 +165,7 @@ class TestUniswapStakingRewards(Contract):
 
     def test_exit(self):
         # given
-        self.uniswap_staking_rewards.approve(self.liquidity_token)
+        self.uniswap_staking_rewards.approve(self.liquidity_token.address)
         stake_receipt = self.uniswap_staking_rewards.stake_liquidity(Wad(10)).transact(from_address=self.our_address)
 
         # when
@@ -192,8 +175,22 @@ class TestUniswapStakingRewards(Contract):
         assert balance > Wad.from_number(0)
 
         # when
-        stake_receipt = self.uniswap_staking_rewards.exit().transact(from_address=self.our_address)
+        stake_receipt = self.uniswap_staking_rewards.withdraw_all_liquidity().transact(from_address=self.our_address)
         balance = self.uniswap_staking_rewards.balance_of()
 
         # then
         assert balance == Wad.from_number(0)
+
+    # def test_reward_accumulation(self):
+    #     # given
+    #     self.uniswap_staking_rewards.approve(self.liquidity_token.address)
+    #     stake_receipt = self.uniswap_staking_rewards.stake_liquidity(Wad(10)).transact(from_address=self.our_address)
+
+    #     time.sleep(15)
+
+    #     earned = self.uniswap_staking_rewards.earned()
+
+    #     reward_for_duration = self.uniswap_staking_rewards.get_rewards_for_duration()
+    #     print("rewards for duration: ", reward_for_duration)
+
+    #     assert earned > Wad(0)
