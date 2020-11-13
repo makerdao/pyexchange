@@ -149,6 +149,7 @@ class LeverjFuturesAPI(PyexAPI):
     """
 
     logger = logging.getLogger()
+    MAX_INDEX_VARIANCE = 0.0085
 
     def __init__(self, web3: Web3, api_server: str, account_id: str, api_key: str, api_secret: str, timeout: float):
         assert(isinstance(api_key, str))
@@ -344,7 +345,8 @@ class LeverjFuturesAPI(PyexAPI):
                 'isPostOnly': False,
                 'reduceOnly': False,
                 'clientOrderId': 1,
-                'triggerPrice': self.round_with_precision(triggerPrice, price_precision)
+                'triggerPrice': self.round_with_precision(triggerPrice, price_precision),
+                'indexSanity': self.MAX_INDEX_VARIANCE
                 }
         order['signature'] = futures.sign_order(order, orderInstrument, self.api_secret)
         self.logger.info(f'order: {order}')
