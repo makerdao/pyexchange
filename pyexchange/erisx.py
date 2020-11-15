@@ -129,8 +129,8 @@ class ErisxApi(PyexAPI):
 
         # wait for response
         reset_market_data_password_response = self.fix_marketdata.wait_for_response('BF')
-        if reset_password_response.get('926').decode('utf-8') != '5':
-            self.logger.error(f"Unable to change password, message: {reset_password_response}")
+        if reset_market_data_password_response.get('926').decode('utf-8') != '5':
+            self.logger.error(f"Unable to change password, message: {reset_market_data_password_response}")
         else:
             self.logger.info(f"Successfully reset marketdata password")
 
@@ -147,8 +147,8 @@ class ErisxApi(PyexAPI):
 
         # wait for response
         reset_trading_password_response = self.fix_trading.wait_for_response('BF')
-        if reset_password_response.get('926').decode('utf-8') != '5':
-            self.logger.error(f"Unable to change password, message: {reset_password_response}")
+        if reset_trading_password_response.get('926').decode('utf-8') != '5':
+            self.logger.error(f"Unable to change password, message: {reset_trading_password_response}")
         else:
             self.logger.info(f"Successfully reset trading password")
 
