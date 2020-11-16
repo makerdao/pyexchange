@@ -95,10 +95,10 @@ class ErisxApi(PyexAPI):
         if fix_trading_endpoint is not None and fix_trading_user is not None:
             self.fix_trading = ErisxFix(fix_trading_endpoint, fix_trading_user, fix_trading_user, password, certs)
             self.fix_trading.logon()
-            self.fix_trading_user = fix_marketdata_user
+            self.fix_trading_user = fix_trading_user
 
         if fix_marketdata_endpoint is not None and fix_marketdata_user is not None:
-            self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_trading_user, password,
+            self.fix_marketdata = ErisxFix(fix_marketdata_endpoint, fix_marketdata_user, fix_marketdata_user, password,
                                            certs)
             self.fix_marketdata.logon()
             self.fix_marketdata_user = fix_marketdata_user
@@ -106,6 +106,7 @@ class ErisxApi(PyexAPI):
         self.clearing_url = clearing_url
         self.api_secret = api_secret
         self.api_key = api_key
+        self.password = password
 
         # store the account id used to retrieve trades and balances
         self.account_id = self.get_account(account_id)
@@ -113,6 +114,46 @@ class ErisxApi(PyexAPI):
     def __del__(self):
         self.fix_marketdata.logout()
         self.fix_trading.logout()
+
+    def reset_password(self, request_id: str, new_password: str):
+        # Reset fix_marketdata
+        m = self.fix_marketdata.create_message(simplefix.MSGTYPE_USER_REQUEST)
+
+        m.append_pair(553, self.fix_marketdata_user)
+        m.append_pair(554, self.password)
+        m.append_pair(923, request_id)
+        m.append_pair(924, 3)
+        m.append_pair(925, new_password)
+
+        self.fix_marketdata.write(m)
+
+        # wait for response
+        reset_market_data_password_response = self.fix_marketdata.wait_for_response('BF')
+        if reset_market_data_password_response.get('926').decode('utf-8') != '5':
+            self.logger.error(f"Unable to change password, message: {reset_market_data_password_response}")
+        else:
+            self.logger.info(f"Successfully reset marketdata password")
+
+        # Reset fix_trading
+        m = self.fix_trading.create_message(simplefix.MSGTYPE_USER_REQUEST)
+
+        m.append_pair(553, self.fix_trading_user)
+        m.append_pair(554, self.password)
+        m.append_pair(923, request_id)
+        m.append_pair(924, 3)
+        m.append_pair(925, new_password)
+
+        self.fix_trading.write(m)
+
+        # wait for response
+        reset_trading_password_response = self.fix_trading.wait_for_response('BF')
+        if reset_trading_password_response.get('926').decode('utf-8') != '5':
+            self.logger.error(f"Unable to change password, message: {reset_trading_password_response}")
+        else:
+            self.logger.info(f"Successfully reset trading password")
+
+        # end session
+        self.__del__()
 
     def ticker(self, pair):
         # TODO: Subscribe to L1 data, await receipt, and then unsubscribe and return the data.
