@@ -43,7 +43,7 @@ class PyexAPI:
     def get_all_trades(self, pair, page_number):
         raise NotImplementedError()
 
-    def _choose_nonce(self) -> int:
+    def choose_nonce(self) -> int:
         with self.last_nonce_lock:
             timed_nonce = int(time.time() * 1000)
 
