@@ -180,8 +180,7 @@ class GeminiApi(PyexAPI):
     if params is None:
       params = {}
 
-    t = datetime.datetime.now()
-    payload_nonce =  str(int(time.mktime(t.timetuple())*1000))
+    payload_nonce = str(self.choose_nonce())
 
     payload = {**params, **{
       "request": resource,
