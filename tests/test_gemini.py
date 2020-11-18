@@ -45,6 +45,8 @@ class GeminiMockServer(MockWebAPIServer):
         # Parse the URL to determine which piece of canned data to return
         if re.search(r"\/v1\/trades", url):
             return MockedResponse(text=self.responses["allTrades"])
+        elif re.search(r"\/v1\/symbols\/details", url):
+            return MockedResponse(text=self.responses["symbolDetails"])
         else:
             raise ValueError("Unable to match HTTP GET request to canned response", url)
 
@@ -184,4 +186,14 @@ class TestGemini:
         response = self.gemini.get_trades(pair)
         assert (len(response) > 0)
         TestGemini.check_trades(response)
+   
+
+    def test_get_rules(self, mocker):
+        pair = "ETH-DAI"
+        mocker.patch("requests.request", side_effect=self.GeminiMockServer.handle_request)
+        minimum_order_size, tick_size, quote_currency_price_increment = self.gemini.get_rules(pair)
+
+        assert tick_size == Wad.from_number(2)
+        assert quote_currency_price_increment == Wad.from_number(6)
+        assert minimum_order_size == Wad.from_number("0.001")
    
