@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import time
+import threading
 import websockets
 
 from functools import partial
@@ -9,6 +11,10 @@ class PyexAPI:
     """
     Define a common abstract API for exchanges
     """
+
+    last_nonce = 0
+    last_nonce_lock = threading.Lock()
+    logger = logging.getLogger()
 
     def ticker(self, pair):
         raise NotImplementedError()
@@ -36,6 +42,20 @@ class PyexAPI:
 
     def get_all_trades(self, pair, page_number):
         raise NotImplementedError()
+
+    def _choose_nonce(self) -> int:
+        with self.last_nonce_lock:
+            timed_nonce = int(time.time() * 1000)
+
+            if self.last_nonce + 1 > timed_nonce:
+                self.logger.info(
+                    f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}', using '{self.last_nonce + 1}' instead")
+
+                self.last_nonce += 1
+            else:
+                self.last_nonce = timed_nonce
+
+            return self.last_nonce
 
 
 class AsyncAPI:
