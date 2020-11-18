@@ -45,10 +45,10 @@ class TestUniswapStakingRewards(Contract):
     Deployable bytecode differs from the runtime bytecode you would see on Etherscan.
 
     """
-    staking_rewards_factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/StakingRewardsFactory.abi')['abi']
-    staking_rewards_factory_bin = Contract._load_bin(__name__, '../pyexchange/abi/StakingRewardsFactory.bin')
-    staking_rewards_abi = Contract._load_abi(__name__, '../pyexchange/abi/StakingRewards.abi')['abi']
-    staking_rewards_bin = Contract._load_bin(__name__, '../pyexchange/abi/StakingRewards.bin')
+    staking_rewards_factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/UniStakingRewardsFactory.abi')['abi']
+    staking_rewards_factory_bin = Contract._load_bin(__name__, '../pyexchange/abi/UniStakingRewardsFactory.bin')
+    staking_rewards_abi = Contract._load_abi(__name__, '../pyexchange/abi/UniStakingRewards.abi')['abi']
+    staking_rewards_bin = Contract._load_bin(__name__, '../pyexchange/abi/UniStakingRewards.bin')
     
     router_abi = Contract._load_abi(__name__, '../pyexchange/abi/UniswapV2Router02.abi')
     router_bin = Contract._load_bin(__name__, '../pyexchange/abi/UniswapV2Router02.bin')

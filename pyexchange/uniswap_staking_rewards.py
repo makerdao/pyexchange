@@ -37,8 +37,8 @@ class UniswapStakingRewards(StakingRewards):
     """
     logger = logging.getLogger()
 
-    staking_rewards_factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/StakingRewardsFactory.abi')['abi']
-    staking_rewards_abi = Contract._load_abi(__name__, '../pyexchange/abi/StakingRewards.abi')['abi']
+    staking_rewards_factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/UniStakingRewardsFactory.abi')['abi']
+    staking_rewards_abi = Contract._load_abi(__name__, '../pyexchange/abi/UniStakingRewards.abi')['abi']
 
     def __init__(self, web3: Web3, keeper_address: Address, contract_address: Address, contract_name: str):
         assert (isinstance(web3, Web3))
@@ -46,15 +46,9 @@ class UniswapStakingRewards(StakingRewards):
         assert (isinstance(contract_address, Address))
         assert (isinstance(contract_name, str))
 
-        self.web3 = web3
+        self.contract = self._get_contract(web3, self.staking_rewards_abi, contract_address)
 
-        self.keeper_address = keeper_address
-        self.contract_address = Address(contract_address)
-        self.contract = self._get_contract(self.web3, self.staking_rewards_abi, self.contract_address)
-        self.contract_abi = self.staking_rewards_abi
-        self.contract_name = contract_name
-
-        super().__init__(web3, self.keeper_address, self.contract, self.contract_abi, self.contract_address, self.contract_name)
+        super().__init__(web3, keeper_address, self.contract, self.staking_rewards_abi, contract_address, contract_name)
 
     def stake_liquidity(self, amount: Wad) -> Transact:
         assert (isinstance(amount, Wad))
@@ -62,10 +56,8 @@ class UniswapStakingRewards(StakingRewards):
         stake_liquidity_args = [
             amount.value
         ]
-        print(self.contract_address)
-        print((isinstance(Address(self.contract_address), Address)))
-        # TODO: what is goig on with contract address no longer being an Address type?
-        return Transact(self, self.web3, self.contract_abi, Address(self.contract_address), self.contract,
+
+        return Transact(self, self.web3, self.contract_abi, self.contract_address, self.contract,
                 'stake', stake_liquidity_args)
 
     def stake_liquidity_with_permit(self, amount: Wad, deadline: Wad, v, r, s) -> Transact:
