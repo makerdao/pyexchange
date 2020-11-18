@@ -61,7 +61,7 @@ class GeminiOrder(Order):
                        pair=item["symbol"].upper(),
                        is_sell=True if item["side"].lower() == "sell" else False,
                        price=Wad.from_number(item["price"]),
-                       amount=Wad.from_number(item["executed_amount"]),
+                       amount=Wad.from_number(item["remaining_amount"]),
                        timestamp=int(item["timestamp"]))
 
 
@@ -180,8 +180,7 @@ class GeminiApi(PyexAPI):
     if params is None:
       params = {}
 
-    t = datetime.datetime.now()
-    payload_nonce =  str(int(time.mktime(t.timetuple())*1000))
+    payload_nonce = str(self.choose_nonce())
 
     payload = {**params, **{
       "request": resource,
