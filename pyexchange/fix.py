@@ -319,7 +319,6 @@ class FixEngine:
 
     async def _wait_for_response(self, message_type: str) -> simplefix.FixMessage:
         assert isinstance(message_type, str)
-        assert len(message_type) == 1
 
         reject_message_types = [simplefix.MSGTYPE_BUSINESS_MESSAGE_REJECT, simplefix.MSGTYPE_ORDER_CANCEL_REJECT]
 
