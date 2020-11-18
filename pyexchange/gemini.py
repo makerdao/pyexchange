@@ -61,7 +61,7 @@ class GeminiOrder(Order):
                        pair=item["symbol"].upper(),
                        is_sell=True if item["side"].lower() == "sell" else False,
                        price=Wad.from_number(item["price"]),
-                       amount=Wad.from_number(item["executed_amount"]),
+                       amount=Wad.from_number(item["remaining_amount"]),
                        timestamp=int(item["timestamp"]))
 
 
