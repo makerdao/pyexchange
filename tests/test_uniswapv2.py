@@ -140,7 +140,7 @@ class TestUniswapV2(Contract):
         assert add_liquidity.successful == True
 
         # when
-        self.dai_usdc_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
+        self.dai_usdc_uniswap.set_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
 
         # then
         assert self.dai_usdc_uniswap.get_current_liquidity() > Wad.from_number(0)
@@ -153,7 +153,7 @@ class TestUniswapV2(Contract):
         assert add_liquidity_eth.successful == True
 
         # when
-        self.dai_eth_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_weth.address))
+        self.dai_eth_uniswap.set_pair_token(self.dai_eth_uniswap.get_pair_address(self.token_dai.address, self.token_weth.address))
 
         # then
         assert self.dai_eth_uniswap.get_current_liquidity() > Wad.from_number(0)
@@ -161,7 +161,7 @@ class TestUniswapV2(Contract):
     def test_remove_liquidity_tokens(self):
         # given
         add_liquidity = self.add_liquidity_tokens()
-        self.dai_usdc_uniswap.set_and_approve_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
+        self.dai_usdc_uniswap.set_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
 
         current_liquidity = self.dai_usdc_uniswap.get_current_liquidity()
         total_liquidity = self.dai_usdc_uniswap.get_total_liquidity()
@@ -192,7 +192,7 @@ class TestUniswapV2(Contract):
     def test_remove_liquidity_eth(self):
         # given
         add_liquidity_eth = self.add_liquidity_eth()
-        self.dai_eth_uniswap.set_and_approve_pair_token(self.dai_eth_uniswap.get_pair_address(self.token_dai.address, self.token_weth.address))
+        self.dai_eth_uniswap.set_pair_token(self.dai_eth_uniswap.get_pair_address(self.token_dai.address, self.token_weth.address))
 
         current_liquidity = self.dai_eth_uniswap.get_current_liquidity()
         total_liquidity = self.dai_eth_uniswap.get_total_liquidity()
