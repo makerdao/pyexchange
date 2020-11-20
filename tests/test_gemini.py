@@ -83,7 +83,7 @@ class TestGemini:
         order = Order(
             order_id="153153",
             timestamp=int(time.time()),
-            pair="DAI-ETH",
+            pair="ETH-USD",
             is_sell=False,
             price=price,
             amount=amount
@@ -132,17 +132,17 @@ class TestGemini:
         assert (duplicate_count == 0)
 
     def test_get_orders(self, mocker):
-        pair = "DAI-ETH"
+        pair = "ETH-USD"
         mocker.patch("requests.request", side_effect=self.GeminiMockServer.handle_request)
         response = self.gemini.get_orders(pair)
-        assert (len(response) > 0)
+        assert (len(response) == 2)
         for order in response:
             assert (isinstance(order.is_sell, bool))
             assert (Wad(order.price) > Wad(0))
         TestGemini.check_orders(response)
 
     def test_order_placement_and_cancellation(self, mocker):
-        pair = "DAI-ETH"
+        pair = "ETH-USD"
         side = "ask"
         mocker.patch("requests.request", side_effect=self.GeminiMockServer.handle_request)
         order_id = self.gemini.place_order(pair, True, Wad.from_number(241700), Wad.from_number(10))
@@ -181,7 +181,7 @@ class TestGemini:
         assert (missorted_found is False)
 
     def test_get_trades(self, mocker):
-        pair = "DAI-ETH"
+        pair = "ETH-USD"
         mocker.patch("requests.request", side_effect=self.GeminiMockServer.handle_request)
         response = self.gemini.get_trades(pair)
         assert (len(response) > 0)

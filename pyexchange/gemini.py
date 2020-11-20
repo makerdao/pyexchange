@@ -119,7 +119,9 @@ class GeminiApi(PyexAPI):
     pair = self._fix_pair(pair)
 
     orders = self._http_authenticated("POST", "/v1/orders")
-    return list(map(lambda order: GeminiOrder.create(order), orders))
+    only_pair_orders = filter(lambda order: (order["symbol"] == pair and order["is_live"] == True), orders)
+
+    return list(map(lambda order: GeminiOrder.create(order), only_pair_orders))
   
   def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad) -> str:
     assert(isinstance(pair, str))
