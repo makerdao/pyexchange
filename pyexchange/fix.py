@@ -135,8 +135,10 @@ class FixEngine:
             self.application_messages.put(message)
             return
 
+        order_processing_types = [simplefix.MSGTYPE_EXECUTION_REPORT, simplefix.MSGTYPE_ORDER_CANCEL_REJECT]
+
         # handle order processing messages
-        if message.get(simplefix.TAG_MSGTYPE) == simplefix.MSGTYPE_EXECUTION_REPORT:
+        if message.get(simplefix.TAG_MSGTYPE) in order_processing_types:
 
             # ensure the correct client id is used, depending on order execution type
             use_origclordid_types = [simplefix.EXECTYPE_CANCELED, simplefix.EXECTYPE_REPLACE, simplefix.EXECTYPE_PENDING_CANCEL, simplefix.EXECTYPE_PENDING_REPLACE]
