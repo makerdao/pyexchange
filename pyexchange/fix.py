@@ -281,10 +281,6 @@ class FixEngine:
                         # Remove orders that have been cancelled from the order book
                         if message.get(simplefix.TAG_EXECTYPE) == simplefix.EXECTYPE_CANCELED:
                             del self.order_book[client_order_id]
-                        # Remove orders that have been filled from the order book
-                        ## orders may be filled before sync_orders runs
-                        if message.get(simplefix.TAG_EXECTYPE) == b'F':
-                            del self.order_book[client_order_id]
                         return message
             await asyncio.sleep(0.3)
 
