@@ -72,7 +72,7 @@ class ErisxApi(PyexAPI):
     """
 
     logger = logging.getLogger()
-    timeout = 5
+    timeout = 20
 
     def __init__(self, fix_trading_endpoint: str, fix_trading_user: str,
                  fix_marketdata_endpoint: str, fix_marketdata_user: str, password: str,
