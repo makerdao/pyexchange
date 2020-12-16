@@ -45,8 +45,8 @@ class TestZrxApi:
 
         self.zrx_api = ZrxApi(self.exchange)
 
-        self.dgx = DSToken.deploy(self.web3, 'DGX')
-        self.dai = DSToken.deploy(self.web3, 'DAI')
+        self.dgx = DSToken.deploy(self.web3, 'DGX', 'DGX')
+        self.dai = DSToken.deploy(self.web3, 'DAI', 'DAI')
         self.pair = Pair(self.dgx.address, 9, self.dai.address, 18)
 
     def test_getting_balances(self):
