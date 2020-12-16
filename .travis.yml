@@ -11,6 +11,9 @@ cache: pip
 before_cache:
   - rm -f $HOME/.cache/pip/log/debug.log
 
+before_install:
+  - pip install virtualenv==20.0.31
+
 install:
   - ./install.sh
   - source _virtualenv/bin/activate
