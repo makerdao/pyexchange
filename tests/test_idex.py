@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import pytest
-from web3 import EthereumTesterProvider, Web3
+from web3 import HTTPProvider, Web3
 
 from pyexchange.idex import IDEX
 from pymaker import Address
@@ -27,7 +27,8 @@ from pymaker.token import DSToken
 
 class TestIDEX:
     def setup_method(self):
-        self.web3 = Web3(EthereumTesterProvider())
+        # Use Ganache docker container
+        self.web3 = Web3(HTTPProvider("http://0.0.0.0:8555"))
         self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
         self.our_address = Address(self.web3.eth.defaultAccount)
         self.idex = IDEX.deploy(self.web3, self.our_address)

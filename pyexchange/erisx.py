@@ -319,14 +319,14 @@ class ErisxApi(PyexAPI):
             elif response.get(150).decode('utf-8') == 'F':
                 # if an order has been filled before it can be cancelled,
                 # treat it as an unknown order prompting the keeper to remove it from the client order book.
-                self.logger.warning(f"Order was filled before it could be cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}")
+                self.logger.info(f"Order was filled before it could be cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}")
                 return False, True
             else:
-                self.logger.warning(f"Order not cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}")
+                self.logger.info(f"Order not cancelled: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}")
                 return False, False
         else:
             if response.get(102).decode('utf-8') == '1':
-                self.logger.warning(f"Order not found, cancellation failed for id: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}")
+                self.logger.info(f"Order not found, cancellation failed for id: {response.get(simplefix.TAG_ORDERID)}|{response.get(simplefix.TAG_CLORDID)}")
                 return False, True
             else:
                 return False, False
