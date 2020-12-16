@@ -66,7 +66,7 @@ class TestUniswapV2(Contract):
         self.router_address = self._deploy(self.web3, self.router_abi, self.router_bin, [self.factory_address.address, self.weth_address.address])
         self._weth_contract = self._get_contract(self.web3, self.weth_abi, self.weth_address)
 
-        self.ds_systemcoin = DSToken.deploy(self.web3, 'SystemCoin')
+        self.ds_systemcoin = DSToken.deploy(self.web3, 'SystemCoin', 'sys')
         self.ds_usdc = DSToken.deploy(self.web3, 'USDC')
         self.token_systemcoin = Token("SystemCoin", self.ds_systemcoin.address, 18)
         self.token_usdc = Token("USDC", self.ds_usdc.address, 6)
