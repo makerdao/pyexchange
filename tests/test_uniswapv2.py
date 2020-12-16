@@ -22,10 +22,7 @@ import pytest
 import unittest
 
 import pkg_resources
-from web3 import EthereumTesterProvider, Web3, HTTPProvider
-
-from eth_tester import EthereumTester, PyEVMBackend
-import eth_tester.backends.pyevm.main as py_evm_main
+from web3 import Web3, HTTPProvider
 
 from pyexchange.uniswapv2 import UniswapV2
 from pyexchange.model import Pair
@@ -131,6 +128,18 @@ class TestUniswapV2(Contract):
         # then
         assert balance_dai == Wad.from_number(17)
         assert balance_usdc == Wad.from_number(9)
+
+    def test_get_exchange_balance_at_block(self):
+        # given
+        add_liquidity = self.add_liquidity_tokens()
+
+        # when
+        starting_block = int(self.web3.eth.getBlock('latest')['number'])
+        self.dai_usdc_uniswap.set_pair_token(self.dai_usdc_uniswap.get_pair_address(self.token_dai.address, self.token_usdc.address))
+
+        # then
+        assert self.dai_usdc_uniswap.get_exchange_balance_at_block(self.token_dai, self.dai_usdc_uniswap.pair_address, starting_block - 1) == Wad(0)
+        assert self.dai_usdc_uniswap.get_exchange_balance_at_block(self.token_dai, self.dai_usdc_uniswap.pair_address, starting_block) > Wad(0)
 
     def test_add_liquidity_tokens(self):
         # when

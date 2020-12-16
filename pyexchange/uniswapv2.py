@@ -86,6 +86,13 @@ class UniswapV2(Contract):
 
         return token.normalize_amount(ERC20Token(web3=self.web3, address=token.address).balance_of(pair_address))
 
+    def get_exchange_balance_at_block(self, token: Token, pair_address: Address, block_number: int) -> Wad:
+        assert (isinstance(token, Token))
+        assert (isinstance(pair_address, Address))
+        assert (isinstance(block_number, int))
+
+        return token.normalize_amount(ERC20Token(web3=self.web3, address=token.address).balance_at_block(pair_address, block_number))
+
     def get_our_exchange_balance(self, token: Token, pair_address: Address) -> Wad:
         assert (isinstance(token, Token))
         assert (isinstance(pair_address, Address))
@@ -113,8 +120,8 @@ class UniswapV2(Contract):
             return token_b_reserve / token_a_reserve
 
     # Return the total number of liquidity tokens minted for a given pair
-    def get_total_liquidity(self) -> Wad:
-        return Wad(self._pair_contract.functions.totalSupply().call())
+    def get_total_liquidity(self, block_identifier = 'latest') -> Wad:
+        return Wad(self._pair_contract.functions.totalSupply().call(block_identifier=block_identifier))
 
     # Return our liquidity token balance
     def get_current_liquidity(self) -> Wad:
