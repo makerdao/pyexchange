@@ -119,6 +119,18 @@ class UniswapV2(Contract):
         else:
             return token_b_reserve / token_a_reserve
 
+    # retrieve exchange rate for the instance's pair token at a specified block
+    def get_exchange_rate_at_block(self, block_number: int) -> Wad:
+        assert (isinstance(block_number, int))
+
+        token_a_reserve = self.get_exchange_balance_at_block(self.token_a, self.pair_address, block_number)
+        token_b_reserve = self.get_exchange_balance_at_block(self.token_b, self.pair_address, block_number)
+
+        if token_a_reserve == Wad.from_number(0) or token_b_reserve == Wad.from_number(0):
+            return Wad.from_number(0)
+        else:
+            return token_b_reserve / token_a_reserve
+
     # Return the total number of liquidity tokens minted for a given pair
     def get_total_liquidity(self, block_identifier = 'latest') -> Wad:
         return Wad(self._pair_contract.functions.totalSupply().call(block_identifier=block_identifier))
