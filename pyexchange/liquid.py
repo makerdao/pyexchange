@@ -142,6 +142,9 @@ class LiquidApi(PyexAPI):
     """
     logger = logging.getLogger()
 
+    last_nonce = 0
+    last_nonce_lock = threading.Lock()
+
     def __init__(self, api_server: str, api_key: str, secret_key: str, timeout: float):
         assert(isinstance(api_server, str))
         assert(isinstance(api_key, str))
@@ -152,8 +155,6 @@ class LiquidApi(PyexAPI):
         self.api_key = api_key
         self.secret_key = secret_key
         self.timeout = timeout
-        self.last_nonce = 0
-        self.last_nonce_lock = threading.Lock()
 
     def get_markets(self):
         return self._http_request("GET", "/products", {})
@@ -178,8 +179,9 @@ class LiquidApi(PyexAPI):
 
         if result['models'] is None:
             return []
-
-        return list(map(lambda item: Order.to_order(item), result['models']))
+        orders = list(map(lambda item: Order.to_order(item), result['models']))
+        print(f"orders - {orders}")
+        return orders
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad):
         assert(isinstance(pair, str))
@@ -243,18 +245,19 @@ class LiquidApi(PyexAPI):
         return list(map(lambda item: Trade.to_trade(pair, item), result['models']))
 
     def _choose_nonce(self) -> int:
-        with self.last_nonce_lock:
-            timed_nonce = int(time.time()*1000)
+        timed_nonce = int(time.time()*1000)
 
-            if self.last_nonce + 1 > timed_nonce:
-                self.logger.info(f"Wanted to use nonce '{timed_nonce}', but last nonce is '{self.last_nonce}'")
-                self.logger.info(f"In this case using '{self.last_nonce + 1}' instead")
+        if self.last_nonce + 1 > timed_nonce:
+            self.logger.info(f"Wanted to use nonce '{self.timed_nonce}', but last nonce is '{self.last_nonce}'")
+            self.logger.info(f"In this case using '{self.last_nonce + 1}' instead")
 
-                self.last_nonce += 1
-            else:
-                self.last_nonce = timed_nonce
+            self.last_nonce += 1
+        else:
+            self.last_nonce = timed_nonce
 
-            return self.last_nonce
+        print(f"nonce returned - {self.last_nonce}")
+
+        return self.last_nonce
 
     def _http_request(self, method: str, resource: str, body: dict):
         assert(isinstance(method, str))
@@ -275,27 +278,29 @@ class LiquidApi(PyexAPI):
 
         max_attempts = 3
         for attempt in range(0, max_attempts):
-            our_nonce = self._choose_nonce()
+            with self.last_nonce_lock:
+                our_nonce = self._choose_nonce()
+                print(f"nonce - {our_nonce}, data {body}")
 
-            auth_payload = {
-                "path": resource,
-                "nonce": our_nonce,
-                "token_id": self.api_key
-            }
+                auth_payload = {
+                    "path": resource,
+                    "nonce": our_nonce,
+                    "token_id": self.api_key
+                }
 
-            signature = jwt.encode(auth_payload, self.secret_key, 'HS256')
+                signature = jwt.encode(auth_payload, self.secret_key, 'HS256')
 
-            data = json.dumps(body, separators=(',', ':'))
+                data = json.dumps(body, separators=(',', ':'))
 
-            result = self._result(requests.request(method=method,
-                                                 url=f"{self.api_server}{resource}",
-                                                 data=data,
-                                                 headers={
-                                                     "X-Quoine-API-Version": "2",
-                                                     "Content-Type":"application/json",
-                                                     "X-Quoine-Auth":signature
-                                                 },
-                                                 timeout=self.timeout))
+                result = self._result(requests.request(method=method,
+                                                     url=f"{self.api_server}{resource}",
+                                                     data=data,
+                                                     headers={
+                                                         "X-Quoine-API-Version": "2",
+                                                         "Content-Type":"application/json",
+                                                         "X-Quoine-Auth":signature
+                                                     },
+                                                     timeout=self.timeout))
 
             # result will be `None` if we need to readjust nonce
             # in this case we will try again in the next iteration
