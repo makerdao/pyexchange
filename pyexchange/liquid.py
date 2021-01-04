@@ -142,7 +142,6 @@ class LiquidApi(PyexAPI):
     """
     logger = logging.getLogger()
 
-    last_nonce = 0
     last_nonce_lock = threading.Lock()
 
     def __init__(self, api_server: str, api_key: str, secret_key: str, timeout: float):
