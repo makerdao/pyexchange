@@ -179,9 +179,8 @@ class LiquidApi(PyexAPI):
 
         if result['models'] is None:
             return []
-        orders = list(map(lambda item: Order.to_order(item), result['models']))
-        print(f"orders - {orders}")
-        return orders
+
+        return list(map(lambda item: Order.to_order(item), result['models']))
 
     def place_order(self, pair: str, is_sell: bool, price: Wad, amount: Wad):
         assert(isinstance(pair, str))
@@ -245,19 +244,7 @@ class LiquidApi(PyexAPI):
         return list(map(lambda item: Trade.to_trade(pair, item), result['models']))
 
     def _choose_nonce(self) -> int:
-        timed_nonce = int(time.time()*1000)
-
-        if self.last_nonce + 1 > timed_nonce:
-            self.logger.info(f"Wanted to use nonce '{self.timed_nonce}', but last nonce is '{self.last_nonce}'")
-            self.logger.info(f"In this case using '{self.last_nonce + 1}' instead")
-
-            self.last_nonce += 1
-        else:
-            self.last_nonce = timed_nonce
-
-        print(f"nonce returned - {self.last_nonce}")
-
-        return self.last_nonce
+        return int(time.time()*1000)
 
     def _http_request(self, method: str, resource: str, body: dict):
         assert(isinstance(method, str))
@@ -279,12 +266,10 @@ class LiquidApi(PyexAPI):
         max_attempts = 3
         for attempt in range(0, max_attempts):
             with self.last_nonce_lock:
-                our_nonce = self._choose_nonce()
-                print(f"nonce - {our_nonce}, data {body}")
 
                 auth_payload = {
                     "path": resource,
-                    "nonce": our_nonce,
+                    "nonce": self._choose_nonce(),
                     "token_id": self.api_key
                 }
 
