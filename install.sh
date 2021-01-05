@@ -7,6 +7,7 @@ set -e
 rm -rf _virtualenv
 virtualenv _virtualenv
 source _virtualenv/bin/activate
+pip install pip==20.2.4
 
 # The advantage of using this method, in contrary to just calling `pip install -r requirements.txt` several times,
 # is that it can detect different versions of the same dependency and fail with a "Double requirement given"
