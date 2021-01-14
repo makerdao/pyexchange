@@ -22,9 +22,8 @@ import pytest
 import unittest
 
 import pkg_resources
-from web3 import EthereumTesterProvider, Web3, HTTPProvider
+from web3 import Web3, HTTPProvider
 
-from eth_tester import EthereumTester, PyEVMBackend
 import eth_tester.backends.pyevm.main as py_evm_main
 
 from pyexchange.uniswapv2 import UniswapV2

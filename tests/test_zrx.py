@@ -18,7 +18,7 @@
 import json
 
 import pkg_resources
-from web3 import EthereumTesterProvider, Web3
+from web3 import EthereumTesterProvider, Web3, HTTPProvider
 
 from eth_tester import EthereumTester, PyEVMBackend
 import eth_tester.backends.pyevm.main as py_evm_main
@@ -34,7 +34,8 @@ from pyflex.zrx import ZrxExchange
 class TestZrxApi:
     def setup_method(self):
         py_evm_main.GENESIS_GAS_LIMIT = 10000000
-        self.web3 = Web3(EthereumTesterProvider(EthereumTester(PyEVMBackend())))
+        #self.web3 = Web3(EthereumTesterProvider(EthereumTester(PyEVMBackend())))
+        self.web3 = Web3(HTTPProvider("http://0.0.0.0:8555"))
         self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
         self.our_address = Address(self.web3.eth.defaultAccount)
 
