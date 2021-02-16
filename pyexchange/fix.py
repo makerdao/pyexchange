@@ -281,6 +281,9 @@ class FixEngine:
                         # Remove orders that have been cancelled from the order book
                         if message.get(simplefix.TAG_EXECTYPE) == simplefix.EXECTYPE_CANCELED:
                             del self.order_book[client_order_id]
+                        # Remove orders that recieve an UnsolicitedCancel response
+                        if message.get(b'5001') is not None:
+                            del self.order_book[client_order_id]                            
                         return message
             await asyncio.sleep(0.3)
 

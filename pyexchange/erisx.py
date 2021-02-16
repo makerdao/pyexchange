@@ -278,6 +278,10 @@ class ErisxApi(PyexAPI):
             elif new_order.get(simplefix.TAG_ORDERREJREASON) == b'23':
                 self.logger.warning(f"Failed to place order as order would have exceeded balance limits")
             return ''
+        # handle unsolicited cancellations
+        elif new_order.get(b'5001') is not None:
+            self.logger.warning(f"Failed to place order due to {new_order.get(simplefix.TAG_TEXT)}")
+            return ''
 
         erisx_oid = new_order.get(simplefix.TAG_ORDERID).decode('utf-8')
         client_oid = new_order.get(simplefix.TAG_CLORDID).decode('utf-8')
