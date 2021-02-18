@@ -194,6 +194,17 @@ class FixEngine:
         self.write_queue.put(message)
         pass
 
+    async def _delete_order(self, client_order_id: str):
+        assert (isinstance(client_order_id, str))
+
+        await self.lock.acquire()
+        try:
+            del self.order_book[client_order_id]
+        except Exception as e:
+            self.logger.error(f"Unable to delete order due to {e}")
+        finally:
+            self.lock.release()
+
     def _get_client_id(self, order_id: str) -> str:
         """ Retrieve the client_id from an order_id structured as exchange_id|client_id """
         assert isinstance(order_id, str)
@@ -225,9 +236,12 @@ class FixEngine:
 
                     # check for cancellations
                     if exchange_order_state.get(simplefix.TAG_EXECTYPE) in cancel_message_types:
-                        if exchange_order_state.get(b'5001') == '4'.encode('utf-8'):
-                            self.logger.warning(f"Unsolicited Cancellation for order: {order_id}")
-                        del self.order_book[client_order_id]
+                        await self._delete_order(client_order_id)
+                        break
+                    # check for unsolicited cancellations (can be received for non exectype messages)
+                    elif exchange_order_state.get(b'5001') is not None:
+                        self.logger.warning(f"Unsolicited Cancellation for order: {order_id}")
+                        await self._delete_order(client_order_id)
                         break
 
                     # check for fills
@@ -235,7 +249,7 @@ class FixEngine:
                         if exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_FILLED:
                             self.logger.info(f"Order: {order_id} filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')} at price of {exchange_order_state.get(simplefix.TAG_PRICE).decode('utf-8')}")
 
-                            del self.order_book[client_order_id]
+                            await self._delete_order(client_order_id)
                             break
                         elif exchange_order_state.get(simplefix.TAG_ORDSTATUS) == simplefix.ORDSTATUS_PARTIALLY_FILLED:
                             self.logger.info(f"Order: {order_id} partially filled with amount {exchange_order_state.get(simplefix.TAG_CUMQTY).decode('utf-8')}  at price of {exchange_order_state.get(simplefix.TAG_PRICE).decode('utf-8')}")
@@ -280,10 +294,10 @@ class FixEngine:
                     if message.get(simplefix.TAG_MSGTYPE) == message_type.encode('UTF-8'):
                         # Remove orders that have been cancelled from the order book
                         if message.get(simplefix.TAG_EXECTYPE) == simplefix.EXECTYPE_CANCELED:
-                            del self.order_book[client_order_id]
+                            await self._delete_order(client_order_id)
                         # Remove orders that recieve an UnsolicitedCancel response
                         if message.get(b'5001') is not None:
-                            del self.order_book[client_order_id]                            
+                            await self._delete_order(client_order_id)
                         return message
             await asyncio.sleep(0.3)
 
