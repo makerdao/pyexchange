@@ -112,7 +112,11 @@ class FixEngine:
 
             # Handle session messages, queue application messages.
             if not self._handle_session_message(message):
-                self._handle_application_message(message)
+                await self.lock.acquire()
+                try:
+                    self._handle_application_message(message)
+                finally:
+                    self.lock.release()
 
         except asyncio.CancelledError:
             logging.error("client read timed out")
