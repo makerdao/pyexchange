@@ -122,7 +122,7 @@ class DydxApi(PyexAPI):
 
         return balance
 
-    # format balances response into a shape expected by keepers 
+    # format balances response into a shape expected by keepers
     def _balances_to_list(self, balances: dict) -> List:
         balance_list = []
 
@@ -142,6 +142,7 @@ class DydxApi(PyexAPI):
 
         return balance_list
 
+
     def get_balances(self) -> List:
         return self._balances_to_list(self.client.get_balances(self.address, consts.ACCOUNT_NUMBERS_SPOT)['balances'])
 
@@ -149,10 +150,27 @@ class DydxApi(PyexAPI):
         assert (isinstance(pair, str))
 
         orders = self.client.get_my_orders(
-            market=[pair], 
+            market=[pair],
             limit=None,
             startingBefore=None
         )
+        open_orders = filter(lambda order: order['status'] == 'OPEN', orders['orders'])
+
+        market_info = self.market_info[pair]
+
+        return list(map(lambda item: DydxOrder.from_message(item, pair, market_info), open_orders))
+
+
+    def get_all_orders(self, pair: str, side: str) -> List[Order]:
+        assert (isinstance(pair, str))
+
+        orders = self.client.get_orders(
+            market=[pair],
+            limit=None,
+            side=side,
+            startingBefore=None
+        )
+
         open_orders = filter(lambda order: order['status'] == 'OPEN', orders['orders'])
 
         market_info = self.market_info[pair]
@@ -165,13 +183,25 @@ class DydxApi(PyexAPI):
         allow_market_ids = [0, 2, 3]
 
         for market_id in allow_market_ids:
+
             try:
-                allowance_tx_hash = self.client.eth.solo.set_allowance(
-                    market=market_id)  # must only be called once, ever
-                receipt = self.client.eth.get_receipt(allowance_tx_hash)
+                self._set_allowance(market_id)
+
             except (Timeout, TypeError):
-                logging.error(f"Unable to set allowance for market_id: {market_id}")
                 continue
+
+        return True
+
+    # Only sets allowance for solo market
+    def _set_allowance(self, token) -> bool:
+        # Market IDs 0 (ETH), 2(USDC), 3(DAI) are traded
+        market_id = self._get_market_id(token)
+        try:
+            allowance_tx_hash = self.client.eth.solo.set_allowance(
+                market=market_id)  # must only be called once, ever
+            receipt = self.client.eth.get_receipt(allowance_tx_hash)
+        except (Timeout, TypeError):
+            logging.error(f"Unable to set allowance for market_id: {market_id}")
 
         return True
 
@@ -238,13 +268,15 @@ class DydxApi(PyexAPI):
 
         return receipt
 
-    def place_order(self, pair: str, is_sell: bool, price: float, amount: float) -> str:
+    def place_order(self, pair: str, is_sell: bool, price: float, amount: float, limit_fee=None, fill_or_kill = False) -> str:
         assert (isinstance(pair, str))
         assert (isinstance(is_sell, bool))
         assert (isinstance(price, float))
         assert (isinstance(amount, float))
 
         side = 'SELL' if is_sell else 'BUY'
+
+        limit_fee = Decimal(0.01) if not limit_fee else round(Decimal(limit_fee.__float__()), 2)
 
         self.logger.info(f"Placing order ({side}, amount {amount} of {pair},"
                          f" price {price})...")
@@ -265,7 +297,8 @@ class DydxApi(PyexAPI):
             side=side,
             price=price,
             amount=amount,
-            fillOrKill=False,
+            limitFee=limit_fee,
+            fillOrKill=fill_or_kill,
             postOnly=False
         )['order']
         order_id = created_order['id']
