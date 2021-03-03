@@ -287,6 +287,8 @@ class FixEngine:
                     message = self.order_book[client_order_id].get()
                     assert isinstance(message, simplefix.FixMessage)
 
+                    logging.info(f"order processing message before checks: {message}")
+
                     # handle message rejection
                     if message.get(simplefix.TAG_MSGTYPE) in reject_message_types:
                         if message.get(simplefix.TAG_CXLREJREASON) is not None:
@@ -303,6 +305,8 @@ class FixEngine:
                         if message.get(b'5001') is not None:
                             await self._delete_order(client_order_id)
                         return message
+
+            logging.info(f"order book state: {self.order_book} pre next cycle")
             await asyncio.sleep(0.3)
 
     def wait_for_order_processing_response(self, message_type: str, client_order_id: str) -> simplefix.FixMessage:
