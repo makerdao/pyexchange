@@ -37,7 +37,7 @@ import time
 from web3 import Web3
 from typing import List, Tuple
 
-from pyexchange.uniswapv3_entities import Params, Pool, Position
+from pyexchange.uniswapv3_entities import Params, Pool, Position, CollectParams, MintParams
 from pymaker import Calldata, Contract, Address, Transact, Wad
 from pymaker.approval import directly
 from pymaker.model import Token
@@ -148,7 +148,7 @@ class SwapRouter:
         pass
 
 
-class PositionManager:
+class PositionManager(Contract):
     """
 
     NFTPositionManager: https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/NonfungiblePositionManager.sol
@@ -157,53 +157,6 @@ class PositionManager:
 
     NonfungiblePositionManager_abi = Contract._load_abi(__name__, 'abi/NonfungiblePositionManager.abi')['abi']
 
-
-    # TODO: construct callback to be passed to mint()
-    ## https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.ts#L162
-    ## https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.ts#L44    
-    class MintParams(Params):
-
-        # https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.test.ts
-        def __init__(self, position: Position, recipient: str, slippage_tolerance: float, deadline: int):
-            assert(isinstance(position, Position))
-            assert(isinstance(recipient, str))
-            assert(isinstance(slippage_tolerance, float))
-            assert(isinstance(deadline, int))
-
-            self.position = position
-            self.recipient = recipient
-            self.slippage_tolerance = slippage_tolerance
-            self.deadline = deadline
-
-            calldata_args = [self.position, self.receipt, self.slippage_tolerance, self.deadline]
-
-            # TODO: figure out how to handle struct typing
-            method = "mint(struct INonfungiblePositionManager.MintParams, params)"
-            # TODO: add fn signature types
-            # TODO: figure out how to pass through web3
-            self.encode_calldata = self.encode_calldata(web3, method, calldata_args)
-
-        @staticmethod
-        def calculate_mint_amounts(self, slippage: int) -> dict:
-            assert(isinstance(slippage, int))
-
-            amount0Desired = Wad.from_number(0)
-
-            return {
-                "amount0Desired": amount0Desired
-            }
-
-
-    class CollectParams(Params):
-
-        # TODO: pass through the contract, and uniswap_pool
-        def __init__(self, uniswap_pool: Pool, recipient: Address, tick_lower: int, tick_upper: int, amounts: dict) -> None:
-            assert(isinstance(uniswap_pool, Pool))
-
-            self.params = {}
-
-            self.params.amount1Min = amounts["amount1Min"]
-            self.deadline = self._deadline()
 
 
     def __init__(self, web3: Web3, nft_position_manager_address: Address):
@@ -239,18 +192,16 @@ class PositionManager:
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         "createAndInitializePoolIfNecessary", create_pool_args)
 
-    # TODO: determine how to pass through args
-    def generate_mint_params(self, position: Position, recipient: str, slippage_tolerance: float, deadline: int) -> MintParams:
+    # TODO: determine if this is redundant with just directly instantiating MintParams?
+    def generate_mint_params(self, web3: Web3, position: Position, recipient: Address, slippage_tolerance: float, deadline: int = None) -> MintParams:
         """ Returns a MintParams object for use in a mint() call """
-        assert(isinstance(position, Position))
-        assert(isinstance(recipient, str))
-        assert(isinstance(slippage_tolerance, float))
-        assert(isinstance(deadline, int))
+        assert (isinstance(web3, Web3))
+        assert (isinstance(position, Position))
+        assert (isinstance(recipient, Address))
+        assert (isinstance(slippage_tolerance, float))
+        assert (isinstance(deadline, int) or (deadline is None))
 
-        pool = Pool()
-        position = Position()
-
-        return MintParams(position, recipient, slippage_tolerance, deadline)
+        return MintParams(web3, position, recipient, slippage_tolerance, deadline)
 
     # TODO: figure out how to build out the Position object
     def mint(self, params: MintParams) -> Transact:
@@ -274,12 +225,15 @@ class PositionManager:
     # TODO: determine if this should return an NFT
     ## use Position instead of NFT?
     def positions(self, token_id: int) -> Position:
-        """ """
+        """ Return liquidity and reserve information for a given NFT's token_id """
         assert (isinstance(token_id, int))
 
         position = self.nft_position_manager_contract.functions.positions(token_id).call()
 
         return Position(position)
+
+    def sum_liquidity_in_range(self, tick_lower, tick_higher) -> Wad:
+        pass
 
     # TODO: interact with self.positions() to instantiate NFT and calculate price values
     # NFTs are controlled by NonfungiblePositionManager

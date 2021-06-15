@@ -45,18 +45,22 @@ MIN_TICK = -887272
 MAX_TICK = 887272
 MIN_SQRT_RATIO = Fxp(4295128739)
 MAX_SQRT_RATIO = Fxp(1461446703485210103287273052203988822378723970342)
-MAX_UINT256 = Fxp('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
+MAX_UINT256 = Fxp('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', signed=False, n_word=256)
+NEGATIVE_ONE = Fxp(-1)
+ZERO = Fxp(0)
+ONE = Fxp(1)
+Q96 = Fxp(2 ** 96)
+Q192 = Fxp(Q96 ** 2)
 
 # https://www.geeksforgeeks.org/find-significant-set-bit-number/
-def most_significant_bit(x: Fxp) -> Fxp:
-    """ returns the most significant bit for a given number"""
-    k = int(math.log(x, 2))
-    msb = 1 << k
-
-    return Fxp(msb)
+# https://www.baeldung.com/cs/most-significant-bit
+def most_significant_bit(x: Fxp) -> int:
+    """ returns the most significant bit for a given number """
+    assert (isinstance(x, Fxp))
+    return int(math.log(x, 2))
 
 # TODO: check return type
-def mul_shift(value: Fxp, multiply_by: string) -> Fxp:
+def mul_shift(value: Fxp, multiply_by: str) -> Fxp:
     """ """
     assert (isinstance(value, Fxp))
     assert (isinstance(multiply_by, str))
@@ -65,8 +69,7 @@ def mul_shift(value: Fxp, multiply_by: string) -> Fxp:
     number = value * (Fxp(multiply_by)) >> Fxp(128)
     return Fxp(number)
 
-# TODO: finish implementing
-def getSqrtRatioAtTick(tick: Fxp) -> Fxp:
+def get_sqrt_ratio_at_tick(tick: Fxp) -> Fxp:
     assert (isinstance(tick, Fxp))
 
     abs_tick = tick * - 1 if tick < 0 else tick
@@ -115,39 +118,55 @@ def getSqrtRatioAtTick(tick: Fxp) -> Fxp:
     if tick > 0:
         ratio = MAX_UINT256 / ratio
 
-    # convert back to Q64.96
+    q32 = Fxp(2 ** 32)
 
+    # convert back to Q64.96
+    if ratio % q32 >= ZERO:
+        return (ratio / q32) + ZERO
+    else:
+        return (ratio / q32)
 
 # https://github.com/Uniswap/uniswap-v3-sdk/blob/c8e0d4c56e3b3ebd6446aba66523d20f2ea0fd9c/src/utils/tickMath.ts#L82
 # TODO: add FXP Qm.n typing? Add signing?
 # TODO: clean up Fxp instantiation / add constants -> add support for Fxp templates?
-def getTickAtSqrtRatio(sqrtRatioX96: Fxp) -> int:
-    """ return the tick for a given Q64.96 formatted ratio (64 bit word, 96 fractional bits) """
+def get_tick_at_sqrt_ratio(sqrtRatioX96: Fxp) -> int:
+    """ return the tick for a given Q64.96 formatted ratio (64 bit word, 96 fractional bits)
+
+        Used to get the amount of liquidity available in a position: 
+     """
     assert (isinstance(sqrtRatioX96, Fxp))
 
-    square_root_ratio_x128 = sqrtRatioX96 << Fxp(32)
+    print("starting datatype", sqrtRatioX96, sqrtRatioX96.info())
+    # TODO: verify this shouldn't be << Fxp(32)
+    square_root_ratio_x128 = sqrtRatioX96 << 32
 
     msb = most_significant_bit(square_root_ratio_x128)
 
     r = None
     if msb > Fxp(128):
         # signed right shift
-        r = square_root_ratio_x128 >> (msb - Fxp(127))
+        r = square_root_ratio_x128 >> (msb - 127)
     else:
         # left shift
-        r = square_root_ratio_x128 << (Fxp(127) - msb)
+        # TODO: verify left shifted into Q64.64?
+        print(square_root_ratio_x128, isinstance(square_root_ratio_x128, Fxp))
+        r = square_root_ratio_x128 << (127 - msb)
 
     # TODO: figure out how to deal with sign... dealt with by Fxp internals?
-    log_2 = (msb - Fxp(128)) << Fxp(64)
+    log_2 = (msb - 128) << 64
 
+    # TODO: why is Fxp(Fxp) impactful in here?
+    print(r, log_2)
     for i in range(14):
         # signed right shift
-        r = (r * r) >> Fxp(127)
-        f = r >> Fxp(128)
+        r = Fxp(r * r) >> 127
+        print("r datatype", r, r.info())
+        f = r >> 128
 
         # leftshift bitwise OR
-        log_2 = log_2 | f << Fxp(63 - i)
+        log_2 = log_2 | f << (63 - i)
 
+        print("r and f", r, f)
         # signed right shift
         r = r >> f
 
@@ -159,24 +178,83 @@ def getTickAtSqrtRatio(sqrtRatioX96: Fxp) -> int:
     if tick_low == tick_high:
         return int(tick_low)
     else:
-        if getSqrtRatioAtTick(tick_high) <= sqrtRatioX96:
+        if get_sqrt_ratio_at_tick(tick_high) <= sqrtRatioX96:
             return int(tick_high)
         else:
             return int(tick_low)
 
 # https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/utils/encodeSqrtRatioX96.ts
-def encodeSqrtRatioX96(amount_1: Wad, amount_0: Wad) -> int:
-    """ Returns a uint160 composed from the ratio of amount1/amount0 """
-    assert (isinstance(amount_1, Wad))
-    assert (isinstance(amount_0, Wad))
+def encodeSqrtRatioX96(amount_1: int, amount_0: int) -> Fxp:
+    """ Returns a Q64.96 uint160 composed from the ratio of amount1/amount0 """
+    assert (isinstance(amount_1, int))
+    assert (isinstance(amount_0, int))
 
     numerator = amount_1 << 196
     
     ratio_x_192 = numerator / amount_0
-    return sqrt(ratio_x_192)
+
+    return Fxp(math.sqrt(ratio_x_192), dtype='Q64.96')
 
 # TODO: finish implementing
 # https://github.com/Uniswap/uniswap-v3-sdk/blob/c8e0d4c56e3b3ebd6446aba66523d20f2ea0fd9c/src/utils/nearestUsableTick.ts
 def nearest_usable_tick(tick: int, tick_spacing: int) -> float:
     assert (isinstance(tick, int))
     assert (isinstance(tick_spacing, int))
+
+def mul_div_rounding_up(a: Fxp, b: Fxp, denominator: Fxp) -> Fxi:
+    assert (isinstance(a, Fxp))
+    assert (isinstance(b, Fxp))
+    assert (isinstance(denominator, Fxp))
+    
+    product = a * b
+    result = product / denominator
+    # TODO: check equality here
+    if product % denominator != ZERO:
+        result += ONE
+    
+    return result
+
+
+class SqrtPriceMath:
+
+    @staticmethod
+    def invert_ratio_if_needed(sqrtRatioAX96: Fxp, sqrtRatioBX96: Fxp) -> Tuple:
+        assert (isinstance(sqrtRatioAX96, Fxp))
+        assert (isinstance(sqrtRatioBX96, Fxp))
+
+        if sqrtRatioAX96 > sqrtRatioBX96:
+            old_sqrtRatioBX96 = sqrtRatioBX96
+            old_sqrtRatioAX96 = sqrtRatioAX96
+            sqrtRatioAX96 = old_sqrtRatioBX96
+            sqrtRatioBX96 = old_sqrtRatioAX96
+
+    @staticmethod
+    def get_amount_0_delta(sqrtRatioAX96: Fxp, sqrtRatioBX96: Fxp, liquidity: Wad, round_up: bool) -> Wad:
+        assert (isinstance(sqrtRatioAX96, Fxp))
+        assert (isinstance(sqrtRatioBX96, Fxp))
+        assert (isinstance(liquidity, Wad))
+        assert (isinstance(round_up, bool))
+        
+        sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
+        
+        numerator_1 = liquidity.value << 96
+        numerator_2 = sqrtRatioBX96 - sqrtRatioAX96
+
+        if round_up:
+            return mul_div_rounding_up(mul_div_rounding_up(numerator_1, numerator_2, sqrtRatioBX96), ONE, sqrtRatioAX96)
+        else:
+            return ((numerator_1 * numerator_2) / sqrtRatioBX96) / sqrtRatioAX96
+
+    @staticmethod
+    def get_amount_1_delta(sqrtRatioAX96: Fxp, sqrtRatioBX96: Fxp, liquidity: Wad, round_up: bool) -> Wad:
+        assert (isinstance(sqrtRatioAX96, Fxp))
+        assert (isinstance(sqrtRatioBX96, Fxp))
+        assert (isinstance(liquidity, Wad))
+        assert (isinstance(round_up, bool))
+
+        sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
+        
+        if round_up:
+            return mul_div_rounding_up(liquidity, (sqrtRatioBX96 - sqrtRatioAX96), Q96)
+        else:
+            return (liquidity * (sqrtRatioBX96 - sqrtRatioAX96)) / Q96

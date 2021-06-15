@@ -26,13 +26,14 @@ from enum import Enum
 from web3 import Web3, HTTPProvider
 
 from pyexchange.uniswapv3 import PositionManager
-from pyexchange.uniswapv3_entities import Pool, Position
-from pyexchange.uniswapv3_math import encodeSqrtRatioX96, getSqrtRatioAtTick, getTickAtSqrtRatio
+from pyexchange.uniswapv3_entities import Pool, Position, MintParams
+from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio
 from pymaker import Address, Contract, Receipt, Transact
 from pymaker.deployment import deploy_contract
 from pymaker.keys import register_keys, register_private_key
 from pymaker.model import Token
 from pymaker.numeric import Wad
+from pymaker.token import DSToken, ERC20Token
 
 
 # TODO: move to uniswapv3.py?
@@ -104,11 +105,13 @@ class TestUniswapV3(Contract):
     def test_generate_mint_params(self):
         
         # TODO: automate and connect with args for mint_tokens
-        amount0 = 100 * 10 ** 6
-        amount1 = 100 * 10 ** 18
+        amount_0 = 100 * 10 ** 6
+        amount_1 = 100 * 10 ** 18
         starting_square_root_ratio_x96 = encodeSqrtRatioX96(amount_1, amount_0)
         liquidity = Wad(0) # liquidity is 0 upon initalization
-        tick_current = getTickAtSqrtRatio(starting_square_root_ratio_x96)
+        # tick_current = get_tick_at_sqrt_ratio(starting_square_root_ratio_x96)
+
+        test_zero_tick = 0
 
         pool = Pool(
             self.token_dai,
@@ -116,12 +119,14 @@ class TestUniswapV3(Contract):
             FEES.LOW.value,
             starting_square_root_ratio_x96,
             liquidity,
-            tick_current,
+            test_zero_tick,
             []
-            )
-        position = Position()
+        )
 
-        mint_params = self.position_manager.generate_mint_params()
+        position = Position(pool, 1, -10, 10)
+
+        recipient = self.our_address
+        mint_params = self.position_manager.generate_mint_params(self.web3, position, recipient, 0.0)
         assert isinstance(mint_params, MintParams)
 
     def test_position_manager_deployment(self):
@@ -130,4 +135,7 @@ class TestUniswapV3(Contract):
         assert test_call is True
 
     def test_mint(self):
+        pass
+
+    def test_positions(self):
         pass
