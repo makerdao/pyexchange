@@ -22,7 +22,9 @@ MIN_TICK = -887272
 MAX_TICK = 887272
 MIN_SQRT_RATIO = Fxp(4295128739)
 MAX_SQRT_RATIO = Fxp(1461446703485210103287273052203988822378723970342)
-MAX_UINT256 = Fxp('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', False, 256)
+# TODO: figure out why this doesn't work
+# MAX_UINT256 = Fxp('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', signed=False, n_word=256)
+MAX_UINT256 = Fxp(115792089237316195423570985008687907853269984665640564039457584007913129639935)
 NEGATIVE_ONE = Fxp(-1)
 ZERO = Fxp(0)
 ONE = Fxp(1)

@@ -17,15 +17,17 @@
 
 import time
 
+from fractions import Fraction
 from fxpmath import Fxp
 from typing import List, Optional, Tuple
 from web3 import Web3
 
-from pyexchange.uniswapv3_math import get_sqrt_ratio_at_tick, SqrtPriceMath
+from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, SqrtPriceMath
+from pyexchange.uniswapv3_constants import Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO
 from pymaker import Address, Calldata, Invocation
 from pymaker.model import Token
 from pymaker.numeric import Wad
-from pymaker.utils import bytes_to_int, bytes_to_hexstring
+from pymaker.util import bytes_to_int, bytes_to_hexstring
 
 
 class PriceFraction:
@@ -40,7 +42,31 @@ class PriceFraction:
         self.denominator = denominator # base token
     
     def get_float_price(self) -> float:
-        return float(numerator / denominator)
+        return float(self.numerator / self.denominator)
+    
+    def multiply(self, other):
+        """ multiply two PriceFractions together. This method assumes that the other's base currency matches self's quote currency
+
+            returns a new PriceFraction instance with the resultant numerator and denominator.
+        """
+        numerator_result = self.numerator * other.numerator
+        denominator_result = self.denominator * other.denominator
+
+        return self.__class__(self.base_token, other.quote_token, numerator_result, denominator_result)
+
+    @staticmethod
+    def convert_to_fraction(number) -> Fraction:
+        """ https://stackoverflow.com/questions/23344185/how-to-convert-a-decimal-number-into-fraction """
+
+        return Fraction(str(number))
+    
+    @staticmethod
+    def from_fraction(fraction: Fraction, base_token: Token, quote_token: Token):
+        assert isinstance(fraction, Fraction)
+        assert isinstance(base_token, Token)
+        assert isinstance(quote_token, Token)
+
+        return PriceFraction(base_token, quote_token, fraction.denominator, fraction.numerator)
 
 
 class Pool:
@@ -61,8 +87,8 @@ class Pool:
         self.liquidity = liquidity
         self.tick_current = tick_current
         self.ticks = ticks
-        self.token_0_price = get_token_1_price()
-        self.token_1_price = get_token_1_price()
+        self.token_0_price = self.get_token_0_price()
+        self.token_1_price = self.get_token_1_price()
 
     def get_token_0_price(self) -> PriceFraction:
         # base, quote
@@ -124,14 +150,39 @@ class Position:
         """ """
         pass
 
-    def max_liquidity_for_amounts(self, pool: Pool, sqrtRatioAX96, sqrtRatioBX96, amount_0, amount_1, use_full_precision):
+
+    def max_liquidity_for_amount_0(self, sqrtRatioAX96, sqrtRatioBX96, amount_0, use_full_precision: bool):
+        sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
+
+        if use_full_precision:
+            numerator = (amount_0 * sqrtRatioAX96) * sqrtRatioBX96
+            denominator = Q96 * (sqrtRatioBX96 - sqrtRatioAX96)
+            return numerator / denominator
+        else:
+            intermediate = (sqrtRatioAX96 * sqrtRatioBX96) / Q96
+            return (amount_0 * intermediate) / (sqrtRatioBX96 - sqrtRatioAX96)
+
+    def max_liquidity_for_amount_1(self, sqrtRatioAX96, sqrtRatioBX96, amount_1):
+        sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
+
+        return (amount_1 * Q96) / (sqrtRatioBX96 - sqrtRatioAX96)
+
+    # TODO: remove top level usage of SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)?
+    def max_liquidity_for_amounts(self, pool: Pool, sqrt_ratio_current_x96, sqrtRatioAX96, sqrtRatioBX96, amount_0, amount_1, use_full_precision):
         assert (isinstance(pool, Pool))
 
         sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
 
-        max_liquidity_for_amount_0 = 
+        if sqrt_ratio_current_x96 <= sqrtRatioAX96:
+            return max_liquidity_for_amount_0(sqrtRatioAX96, sqrtRatioBX96, amount_0, use_full_precision)
+        elif sqrt_ratio_current_x96 < sqrtRatioBX96:
+            liquidity_0 = max_liquidity_for_amount_0(sqrtRatioAX96, sqrtRatioBX96, amount_0, use_full_precision)
+            liquidity_1 = max_liquidity_for_amount_1(sqrtRatioAX96, sqrtRatioBX96, amount_1)
+            # determine maximum amount of liquidity that doesn't exceed other side
+            return liquidity_0 if liquidity_0 < liquidity_1 else liquidity_1
+        else:
+            return max_liquidity_for_amount_1(sqrtRatioAX96, sqrtRatioBX96, amount_1)
 
-    # TODO: finish implementing
     @staticmethod
     def from_amounts(pool: Pool, tick_lower: int, tick_upper: int, amount_0, amount_1, use_full_precision):
         """ """
@@ -148,9 +199,10 @@ class Position:
             sqrtRatioBX96,
             amount_0,
             amount_1,
-            useFullPrecision
+            use_full_precision
         ))
 
+    # TODO: update cls _mint_amount var
     def mint_amounts(self) -> Tuple:
         # TODO: convert 0 to ZERO Fxp constant?
         if self._mint_amount == None:
@@ -182,8 +234,8 @@ class Position:
         assert isinstance(slippage_tolerance, float)
         assert (slippage_tolerance < 1 and slippage_tolerance > 0)
 
-        price_lower = self.pool.get_token_0_price().get_float_price() * (1 - slippage_tolerance)
-        price_upper = self.pool.get_token_0_price().get_float_price() * (1 + slippage_tolerance)
+        price_lower = self.pool.get_token_0_price().multiply(PriceFraction.from_fraction(PriceFraction.convert_to_fraction((1 - slippage_tolerance)), self.pool.token_0, self.pool.token_1))
+        price_upper = self.pool.get_token_0_price().multiply(PriceFraction.from_fraction(PriceFraction.convert_to_fraction((1 + slippage_tolerance)), self.pool.token_0, self.pool.token_1))
 
         sqrtRatioX96Lower = encodeSqrtRatioX96(price_lower.numerator, price_lower.denominator)
 
@@ -199,9 +251,23 @@ class Position:
 
     # TODO: finish implementing
     def mint_amounts_with_slippage(self, slippage_tolerance: float) -> Tuple:
-        """ Returns amount0; amount1 to mint after accounting for the given slippage_tolerance """
+        """ Returns amount0; amount1 to mint after accounting for the given slippage_tolerance
+
+            Virtual pools are created for instantiating Position entities that can be used to determin
+        """
 
         sqrtRatioX96Lower, sqrtRatioX96Upper = self._ratios_after_slippage(slippage_tolerance)
+
+        # create counterfactual pools with no liquidity
+        pool_lower = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Lower, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Lower))
+        pool_upper = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Upper, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Upper))
+
+        position_to_create_amount_0, position_to_create_amount_1 = self.mint_amounts()
+        position_to_create = Position.from_amounts(self.pool, self.tick_lower, self.tick_upper, position_to_create_amount_0, position_to_create_amount_1, False)
+
+        amount_0 = Position(pool_upper, self.tick_lower, self.ticker_upper, position_to_create.liquidity).mint_amounts()[0]
+        amount_1 = Position(pool_lower, self.tick_lower, self.ticker_upper, position_to_create.liquidity).mint_amounts()[1]
+        return amount_0, amount_1
 
     # TODO: is this still necessary?
     def as_NFT(self):
@@ -261,8 +327,7 @@ class MintParams(Params):
         self.deadline = deadline if deadline is not None else self._deadline()
 
         # TODO: figure out most effective way to calculate amount0desired, amount1Desired
-
-        amount_0, amount_1 = self.position.mint_amounts()
+        amount_0, amount_1 = self.position.mint_amounts_with_slippage(slippage_tolerance)
 
         calldata_args = [{
             "token0": position.pool.token_0.address,
