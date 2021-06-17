@@ -23,13 +23,14 @@ from typing import List, Optional, Tuple
 from web3 import Web3
 
 from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, SqrtPriceMath
-from pyexchange.uniswapv3_constants import Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO
+from pyexchange.uniswapv3_constants import Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, Q96
 from pymaker import Address, Calldata, Invocation
 from pymaker.model import Token
 from pymaker.numeric import Wad
-from pymaker.util import bytes_to_int, bytes_to_hexstring
+from pymaker.util import bytes_to_int, bytes_to_hexstring, int_to_bytes32
 
 
+# TODO: add scaling based upon token decimals
 class PriceFraction:
 
     def __init__(self, base_token: Token, quote_token: Token, denominator: int, numerator: int):
@@ -71,14 +72,15 @@ class PriceFraction:
 
 class Pool:
     """ https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/entities/pool.ts """
-    def __init__(self, token_0: Token, token_1: Token, fee: int, square_root_ratio_x96: Fxp, liquidity: Wad, tick_current: int, ticks: List):
+    def __init__(self, token_0: Token, token_1: Token, fee: int, square_root_ratio_x96: int, liquidity: int, tick_current: int, ticks: List):
         assert isinstance(token_0, Token)
         assert isinstance(token_1, Token)
         assert isinstance(fee, int)
-        assert isinstance(square_root_ratio_x96, Fxp)
-        assert isinstance(liquidity, Wad)
+        assert isinstance(square_root_ratio_x96, int)
+        assert isinstance(liquidity, int)
         assert isinstance(tick_current, int)
-        assert isinstance(ticks, List)
+        # TODO: remove None check?
+        assert (isinstance(ticks, List) or (ticks is None))
 
         self.token_0 = token_0
         self.token_1 = token_1
@@ -116,7 +118,7 @@ class Position:
 
         self.token_0_amount = None
         self.token_1_amount = None
-        self.mint_amounts: Tuple = None # Tuple
+        self._mint_amounts: Tuple = None # Tuple
 
     def get_token_0_price_lower(self):
         """ return the token_0 price at the lower tick """
@@ -150,38 +152,60 @@ class Position:
         """ """
         pass
 
+    @staticmethod
+    def max_liquidity_for_amount_0(sqrtRatioAX96: int, sqrtRatioBX96: int, amount_0: int, use_full_precision: bool) -> int:
+        assert (isinstance(sqrtRatioAX96, int))
+        assert (isinstance(sqrtRatioBX96, int))
+        # assert (isinstance(amount_0, int))
+        assert (isinstance(use_full_precision, bool))
 
-    def max_liquidity_for_amount_0(self, sqrtRatioAX96, sqrtRatioBX96, amount_0, use_full_precision: bool):
         sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
 
         if use_full_precision:
             numerator = (amount_0 * sqrtRatioAX96) * sqrtRatioBX96
             denominator = Q96 * (sqrtRatioBX96 - sqrtRatioAX96)
-            return numerator / denominator
+            result = int(numerator / denominator)
+            return result
         else:
             intermediate = (sqrtRatioAX96 * sqrtRatioBX96) / Q96
-            return (amount_0 * intermediate) / (sqrtRatioBX96 - sqrtRatioAX96)
+            result = int((amount_0 * intermediate) / (sqrtRatioBX96 - sqrtRatioAX96))
+            return result
 
-    def max_liquidity_for_amount_1(self, sqrtRatioAX96, sqrtRatioBX96, amount_1):
+    @staticmethod
+    def max_liquidity_for_amount_1(sqrtRatioAX96: int, sqrtRatioBX96: int, amount_1: int) -> int:
+        assert (isinstance(sqrtRatioAX96, int))
+        assert (isinstance(sqrtRatioBX96, int))
+        # assert (isinstance(amount_1, int))
+
         sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
 
-        return (amount_1 * Q96) / (sqrtRatioBX96 - sqrtRatioAX96)
+        result = int((amount_1 * Q96) / (sqrtRatioBX96 - sqrtRatioAX96))
+        return result
 
+    # TODO: move these methods to uniswapv3_math?
     # TODO: remove top level usage of SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)?
-    def max_liquidity_for_amounts(self, pool: Pool, sqrt_ratio_current_x96, sqrtRatioAX96, sqrtRatioBX96, amount_0, amount_1, use_full_precision):
+    @staticmethod
+    def max_liquidity_for_amounts(pool: Pool, sqrt_ratio_current_x96: int, sqrtRatioAX96: int, sqrtRatioBX96: int, amount_0: int, amount_1: int, use_full_precision: bool) -> int:
         assert (isinstance(pool, Pool))
+        assert (isinstance(sqrtRatioAX96, int))
+        assert (isinstance(sqrtRatioBX96, int))
+        # assert (isinstance(amount_0, int))
+        # assert (isinstance(amount_1, int))
+        assert (isinstance(use_full_precision, bool))
 
         sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
 
+        # TODO: determine if there's a decimal issue with sqrt_ratio_current_x96
         if sqrt_ratio_current_x96 <= sqrtRatioAX96:
-            return max_liquidity_for_amount_0(sqrtRatioAX96, sqrtRatioBX96, amount_0, use_full_precision)
+            return Position.max_liquidity_for_amount_0(sqrtRatioAX96, sqrtRatioBX96, amount_0, use_full_precision)
         elif sqrt_ratio_current_x96 < sqrtRatioBX96:
-            liquidity_0 = max_liquidity_for_amount_0(sqrtRatioAX96, sqrtRatioBX96, amount_0, use_full_precision)
-            liquidity_1 = max_liquidity_for_amount_1(sqrtRatioAX96, sqrtRatioBX96, amount_1)
+            liquidity_0 = Position.max_liquidity_for_amount_0(sqrtRatioAX96, sqrtRatioBX96, amount_0, use_full_precision)
+            liquidity_1 = Position.max_liquidity_for_amount_1(sqrtRatioAX96, sqrtRatioBX96, amount_1)
             # determine maximum amount of liquidity that doesn't exceed other side
             return liquidity_0 if liquidity_0 < liquidity_1 else liquidity_1
         else:
-            return max_liquidity_for_amount_1(sqrtRatioAX96, sqrtRatioBX96, amount_1)
+            # TODO: figure out why amount_1 is 0?
+            return Position.max_liquidity_for_amount_1(sqrtRatioAX96, sqrtRatioBX96, amount_1)
 
     @staticmethod
     def from_amounts(pool: Pool, tick_lower: int, tick_upper: int, amount_0, amount_1, use_full_precision):
@@ -193,7 +217,8 @@ class Position:
         sqrtRatioAX96 = get_sqrt_ratio_at_tick(tick_lower)
         sqrtRatioBX96 = get_sqrt_ratio_at_tick(tick_upper)
 
-        return Position(pool, tick_lower, tick_upper, self.max_liquidity_for_amounts(
+        return Position(pool, tick_lower, tick_upper, Position.max_liquidity_for_amounts(
+            pool,
             pool.square_root_ratio_x96,
             sqrtRatioAX96,
             sqrtRatioBX96,
@@ -202,32 +227,28 @@ class Position:
             use_full_precision
         ))
 
-    # TODO: update cls _mint_amount var
     def mint_amounts(self) -> Tuple:
-        # TODO: convert 0 to ZERO Fxp constant?
-        if self._mint_amount == None:
+        if self._mint_amounts == None:
             if self.pool.tick_current < self.tick_lower:
-                return {
-                    "amount0": SqrtPriceMath.get_amount_0_delta(
-                        get_sqrt_ratio_at_tick(self.tick_lower),
-                        get_sqrt_ratio_at_tick(self.tick_upper),
-                        self.liquidity,
-                        True
-                    ),
-                    "amount1": 0
-                }
+                amount_0_delta = SqrtPriceMath.get_amount_0_delta(get_sqrt_ratio_at_tick(self.tick_lower), get_sqrt_ratio_at_tick(self.tick_upper), self.liquidity, True)
+                amount_1_delta = 0
+                self._mint_amounts = amount_0_delta, amount_1_delta
+
+                return self._mint_amounts
             elif self.pool.tick_current < self.tick_upper:
-                return {
-                    "amount0": SqrtPriceMath.get_amount_0_delta(),
-                    "amount1": SqrtPriceMath.get_amount_1_delta()
-                }
+                amount_0_delta = SqrtPriceMath.get_amount_0_delta(self.pool.square_root_ratio_x96, get_sqrt_ratio_at_tick(self.tick_upper), self.liquidity, True)
+                amount_1_delta = SqrtPriceMath.get_amount_1_delta(get_sqrt_ratio_at_tick(self.tick_upper), self.pool.square_root_ratio_x96, self.liquidity, True)
+                self._mint_amounts = amount_0_delta, amount_1_delta
+                
+                return self._mint_amounts
             else:
-                return {
-                    "amount0": 0,
-                    "amount1": SqrtPriceMath.get_amount_1_delta()
-                }
+                amount_0_delta = 0
+                amount_1_delta = SqrtPriceMath.get_amount_1_delta(get_sqrt_ratio_at_tick(self.tick_lower), get_sqrt_ratio_at_tick(self.tick_upper), self.liquidity, True)
+                self._mint_amounts = amount_0_delta, amount_1_delta
+
+                return self._mint_amounts
         else:
-            return self._mint_amount
+            return self._mint_amounts
 
     # TODO: determine if conversion to fractions is necessary
     def _ratios_after_slippage(self, slippage_tolerance: float) -> Tuple:
@@ -241,7 +262,7 @@ class Position:
 
         if sqrtRatioX96Lower < MIN_SQRT_RATIO:
             sqrtRatioX96Lower = MIN_SQRT_RATIO + 1
-        
+
         sqrtRatioX96Upper = encodeSqrtRatioX96(price_upper.numerator, price_upper.denominator)
 
         if sqrtRatioX96Upper > MAX_SQRT_RATIO:
@@ -259,14 +280,14 @@ class Position:
         sqrtRatioX96Lower, sqrtRatioX96Upper = self._ratios_after_slippage(slippage_tolerance)
 
         # create counterfactual pools with no liquidity
-        pool_lower = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Lower, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Lower))
-        pool_upper = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Upper, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Upper))
+        pool_lower = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Lower, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Lower), [])
+        pool_upper = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Upper, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Upper), [])
 
         position_to_create_amount_0, position_to_create_amount_1 = self.mint_amounts()
         position_to_create = Position.from_amounts(self.pool, self.tick_lower, self.tick_upper, position_to_create_amount_0, position_to_create_amount_1, False)
 
-        amount_0 = Position(pool_upper, self.tick_lower, self.ticker_upper, position_to_create.liquidity).mint_amounts()[0]
-        amount_1 = Position(pool_lower, self.tick_lower, self.ticker_upper, position_to_create.liquidity).mint_amounts()[1]
+        amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[0]
+        amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[1]
         return amount_0, amount_1
 
     # TODO: is this still necessary?
@@ -329,6 +350,7 @@ class MintParams(Params):
         # TODO: figure out most effective way to calculate amount0desired, amount1Desired
         amount_0, amount_1 = self.position.mint_amounts_with_slippage(slippage_tolerance)
 
+        print(amount_0, amount_1)
         calldata_args = [{
             "token0": position.pool.token_0.address,
             "token1": position.pool.token_1.address,
