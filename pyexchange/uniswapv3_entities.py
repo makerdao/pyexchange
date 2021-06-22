@@ -39,9 +39,14 @@ class PriceFraction:
 
         self.base_token = base_token
         self.quote_token = quote_token
-        self.numerator = numerator # quote token
-        self.denominator = denominator # base token
-    
+        # TODO: best place to normalize? leave this as wad as opposed to converting back to int?
+        # TODO: unfuck this normalization
+        # self.numerator = self.quote_token.normalize_amount(Wad.from_number(numerator)).value # quote token
+        # self.denominator = self.base_token.normalize_amount(Wad.from_number(denominator)).value # base token
+
+        self.numerator = self.quote_token.normalize_amount(Wad.from_number(numerator)).value  # quote token
+        self.denominator = self.base_token.normalize_amount(Wad.from_number(denominator)).value  # base token
+
     def get_float_price(self) -> float:
         return float(self.numerator / self.denominator)
     
@@ -270,7 +275,6 @@ class Position:
 
         return (sqrtRatioX96Lower, sqrtRatioX96Upper)
 
-    # TODO: finish implementing
     def mint_amounts_with_slippage(self, slippage_tolerance: float) -> Tuple:
         """ Returns amount0; amount1 to mint after accounting for the given slippage_tolerance
 
@@ -286,8 +290,12 @@ class Position:
         position_to_create_amount_0, position_to_create_amount_1 = self.mint_amounts()
         position_to_create = Position.from_amounts(self.pool, self.tick_lower, self.tick_upper, position_to_create_amount_0, position_to_create_amount_1, False)
 
-        amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[0]
-        amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[1]
+        # amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[0]
+        # amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[1]
+        # TODO: figure out why this worksish?
+        # using position_to_create.liquidity results in reversed amounts...
+        amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, 1).mint_amounts()[0]
+        amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, 1).mint_amounts()[1]
         return amount_0, amount_1
 
     # TODO: is this still necessary?
@@ -334,6 +342,7 @@ class Params:
 class MintParams(Params):
 
     # https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.test.ts
+
     def __init__(self, web3: Web3, position: Position, recipient: Address, slippage_tolerance: float, deadline: int):
         assert(isinstance(web3, Web3))
         assert(isinstance(position, Position))
@@ -348,39 +357,45 @@ class MintParams(Params):
         self.deadline = deadline if deadline is not None else self._deadline()
 
         # TODO: figure out most effective way to calculate amount0desired, amount1Desired
-        amount_0, amount_1 = self.position.mint_amounts_with_slippage(slippage_tolerance)
+        amount_0, amount_1 = self.position.mint_amounts()
+        # amount_0, amount_1 = self.position.mint_amounts_with_slippage(slippage_tolerance)
 
-        print(amount_0, amount_1)
-        calldata_args = [{
-            "token0": position.pool.token_0.address,
-            "token1": position.pool.token_1.address,
-            "fee": position.pool.fee,
-            "tickLower": position.tick_lower,
-            "tickUpper": position.tick_upper,
-            "amount0Desired": self._to_hex(amount_0),
-            "amount1Desired": self._to_hex(amount_1),
-            "amount0Min": 0,
-            "amount1Min": 0,
-            "recipient": self.recipient,
-            "deadline": self.deadline
-        }]
+        amount_0_min, amount_1_min = self.position.mint_amounts_with_slippage(slippage_tolerance)
+        # TODO: determine why mint_amounts() and mint_amounts_with_slippage() are reversed...?
+        print("desired amounts", amount_0, amount_1)
+        print("min amounts", amount_0_min, amount_1_min)
 
-        # TODO: figure out how to handle struct typing
-        method = "mint(struct INonfungiblePositionManager.MintParams)"
-        # TODO: add fn signature types
-        # TODO: figure out how to pass through web3
-        self.encode_calldata = self.encode_calldata(web3, method, calldata_args)
+        self.calldata_args = [
+            position.pool.token_0.address.address,
+            position.pool.token_1.address.address,
+            position.pool.fee,
+            position.tick_lower,
+            position.tick_upper,
+            amount_0,
+            amount_1,
+            amount_0_min,
+            amount_1_min,
+            self.recipient.address,
+            self.deadline
+        ]
+        # use structs as tuples
+        # https://github.com/ethereum/web3.py/issues/829
+        self.method = "mint(address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,address,uint256)"
+        self.calldata = self.encode_calldata(web3, self.method, self.calldata_args)
+        print(self.calldata)
 
-    @staticmethod
-    def calculate_mint_amounts(self, liquidity: Wad) -> Tuple[Wad, Wad]:
-        """ Return a tuple of amount0, amount1 to be minted for a given position to match a desired amount of liquidity """
-        assert(isinstance(slippage, int))
 
-        amount0Desired = Wad.from_number(0)
+class BurnParams(Params):
 
-        return {
-            "amount0Desired": amount0Desired
-        }
+    def __init__(self, web3: Web3, token_id: int):
+        assert(isinstance(web3, Web3))
+        assert(isinstance(token_id, int))
+
+        self.token_id = token_id
+
+        self.calldata_args = [self.token_id]
+        self.method = "burn(uint256)"
+        self.calldata = self.encode_calldata(web3, self.method, self.calldata_args)
 
 
 class CollectParams(Params):
@@ -393,3 +408,34 @@ class CollectParams(Params):
 
         self.params.amount1Min = amounts["amount1Min"]
         self.deadline = self._deadline()
+
+
+class DecreaseLiquidityParams(Params):
+
+    def __init__(self, web3: Web3, token_id: int, liquidity: int, amount_0_min: int, amount_1_min: int, deadline: int):
+        assert(isinstance(web3, Web3))
+        assert(isinstance(token_id, int))
+        assert(isinstance(liquidity, int))
+        assert(isinstance(amount_0_min, int))
+        assert(isinstance(amount_1_min, int))
+        assert(isinstance(deadline, int) or (deadline is None))
+
+        self.web3 = web3
+        self.token_id = token_id
+        self.liquidity = liquidity
+        self.amount_0_min = amount_0_min
+        self.amount_1_min = amount_1_min
+
+        self.deadline = deadline if deadline is not None else self._deadline()
+
+        self.calldata_args = [
+            self.token_id,
+            self.liquidity,
+            self.amount_0_min,
+            self.amount_1_min,
+            self.deadline
+        ]
+        self.method = "decreaseLiquidity(uint256,uint128,uint256,uint256,uint256)"
+        self.calldata = self.encode_calldata(self.web3, self.method, self.calldata_args)
+
+
