@@ -35,6 +35,7 @@ Q96 = 2 ** 96
 Q192 = Q96 ** 2
 
 
+# default fee amounts in hundreths of basis points
 class FEES(Enum):
     LOW = 500
     MEDIUM = 3000

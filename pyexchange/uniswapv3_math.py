@@ -20,7 +20,7 @@ import math
 from pyexchange.uniswapv3_constants import Q96, Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, MAX_UINT256, ZERO, ONE
 from pymaker.numeric import Wad
 from fxpmath import Fxp
-from typing import Tuple
+from typing import List, Tuple
 
 ## Used by uniswap-v3-sdk
 # https://github.com/GoogleChromeLabs/jsbi
@@ -200,6 +200,73 @@ def mul_div_rounding_up(a: int, b: int, denominator: int):
     
     return int(result)
 
+def is_below_smallest_tick(ticks: List, tick: int) -> bool:
+    assert (isinstance(ticks, List) and len(ticks) > 0)
+    assert isinstance(tick, int)
+
+    return tick < ticks[0]
+
+def is_at_or_above_largest_tick(ticks: List, tick: int) -> bool:
+    assert (isinstance(ticks, List) and len(ticks) > 0)
+    assert isinstance(tick, int)
+
+    return tick > ticks[len(ticks) -1]
+
+def find_largest_tick(ticks: List, tick):
+    """ Find largest tick in list that is less than or equal to given tick using binary search """
+    assert (isinstance(ticks, List) and len(ticks) > 0)
+    assert isinstance(tick, int)
+    assert is_below_smallest_tick(ticks, tick) is not True
+
+    l =
+
+def next_initalized_tick(ticks: List, tick: int, zero_or_one: bool) -> int:
+    assert isinstance(ticks, List)
+    assert isinstance(tick, int)
+    assert isinstance(zero_or_one, bool)
+
+    if zero_or_one:
+        assert is_below_smallest_tick(ticks, tick) is not True
+        if is_at_or_above_largest_tick(ticks, tick):
+            return ticks[len(ticks) - 1]
+        index = find_largest_tick(ticks, tick)
+        return ticks[index]
+    else:
+        assert is_at_or_above_largest_tick(ticks, tick) is not True
+        if is_below_smallest_tick(ticks, tick):
+            return ticks[0]
+        index = find_largest_tick(ticks, tick)
+        return ticks[index + 1]
+
+def next_initialized_tick_within_word(ticks: List, tick: int, zero_or_one: bool, tick_spacing: int) -> Tuple:
+    """ https://github.com/Uniswap/uniswap-v3-sdk/blob/19a990403817d0359d8f38edfa3b0827d32adc05/src/utils/tickList.ts#L101
+        @returns (tick, tick_initalized)
+    """
+    assert isinstance(ticks, List)
+    assert isinstance(tick, int)
+    assert isinstance(zero_or_one, bool)
+    assert isinstance(tick_spacing, int)
+
+    compressed = math.floor(tick / tick_spacing)
+
+    if zero_or_one:
+        word_position = compressed >> 8
+        minimum = (word_position << 8) * tick_spacing
+
+        if is_below_smallest_tick(ticks, tick)
+            return (minimum, False)
+
+        index = next_initalized_tick(ticks, tick, zero_or_one)
+        next_initalized_tick = math.max(minimum, index)
+        return (next_initalized_tick, next_initalized_tick == index)
+    else:
+        word_position = (compressed + 1) >> 8
+        maximum = ((word_position + 1) << 8) * tick_spacing - 1
+
+def compute_swap_step(sqrt_ratio_current_price_x96: int, sqrt_ratio_target_price_x96: int, liquidity: int, amount_remaining: int, fee: int) -> {}:
+    """ @returns {sqrt_ratio_next_price, amount_in, amount_out, fee} """
+
+
 
 class SqrtPriceMath:
 
@@ -217,7 +284,6 @@ class SqrtPriceMath:
         return sqrtRatioAX96, sqrtRatioBX96
 
     @staticmethod
-    # TODO: figure out why this is returning 0
     def get_amount_0_delta(sqrtRatioAX96: int, sqrtRatioBX96: int, liquidity: int, round_up: bool) -> Wad:
         assert (isinstance(sqrtRatioAX96, int))
         assert (isinstance(sqrtRatioBX96, int))

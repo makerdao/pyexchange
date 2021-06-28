@@ -22,8 +22,8 @@ from fxpmath import Fxp
 from typing import List, Optional, Tuple
 from web3 import Web3
 
-from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, SqrtPriceMath
-from pyexchange.uniswapv3_constants import Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, Q96
+from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, next_initialized_tick, SqrtPriceMath
+from pyexchange.uniswapv3_constants import Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, Q96, MIN_TICK, MAX_TICK, TICK_SPACING
 from pymaker import Address, Calldata, Invocation
 from pymaker.model import Token
 from pymaker.numeric import Wad
@@ -96,6 +96,7 @@ class Pool:
         self.ticks = ticks
         self.token_0_price = self.get_token_0_price()
         self.token_1_price = self.get_token_1_price()
+        self.tick_spacing = TICK_SPACING[f"{fee}"].value
 
     def get_token_0_price(self) -> PriceFraction:
         # base, quote
@@ -104,6 +105,59 @@ class Pool:
     # TODO: verify proper return type here -- wad desired?
     def get_token_1_price(self) -> PriceFraction:
         return PriceFraction(self.token_0, self.token_1, (self.square_root_ratio_x96 * self.square_root_ratio_x96), Q192)
+
+    def get_output_amount(self, input_amount: int, sqrt_price_limit_x96: int) -> int:
+        assert isinstance(input_amount, int)
+        assert isinstance(sqrt_price_limit_x96, int)
+
+    def get_input_amount(self) -> int:
+        pass
+
+    def swap(self, zero_or_one: bool, swap_amount: int, sqrt_price_limit_x96: int) -> dict:
+        """ Calculate a swap and output pool state
+            @param zero_or_one boolean indicating swapping in token_0 or token_1
+            @param swap_amount integer amount of the given token to be swapped
+            @param sqrt_price_limit_x96 price limit that can't be breached following swap reserve changes
+            @returns dictionary of resulting pool state {amount_calculated, sqrt_price_ratio_x96, liquidity, tick_current}
+        """
+        assert isinstance(zero_or_one, bool)
+        assert isinstance(swap_amount, int)
+        assert isinstance(sqrt_price_limit_x96, int)
+
+        # TODO: pass in MIN or MAX SQRT RATIO to establish default price limits
+        if sqrt_price_limit_x96 is None:
+           pass
+
+        if zero_or_one:
+            assert sqrt_price_limit_x96 > MIN_SQRT_RATIO
+            assert sqrt_price_limit_x96 < self.square_root_ratio_x96
+        else:
+            assert sqrt_price_limit_x96 < MAX_SQRT_RATIO
+            assert sqrt_price_limit_x96 > self.square_root_ratio_x96
+
+        pool_swap_state = {
+            "swap_amount_remaining": swap_amount,
+            "amount_calculated": 0,
+            "sqrt_price_x96": self.square_root_ratio_x96,
+            "tick": self.tick_current,
+            "liquidity": self.liquidity
+        }
+
+        while pool_swap_state["swap_amount_remaining"] != 0 and pool_swap_state["sqrt_price_x96"] != sqrt_price_limit_x96:
+
+            tick_next, tick_initalized = next_initalized_tick(pool_swap_state["tick"], zero_or_one, self.tick_spacing)
+
+            step_state = {
+                "sqrt_price_x96": pool_swap_state["sqrt_price_x96"],
+                "tick_next": tick_next,
+                "tick_initalized": tick_initalized
+            }
+
+            if step_state["tick_next"] < MIN_TICK:
+                step_state["tick_next"] = MIN_TICK
+            elif step_state["tick_next"] > MAX_TICK:
+                step_state["tick_next"] = MAX_TICK
+
 
 
 class Position:
@@ -304,138 +358,43 @@ class Position:
         pass
 
 
-class Params:
+class Route:
+    """ """
+    def __init__(self, pools: List[Pool], input_token: Token, output_token: Token):
+        assert isinstance(pools, List)
+        assert isinstance(input_token, Token)
+        assert isinstance(output_token, Token)
 
-    def convert_to_bytes(self, calldata: Calldata) -> bytes:
-        """ convert calldata to byte array """
-        return calldata.as_bytes()
+        token_path = []
 
-    def encode_calldata(self, web3: Web3, fn_signature: str, arguments: List) -> Calldata:
-        """ encode inputted contract and methods with call arguments as pymaker.Calldata """
-        assert isinstance(web3, Web3)
-        assert isinstance(fn_signature, str)
-        assert isinstance(arguments, List)
+        # normalize token path ordering for base-quote
+        for pool in pools:
+            token_path.push()
 
-        # TODO: add Invocation support
-        return Calldata.from_signature(web3, fn_signature, arguments)
+        self.pools = pools
+        self.tokenPath = token_path
+        self.input = input_token
+        # Coalesce Nullish
+        self.output = output_token or token_path[(token_path) - 1]
 
-    # TODO: remove method if unnecessary?
-    # TODO: figure out how to handle multicall calldata
+
+
+class Trade:
+    """ Trade object representing a potential UniswapV3 Swap """
+    def __init__(self, route: Route, input_amount: int, output_amount: int, trade_type):
+        assert isinstance(route, Route)
+        assert isinstance(input_amount, int)
+        assert isinstance(output_amount, int)
+
+        self.
+
+    # TODO: make trade types an explicit enum?
     @staticmethod
-    def prepare_invocation(contract_address: Address, calldata: Calldata):
-        return Invocation(contract_address, calldata)
+    def from_route(self, route: Route, amount, trade_type: str):
+        if trade_type == "exactInput":
+            for step in route:
+                pool = route[step]
+                output_amount = pool.get_output_amount()
 
-    def _deadline(self) -> int:
-        """Get a predefined deadline."""
-        return int(time.time()) + 1000
-    
-    # TODO: simplify conversion path from int -> hexstring
-    # TODO: call self.convert_to_bytes?
-    def _to_hex(self, num: int) -> str:
-        return bytes_to_hexstring(int_to_bytes32(num))
-
-
-
-# TODO: construct callback to be passed to mint()
-## https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.ts#L162
-## https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.ts#L44    
-class MintParams(Params):
-
-    # https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.test.ts
-
-    def __init__(self, web3: Web3, position: Position, recipient: Address, slippage_tolerance: float, deadline: int):
-        assert(isinstance(web3, Web3))
-        assert(isinstance(position, Position))
-        assert(isinstance(recipient, Address))
-        assert(isinstance(slippage_tolerance, float))
-        assert(isinstance(deadline, int) or (deadline is None))
-
-        self.position = position
-        self.recipient = recipient
-        self.slippage_tolerance = slippage_tolerance
-
-        self.deadline = deadline if deadline is not None else self._deadline()
-
-        # TODO: figure out most effective way to calculate amount0desired, amount1Desired
-        amount_0, amount_1 = self.position.mint_amounts()
-        # amount_0, amount_1 = self.position.mint_amounts_with_slippage(slippage_tolerance)
-
-        amount_0_min, amount_1_min = self.position.mint_amounts_with_slippage(slippage_tolerance)
-        # TODO: determine why mint_amounts() and mint_amounts_with_slippage() are reversed...?
-        print("desired amounts", amount_0, amount_1)
-        print("min amounts", amount_0_min, amount_1_min)
-
-        self.calldata_args = [
-            position.pool.token_0.address.address,
-            position.pool.token_1.address.address,
-            position.pool.fee,
-            position.tick_lower,
-            position.tick_upper,
-            amount_0,
-            amount_1,
-            amount_0_min,
-            amount_1_min,
-            self.recipient.address,
-            self.deadline
-        ]
-        # use structs as tuples
-        # https://github.com/ethereum/web3.py/issues/829
-        self.method = "mint(address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,address,uint256)"
-        self.calldata = self.encode_calldata(web3, self.method, self.calldata_args)
-        print(self.calldata)
-
-
-class BurnParams(Params):
-
-    def __init__(self, web3: Web3, token_id: int):
-        assert(isinstance(web3, Web3))
-        assert(isinstance(token_id, int))
-
-        self.token_id = token_id
-
-        self.calldata_args = [self.token_id]
-        self.method = "burn(uint256)"
-        self.calldata = self.encode_calldata(web3, self.method, self.calldata_args)
-
-
-class CollectParams(Params):
-
-    # TODO: pass through the contract, and uniswap_pool
-    def __init__(self, uniswap_pool: Pool, recipient: Address, tick_lower: int, tick_upper: int, amounts: dict) -> None:
-        assert(isinstance(uniswap_pool, Pool))
-
-        self.params = {}
-
-        self.params.amount1Min = amounts["amount1Min"]
-        self.deadline = self._deadline()
-
-
-class DecreaseLiquidityParams(Params):
-
-    def __init__(self, web3: Web3, token_id: int, liquidity: int, amount_0_min: int, amount_1_min: int, deadline: int):
-        assert(isinstance(web3, Web3))
-        assert(isinstance(token_id, int))
-        assert(isinstance(liquidity, int))
-        assert(isinstance(amount_0_min, int))
-        assert(isinstance(amount_1_min, int))
-        assert(isinstance(deadline, int) or (deadline is None))
-
-        self.web3 = web3
-        self.token_id = token_id
-        self.liquidity = liquidity
-        self.amount_0_min = amount_0_min
-        self.amount_1_min = amount_1_min
-
-        self.deadline = deadline if deadline is not None else self._deadline()
-
-        self.calldata_args = [
-            self.token_id,
-            self.liquidity,
-            self.amount_0_min,
-            self.amount_1_min,
-            self.deadline
-        ]
-        self.method = "decreaseLiquidity(uint256,uint128,uint256,uint256,uint256)"
-        self.calldata = self.encode_calldata(self.web3, self.method, self.calldata_args)
-
-
+            input_amount = PriceFraction()
+        return Trade()

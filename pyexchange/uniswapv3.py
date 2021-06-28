@@ -38,7 +38,10 @@ from web3 import Web3
 from typing import List, Tuple
 from hexbytes import HexBytes
 
-from pyexchange.uniswapv3_entities import Params, Pool, Position, BurnParams, CollectParams, MintParams
+from pyexchange.uniswapv3_calldata_params import BurnParams, CollectParams, DecreaseLiquidityParams, \
+    IncreaseLiquidityParams, MintParams, ExactInputSingleParams, ExactInputParams, ExactOutputSingleParams, \
+    ExactOutputParams
+from pyexchange.uniswapv3_entities import Pool, Position
 from pymaker import Calldata, Contract, Address, Transact, Wad, Receipt
 from pymaker.approval import directly
 from pymaker.model import Token
@@ -51,6 +54,9 @@ from web3._utils.events import get_event_data
 from web3.types import EventData
 
 # TODO: figure out division of responsibiliies between uniswapv3_entitites.Pool and UniswapV3
+from pyexchange.uniswapv3_math import encodeSqrtRatioX96
+
+
 class UniswapV3(Contract):
     """
     UniswapV3 Python Client
@@ -107,51 +113,52 @@ class UniswapV3(Contract):
         # TODO: finish implementing
         return Wad.from_number(pool_contract.functions.observe(seconds_ago).call())
 
-    def check_global_state(self):
-        """ Retrieve global state varialbe"""
-        pass
-
-    def _deadline(self) -> int:
-        """Get a predefined deadline."""
-        return int(time.time()) + 1000
-
 
 # TODO: add registering keys directly to SwapRouter?
-class SwapRouter:
+class SwapRouter(Contract):
     """ Class to handle any interactions with UniswapV3 SwapRouter
     
     Code for SwapRouter.sol: https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/SwapRouter.sol
     """
 
-    # Iswap_router_abi = Contract._load_abi(__name__, 'abi/ISwapRouter.abi')['abi']
+    SwapRouter_abi = Contract._load_abi(__name__, 'abi/SwapRouter.abi')['abi']
 
-    def __init__(self, uniswap_pool: UniswapV3, swap_router_address: Address) -> None:
-        assert(isinstance(uniswap_pool, UniswapV3))
+    def __init__(self, web3: Web3, swap_router_address: Address):
+        assert(isinstance(web3, Web3))
         assert(isinstance(swap_router_address, Address))
-
-        self.uniswap_pool = uniswap_pool
 
         self.swap_router_address = swap_router_address
         self.swap_router_contract = self._get_contract(self.uniswap_pool.web3, self.Iswap_router_abi, self.swap_router_address)
 
-    def swap_exact_output(self) -> Transact:
-
-        # TODO: generate param Calldata 
-        swap_exact_output_args = []
-
-        return Transact(self, self.web3, self.Iswap_router_abi, self.swap_router_address, self.swap_router_contract,
-                        "exactOutput", swap_exact_output_args)
-
-    def swap_exact_output_single(self) -> Transact:
+    # state machine - given route and trades to execute, return transact
+    def determine_swap_method(self, trade, route) -> Transact:
         pass
 
-    def swap_exact_input(self) -> Transact:
+    def swap_exact_output(self, params: ExactOutputParams) -> Transact:
+        assert(isinstance(params, ExactOutputParams))
+
+        return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
+                        "exactOutput", [tuple(params.calldata_args)])
+
+    def swap_exact_output_single(self, params: ExactOutputSingleParams) -> Transact:
+        assert(isinstance(params, ExactOutputSingleParams))
+
+        return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
+                        "exactOutputSingle", [tuple(params.calldata_args)])
+
+    def swap_exact_input(self, params: ExactInputParams) -> Transact:
         """ Given an exact set of inputs, execute swap to target outputs """
-        pass
+        assert(isinstance(params, ExactInputParams))
 
-    def swap_exact_input_single(self) -> Transact:
+        return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
+                        "exactInput", [tuple(params.calldata_args)])
+
+    def swap_exact_input_single(self, params: ExactInputSingleParams) -> Transact:
         """ Given an exact input, execute a swap to target output """
-        pass
+        assert(isinstance(params, ExactInputSingleParams))
+
+        return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
+                        "exactInputSingle", [tuple(params.calldata_args)])
 
 
 # TODO: move this to pymaker and add tests
@@ -207,14 +214,20 @@ class PositionManager(Contract):
     """
 
     NonfungiblePositionManager_abi = Contract._load_abi(__name__, 'abi/NonfungiblePositionManager.abi')['abi']
+    UniswapV3Factory_abi = Contract._load_abi(__name__, 'abi/UniswapV3Factory.abi')['abi']
+    UniswapV3Pool_abi = Contract._load_abi(__name__, 'abi/UniswapV3Pool.abi')['abi']
 
-    def __init__(self, web3: Web3, nft_position_manager_address: Address):
+    def __init__(self, web3: Web3, nft_position_manager_address: Address, factory_address: Address):
         assert(isinstance(web3, Web3))
         assert(isinstance(nft_position_manager_address, Address))
+        assert(isinstance(factory_address, Address))
 
         self.web3: Web3 = web3
         self.nft_position_manager_address = nft_position_manager_address
         self.nft_position_manager_contract = self._get_contract(self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address)
+
+        self.factory_address = factory_address
+        self.factory_contract = self._get_contract(self.web3, self.UniswapV3Factory_abi, self.factory_address)
 
     def approve(self, token: Token):
         assert (isinstance(token, Token))
@@ -243,8 +256,11 @@ class PositionManager(Contract):
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         "createAndInitializePoolIfNecessary", create_pool_args)
 
-    def decrease_liquidity(self):
-        pass
+    def decrease_liquidity(self, params: DecreaseLiquidityParams) -> Transact:
+        assert(isinstance(params, DecreaseLiquidityParams))
+
+        return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
+                        'decreaseLiquidity', [tuple(params.calldata_args)])
 
     def get_logs_from_receipt(self, receipt: Receipt, topics: List[HexBytes], event_names: List[str], log_class: LogEvent) -> List:
         """ Retrieve method call return data from log events
@@ -308,17 +324,66 @@ class PositionManager(Contract):
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         'multicall', [calldata])
 
-    # TODO: determine if this should return an NFT
-    ## use Position instead of NFT?
+    def get_pool_address(self, token_0: Token, token_1: Token, fee: int) -> Address:
+        assert isinstance(token_0, Token)
+        assert isinstance(token_1, Token)
+        assert isinstance(fee, int)
+
+        pool_address = self.factory_contract.functions.getPool(token_0.address.address, token_1.address.address, fee).call()
+        return Address(pool_address)
+
+    def get_pool_contract(self, pool_address: Address):
+        assert(isinstance(pool_address, Address))
+
+        pool_contract = self._get_contract(self.web3, self.UniswapV3Pool_abi, pool_address)
+        return pool_contract
+
+    def get_pool_state(self, pool_contract) -> dict:
+        struct = pool_contract.functions.slot0().call()
+        print(struct)
+        return struct
+
+    def get_pool_ticks(self, pool_contract, current_tick: int) -> List:
+        ticks = pool_contract.functions.ticks(current_tick).call()
+        return ticks
+
     def positions(self, token_id: int) -> Position:
         """ Return liquidity and reserve information for a given NFT's token_id """
         assert (isinstance(token_id, int))
 
         position = self.nft_position_manager_contract.functions.positions(token_id).call()
 
-        return Position(position)
+        # TODO: dynamically retrieve token info from address
+        token_0 = Token("DAI", Address(position[2]), 18)
+        token_1 = Token("USDC", Address(position[3]), 6)
+        fee = position[4]
 
-    def sum_liquidity_in_range(self, tick_lower, tick_higher) -> Wad:
+        pool_address = self.get_pool_address(token_0, token_1, fee)
+        pool_contract = self.get_pool_contract(pool_address)
+        pool_state = self.get_pool_state(pool_contract)
+
+        # pool_amount_1, pool_amount_0 =
+        # sqrt_ratio_x96 = encodeSqrtRatioX96(pool_amount_1, pool_amount_0)
+        price_sqrt_ratio_x96 = pool_state[0]
+        tick_current = pool_state[1]
+        ticks = self.get_pool_ticks(pool_contract, tick_current)
+
+        print("pool ticks", ticks)
+        in_range_liquidity = self.sum_liquidity_in_range()
+
+        pool = Pool(token_0, token_1, fee, price_sqrt_ratio_x96, in_range_liquidity, tick_current, ticks)
+
+        tick_lower = position[5]
+        tick_upper = position[6]
+        liquidity = position[7]
+
+        return Position(pool, tick_lower, tick_upper, liquidity)
+
+    def liquidity_at_price(self, sqrt_price_x96: int) -> int:
+        """ Uses equations (L = sqrt(x*y*) and sqrt_price = sqrt(y/x) """
+
+    # TODO: implement: https://github.com/Uniswap/uniswap-v3-periphery/blob/9ca9575d09b0b8d985cc4d9a0f689f7a4470ecb7/contracts/libraries/LiquidityAmounts.sol
+    def sum_liquidity_in_range(self, tick_lower, tick_higher) -> int:
         pass
 
     # TODO: interact with self.positions() to instantiate NFT and calculate price values
@@ -327,11 +392,13 @@ class PositionManager(Contract):
         """ Return the Wad price of a given token_id """
         assert (isinstance(token_id, int))
 
-    def increase_liquidity(self) -> Transact:
-        pass
+        position_to_price = positions(token_id)
 
-    def decrease_liquidity(self) -> Transact:
-        pass
+    def increase_liquidity(self, params: IncreaseLiquidityParams) -> Transact:
+        assert(isinstance(params, IncreaseLiquidityParams))
+
+        return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
+                        'increaseLiquidity', [tuple(params.calldata_args)])
 
     def collect(self, params: CollectParams) -> Transact:
         """ Collect fees that have accrued to a given position """
