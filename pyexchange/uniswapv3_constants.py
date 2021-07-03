@@ -18,6 +18,7 @@
 from enum import Enum
 from fxpmath import Fxp
 
+MAX_FEE = 10 ** 6
 MIN_TICK = -887272
 MAX_TICK = 887272
 MIN_SQRT_RATIO = 4295128739
@@ -25,6 +26,7 @@ MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342
 # TODO: figure out why this doesn't work
 # MAX_UINT256 = Fxp('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', signed=False, n_word=256)
 MAX_UINT256 = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+MAX_UINT160 = (2 ** 160) - 1
 # TODO: careful with negatives when dealing with raw int
 NEGATIVE_ONE = -1
 ZERO = 0

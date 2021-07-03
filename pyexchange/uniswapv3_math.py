@@ -17,7 +17,8 @@
 
 import math
 
-from pyexchange.uniswapv3_constants import Q96, Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, MAX_UINT256, ZERO, ONE
+from pyexchange.uniswapv3_constants import Q96, Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, MAX_UINT256, ZERO, ONE, MAX_FEE, \
+    MAX_UINT160
 from pymaker.numeric import Wad
 from fxpmath import Fxp
 from typing import List, Tuple
@@ -40,6 +41,9 @@ from typing import List, Tuple
 
 # https://www.geeksforgeeks.org/find-significant-set-bit-number/
 # https://www.baeldung.com/cs/most-significant-bit
+from pyexchange.uniswapv3_entities import Tick
+
+
 def most_significant_bit(x: int) -> int:
     """ returns the most significant bit for a given number """
     assert (isinstance(x, int))
@@ -200,72 +204,193 @@ def mul_div_rounding_up(a: int, b: int, denominator: int):
     
     return int(result)
 
-def is_below_smallest_tick(ticks: List, tick: int) -> bool:
-    assert (isinstance(ticks, List) and len(ticks) > 0)
-    assert isinstance(tick, int)
+def compute_swap_step(sqrt_ratio_current_price_x96: int, sqrt_ratio_target_price_x96: int, liquidity: int, amount_remaining: int, fee_pips: int) -> Tuple:
+    """ @returns {sqrt_price_next_x96, amount_in, amount_out, fee_amount} """
+    assert isinstance(sqrt_ratio_current_price_x96, int)
+    assert isinstance(sqrt_ratio_target_price_x96, int)
+    assert isinstance(liquidity, int)
+    assert isinstance(amount_remaining, int)
+    assert isinstance(fee_pips, int)
 
-    return tick < ticks[0]
+    return_state = {}
 
-def is_at_or_above_largest_tick(ticks: List, tick: int) -> bool:
-    assert (isinstance(ticks, List) and len(ticks) > 0)
-    assert isinstance(tick, int)
+    zero_or_one = sqrt_ratio_current_price_x96 > sqrt_ratio_target_price_x96
+    exact_in = amount_remaining > 0
 
-    return tick > ticks[len(ticks) -1]
+    if exact_in:
+        amount_remaining_less_fee = (amount_remaining * (MAX_FEE - fee_pips)) / MAX_FEE
+        if zero_or_one:
+            return_state["amount_in"] = SqrtPriceMath.get_amount_0_delta(sqrt_ratio_target_price_x96, sqrt_ratio_current_price_x96, liquidity, True)
+        else:
+            return_state["amount_in"] = SqrtPriceMath.get_amount_1_delta(sqrt_ratio_current_price_x96, sqrt_ratio_target_price_x96, liquidity, True)
 
-def find_largest_tick(ticks: List, tick):
-    """ Find largest tick in list that is less than or equal to given tick using binary search """
-    assert (isinstance(ticks, List) and len(ticks) > 0)
-    assert isinstance(tick, int)
-    assert is_below_smallest_tick(ticks, tick) is not True
+        assert return_state["amount_in"] is not None
+        if amount_remaining_less_fee >= return_state["amount_in"]:
+            return_state["sqrt_price_next_x96"] = sqrt_ratio_target_price_x96
+        else:
+            return_state["sqrt_price_next_x96"] = SqrtPriceMath.get_next_sqrt_price_from_input(sqrt_ratio_current_price_x96, liquidity, amount_remaining_less_fee, zero_or_one)
+    else:
+        if zero_or_one:
+            return_state["amount_out"] = SqrtPriceMath.get_amount_1_delta(sqrt_ratio_target_price_x96, sqrt_ratio_current_price_x96, liquidity, False)
+        else:
+            return_state["amount_out"] = SqrtPriceMath.get_amount_0_delta(sqrt_ratio_current_price_x96, sqrt_ratio_target_price_x96, liquidity, False)
 
-    l =
+        if amount_remaining * -1 >= return_state["amount_out"]:
+            return_state["sqrt_price_next_x96"] = sqrt_ratio_target_price_x96
+        else:
+            return_state["sqrt_price_next_x96"] = SqrtPriceMath.get_next_sqrt_price_from_output(sqrt_ratio_current_price_x96, liquidity, (amount_remaining * -1), zero_or_one)
 
-def next_initalized_tick(ticks: List, tick: int, zero_or_one: bool) -> int:
-    assert isinstance(ticks, List)
-    assert isinstance(tick, int)
-    assert isinstance(zero_or_one, bool)
+    max = sqrt_ratio_target_price_x96 == return_state["sqrt_price_next_x96"]
 
     if zero_or_one:
-        assert is_below_smallest_tick(ticks, tick) is not True
-        if is_at_or_above_largest_tick(ticks, tick):
-            return ticks[len(ticks) - 1]
-        index = find_largest_tick(ticks, tick)
-        return ticks[index]
+        return_state["amount_in"] = return_state["amount_in"] if max and exact_in else SqrtPriceMath.get_amount_0_delta(return_state["sqrt_price_next_x96"], sqrt_ratio_current_price_x96, liquidity, True)
+
+        return_state["amount_out"] = return_state["amount_out"] if max and not exact_in else SqrtPriceMath.get_amount_1_delta(return_state["sqrt_price_next_x96"], sqrt_ratio_current_price_x96, liquidity, False)
     else:
-        assert is_at_or_above_largest_tick(ticks, tick) is not True
-        if is_below_smallest_tick(ticks, tick):
-            return ticks[0]
-        index = find_largest_tick(ticks, tick)
-        return ticks[index + 1]
+        return_state["amount_in"] = return_state["amount_in"] if max and exact_in else SqrtPriceMath.get_amount_1_delta(sqrt_ratio_current_price_x96, return_state["sqrt_price_next_x96"], liquidity, True)
 
-def next_initialized_tick_within_word(ticks: List, tick: int, zero_or_one: bool, tick_spacing: int) -> Tuple:
-    """ https://github.com/Uniswap/uniswap-v3-sdk/blob/19a990403817d0359d8f38edfa3b0827d32adc05/src/utils/tickList.ts#L101
-        @returns (tick, tick_initalized)
-    """
-    assert isinstance(ticks, List)
-    assert isinstance(tick, int)
-    assert isinstance(zero_or_one, bool)
-    assert isinstance(tick_spacing, int)
+        return_state["amount_out"] = return_state["amount_out"] if max and not exact_in else SqrtPriceMath.get_amount_0_delta(sqrt_ratio_current_price_x96, return_state["sqrt_price_next_x96"], liquidity, False)
 
-    compressed = math.floor(tick / tick_spacing)
+    if not exact_in and return_state["amount_out"] > (amount_remaining * -1):
+        return_state["amount_out"] = amount_remaining * -1
 
-    if zero_or_one:
-        word_position = compressed >> 8
-        minimum = (word_position << 8) * tick_spacing
-
-        if is_below_smallest_tick(ticks, tick)
-            return (minimum, False)
-
-        index = next_initalized_tick(ticks, tick, zero_or_one)
-        next_initalized_tick = math.max(minimum, index)
-        return (next_initalized_tick, next_initalized_tick == index)
+    if exact_in and return_state["sqrt_price_next_x96"] != sqrt_ratio_target_price_x96:
+        return_state["fee_amount"] = amount_remaining - return_state["amount_in"]
     else:
-        word_position = (compressed + 1) >> 8
-        maximum = ((word_position + 1) << 8) * tick_spacing - 1
+        return_state["fee_amount"] = mul_div_rounding_up(return_state["amount_in"], fee_pips, MAX_FEE - fee_pips)
 
-def compute_swap_step(sqrt_ratio_current_price_x96: int, sqrt_ratio_target_price_x96: int, liquidity: int, amount_remaining: int, fee: int) -> {}:
-    """ @returns {sqrt_ratio_next_price, amount_in, amount_out, fee} """
+    # TODO: use tuple variables in place of return_state{}
+    sqrt_price_next_x96 = return_state["sqrt_price_next_x96"]
+    amount_in = return_state["amount_in"]
+    amount_out = return_state["amount_out"]
+    fee_amount = return_state["fee_amount"]
 
+    return sqrt_price_next_x96, amount_in, amount_out, fee_amount
+
+def multiply_bitwise_and_256(x: int, y: int) -> int:
+    assert (isinstance(x, int))
+    assert (isinstance(y, int))
+
+    product = x * y
+    return product & MAX_UINT256
+
+def add_bitwise_and_256(x: int, y: int) -> int:
+    assert (isinstance(x, int))
+    assert (isinstance(y, int))
+
+    sum = x + y
+    return sum & MAX_UINT256
+
+def add_liquidity_delta(x: int, y: int) -> int:
+    assert (isinstance(x, int))
+    assert (isinstance(y, int))
+
+    if y < 0:
+        return x - (y * - 1)
+    else:
+        return x + y
+
+# TODO: rename this to TickList? group above methods into TickMath
+class TickMath:
+
+    @staticmethod
+    def get_tick(ticks: List[Tick], tick_index: int) -> Tick:
+        assert isinstance(ticks, List)
+        assert isinstance(tick_index, int)
+
+        tick = ticks[TickMath._find_largest_tick(ticks, tick_index)]
+        # check that the given tick_index is contained within the list of initialized ticks
+        assert tick.index == tick_index
+        return tick
+
+    @staticmethod
+    def _is_below_smallest_tick(ticks: List, tick: int) -> bool:
+        assert (isinstance(ticks, List) and len(ticks) > 0)
+        assert isinstance(tick, int)
+
+        return tick < ticks[0].index
+
+    @staticmethod
+    def _is_at_or_above_largest_tick(ticks: List, tick: int) -> bool:
+        assert (isinstance(ticks, List) and len(ticks) > 0)
+        assert isinstance(tick, int)
+
+        return tick > ticks[len(ticks) - 1].index
+
+    @staticmethod
+    def _find_largest_tick(ticks: List, tick) -> int:
+        """ Find index of largest tick in list that is less than or equal to given tick using binary search """
+        assert (isinstance(ticks, List) and len(ticks) > 0)
+        assert isinstance(tick, int)
+        assert TickMath._is_below_smallest_tick(ticks, tick) is not True
+
+        l = 0
+        r = len(ticks) - 1
+        # TODO: figure out best initialization state for i
+        i = 0
+
+        while True:
+            i = math.floor((l + r) / 2)
+
+            if ticks[i].index <= tick and (i == len(ticks) - 1 or ticks[i + 1].index > tick):
+                return i
+
+            if ticks[i].index < tick:
+                l = i + 1
+            else:
+                r = i + 1
+
+    @staticmethod
+    def next_initialized_tick(ticks: List[Tick], tick: int, zero_or_one: bool) -> Tick:
+        assert isinstance(ticks, List)
+        assert isinstance(tick, int)
+        assert isinstance(zero_or_one, bool)
+
+        if zero_or_one:
+            assert TickMath._is_below_smallest_tick(ticks, tick) is not True
+            if TickMath._is_at_or_above_largest_tick(ticks, tick):
+                return ticks[len(ticks) - 1]
+            index = TickMath._find_largest_tick(ticks, tick)
+            return ticks[index]
+        else:
+            assert TickMath._is_at_or_above_largest_tick(ticks, tick) is not True
+            if TickMath._is_below_smallest_tick(ticks, tick):
+                return ticks[0]
+            index = TickMath._find_largest_tick(ticks, tick)
+            return ticks[index + 1]
+
+    @staticmethod
+    def next_initialized_tick_within_word(ticks: List[Tick], tick: int, zero_or_one: bool, tick_spacing: int) -> Tuple:
+        """ https://github.com/Uniswap/uniswap-v3-sdk/blob/19a990403817d0359d8f38edfa3b0827d32adc05/src/utils/tickList.ts#L101
+            @returns (tick, tick_initalized)
+        """
+        assert isinstance(ticks, List)
+        assert isinstance(tick, int)
+        assert isinstance(zero_or_one, bool)
+        assert isinstance(tick_spacing, int)
+
+        compressed = math.floor(tick / tick_spacing)
+
+        if zero_or_one:
+            word_position = compressed >> 8
+            minimum = (word_position << 8) * tick_spacing
+
+            if TickMath._is_below_smallest_tick(ticks, tick):
+                return (minimum, False)
+
+            index = TickMath.next_initialized_tick(ticks, tick, zero_or_one).index
+            next_initalized_tick = max(minimum, index)
+            return (next_initalized_tick, next_initalized_tick == index)
+        else:
+            word_position = (compressed + 1) >> 8
+            maximum = ((word_position + 1) << 8) * tick_spacing - 1
+
+            if TickMath._is_at_or_above_largest_tick(ticks, tick):
+                return (maximum, False)
+
+            index = TickMath.next_initialized_tick(ticks, tick, zero_or_one).index
+            next_initalized_tick = min(maximum, index)
+            return (next_initalized_tick, next_initalized_tick == index)
 
 
 class SqrtPriceMath:
@@ -314,3 +439,75 @@ class SqrtPriceMath:
             return mul_div_rounding_up(liquidity, (sqrtRatioBX96 - sqrtRatioAX96), Q96)
         else:
             return (liquidity * (sqrtRatioBX96 - sqrtRatioAX96)) / Q96
+
+    @staticmethod
+    def get_next_sqrt_price_from_input(sqrt_price_x96: int, liquidity: int, amount_in: int, zero_or_one: bool):
+        assert (isinstance(sqrt_price_x96, int) and sqrt_price_x96 > 0)
+        assert (isinstance(liquidity, int) and liquidity > 0)
+        assert (isinstance(amount_in, int))
+        assert (isinstance(zero_or_one, bool))
+
+        if zero_or_one:
+            return SqrtPriceMath.get_next_sqrt_price_from_amount_1_rounding_down(sqrt_price_x96, liquidity, amount_in, True)
+        else:
+            return SqrtPriceMath.get_next_sqrt_price_from_amount_0_rounding_up(sqrt_price_x96, liquidity, amount_in, True)
+
+    @staticmethod
+    def get_next_sqrt_price_from_output(sqrt_price_x96: int, liquidity: int, amount_out: int, zero_or_one: bool):
+        assert (isinstance(sqrt_price_x96, int) and sqrt_price_x96 > 0)
+        assert (isinstance(liquidity, int) and liquidity > 0)
+        assert (isinstance(amount_out, int))
+        assert (isinstance(zero_or_one, bool))
+
+        if zero_or_one:
+            return SqrtPriceMath.get_next_sqrt_price_from_amount_1_rounding_down(sqrt_price_x96, liquidity, amount_out, True)
+        else:
+            return SqrtPriceMath.get_next_sqrt_price_from_amount_0_rounding_up(sqrt_price_x96, liquidity, amount_out, True)
+
+    @staticmethod
+    def get_next_sqrt_price_from_amount_0_rounding_up(sqrt_price_x96: int, liquidity: int, amount: int, add: bool) -> int:
+        assert (isinstance(sqrt_price_x96, int))
+        assert (isinstance(liquidity, int))
+        assert (isinstance(amount, int))
+        assert (isinstance(add, bool))
+
+        if amount == 0:
+            return sqrt_price_x96
+
+        numerator_1 =  liquidity << 96
+
+        if add:
+            product = multiply_bitwise_and_256(amount, sqrt_price_x96)
+            if product / amount == sqrt_price_x96:
+                denominator = add_bitwise_and_256(numerator_1, product)
+                if denominator >= numerator_1:
+                    return mul_div_rounding_up(numerator_1, sqrt_price_x96, denominator)
+            return mul_div_rounding_up(numerator_1, 1, (numerator_1 / sqrt_price_x96) + amount)
+        else:
+            product = multiply_bitwise_and_256(amount, sqrt_price_x96)
+
+            assert (product / amount) == sqrt_price_x96
+            assert numerator_1 > product
+
+            denominator = numerator_1 - product
+            return mul_div_rounding_up(numerator_1, sqrt_price_x96, denominator)
+
+    @staticmethod
+    def get_next_sqrt_price_from_amount_1_rounding_down(sqrt_price_x96: int, liquidity: int, amount: int, add: bool) -> int:
+        assert (isinstance(sqrt_price_x96, int))
+        assert (isinstance(liquidity, int))
+        assert (isinstance(amount, int))
+        assert (isinstance(add, bool))
+
+        if add:
+            if amount <= MAX_UINT160:
+                quotient = (amount << 96) / liquidity
+            else:
+                quotient = (amount * Q96) / liquidity
+
+            return sqrt_price_x96 + quotient
+        else:
+            quotient = mul_div_rounding_up(amount, Q96, liquidity)
+
+            assert sqrt_price_x96 > quotient
+            return sqrt_price_x96 - quotient
