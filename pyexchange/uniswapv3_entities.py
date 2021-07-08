@@ -17,21 +17,21 @@
 
 import time
 
-from fractions import Fraction
 from fxpmath import Fxp
 from typing import List, Optional, Tuple
 from web3 import Web3
 
 from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, \
-    SqrtPriceMath, compute_swap_step, TickMath, add_liquidity_delta
-from pyexchange.uniswapv3_constants import Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, Q96, MIN_TICK, MAX_TICK, TICK_SPACING
+    SqrtPriceMath, compute_swap_step, Tick, add_liquidity_delta
+from pyexchange.uniswapv3_constants import Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, Q96, MIN_TICK, MAX_TICK, TICK_SPACING, \
+    TRADE_TYPE, FEES
 from pymaker.model import Token
 from pymaker.numeric import Wad
 
 
 class Fraction:
 
-    def __init__(self, numerator: int, denominator: int):
+    def __init__(self, numerator: int, denominator: int = 1):
         assert isinstance(numerator, int)
         assert isinstance(denominator, int)
 
@@ -46,9 +46,44 @@ class Fraction:
     def quotient(self) -> int:
         return int(self.numerator / self.denominator)
 
+    def float_quotient(self) -> float:
+        return self.numerator / self.denominator
+
     def round_to_significant_digits(self, sig_digits, format, rounding):
         pass
 
+    def add(self, other):
+        """ Add two Fraction instances and return a new Fraction """
+        assert isinstance(other, Fraction)
+
+        if self.denominator == other.denominator:
+            return Fraction(self.numerator + other.numerator, self.denominator)
+
+        new_numerator = (self.numerator * other.denominator) + (other.numerator * self.denominator)
+        new_denominator = self.denominator * other.denominator
+        return Fraction(new_numerator, new_denominator)
+
+    def subtract(self, other):
+        """ Subtract two Fraction instances and return a new Fraction """
+        assert isinstance(other, Fraction)
+
+        if self.denominator == other.denominator:
+            return Fraction(self.numerator - other.numerator, self.denominator)
+
+        new_numerator = (self.numerator * other.denominator) - (other.numerator * self.denominator)
+        new_denominator = self.denominator * other.denominator
+        return Fraction(new_numerator, new_denominator)
+
+    def multiply(self, other):
+        assert isinstance(other, Fraction)
+
+        new_numerator = (self.numerator * other.denominator)
+        new_denominator = (self.denominator * other.numerator)
+        return Fraction(new_numerator, new_denominator)
+
+    def as_fraction(self):
+        """ Used be inheriting classes to create a raw Fraction instance """
+        return Fraction(self.numerator, self.denominator)
 
 class CurrencyAmount(Fraction):
 
@@ -94,6 +129,8 @@ class PriceFraction(Fraction):
         # self.numerator = self.quote_token.normalize_amount(Wad.from_number(numerator)).value # quote token
         # self.denominator = self.base_token.normalize_amount(Wad.from_number(denominator)).value # base token
 
+        # TODO: check if need to pass through or override the normalized numerator / denominator
+        super().__init__(numerator, denominator)
         self.numerator = self.quote_token.normalize_amount(Wad.from_number(numerator)).value  # quote token
         self.denominator = self.base_token.normalize_amount(Wad.from_number(denominator)).value  # base token
 
@@ -101,9 +138,9 @@ class PriceFraction(Fraction):
         return float(self.numerator / self.denominator)
 
     def multiply(self, other):
-        """ multiply two Fractions together. This method assumes that the other's base currency matches self's quote currency
+        """ multiply two PriceFractions together. This method assumes that the other's base currency matches self's quote currency
 
-            returns a new Fraction instance with the resultant numerator and denominator.
+            returns a new PriceFraction instance with the resultant numerator and denominator.
         """
         numerator_result = self.numerator * other.numerator
         denominator_result = self.denominator * other.denominator
@@ -111,30 +148,12 @@ class PriceFraction(Fraction):
         return self.__class__(self.base_token, other.quote_token, numerator_result, denominator_result)
 
     @staticmethod
-    def convert_to_fraction(number) -> Fraction:
-        """ https://stackoverflow.com/questions/23344185/how-to-convert-a-decimal-number-into-fraction """
-
-        return Fraction(str(number))
-    
-    @staticmethod
     def from_fraction(fraction: Fraction, base_token: Token, quote_token: Token):
         assert isinstance(fraction, Fraction)
         assert isinstance(base_token, Token)
         assert isinstance(quote_token, Token)
 
         return PriceFraction(base_token, quote_token, fraction.denominator, fraction.numerator)
-
-
-class Tick:
-    """ """
-    def __init__(self, index: int, liquidity_net: int, liquidity_gross: int):
-        assert (isinstance(index, int) and (index >= MIN_TICK and index <= MAX_TICK))
-        assert isinstance(liquidity_net, int)
-        assert isinstance(liquidity_net, int)
-
-        self.index = index
-        self.liquidity_net = liquidity_net
-        self.liquidity_gross = liquidity_gross
 
 
 class Pool:
@@ -161,7 +180,7 @@ class Pool:
         self.ticks = ticks
         self.token_0_price = self.get_token_0_price()
         self.token_1_price = self.get_token_1_price()
-        self.tick_spacing = TICK_SPACING[f"{fee}"].value
+        self.tick_spacing = TICK_SPACING[FEES(self.fee).name].value
 
     def contains_token(self, token_to_check: Token) -> bool:
         """ check that token is available on either side of the pool """
@@ -181,7 +200,7 @@ class Pool:
         return PriceFraction(self.token_0, self.token_1, (self.square_root_ratio_x96 * self.square_root_ratio_x96), Q192)
 
     # TODO: figure out best way to update pool.ticks
-    def get_output_amount(self, input_amount: CurrencyAmount, sqrt_price_limit_x96: int) -> Tuple:
+    def get_output_amount(self, input_amount: CurrencyAmount, sqrt_price_limit_x96: Optional[int]) -> Tuple:
         """ given an input amount of a token, calculate how much output liquidity is available, and the resulting pool state"""
         assert isinstance(input_amount, CurrencyAmount)
         assert (isinstance(sqrt_price_limit_x96, int) or sqrt_price_limit_x96 is None)
@@ -199,7 +218,7 @@ class Pool:
         return output_amount, new_pool
 
     # TODO: check for output token being ETH vs ERC20
-    def get_input_amount(self, output_amount: CurrencyAmount, sqrt_price_limit_x96: int) -> Tuple:
+    def get_input_amount(self, output_amount: CurrencyAmount, sqrt_price_limit_x96: Optional[int]) -> Tuple:
         assert isinstance(output_amount, CurrencyAmount)
         assert (isinstance(sqrt_price_limit_x96, int) or sqrt_price_limit_x96 is None)
         assert self.contains_token(output_amount.token)
@@ -250,7 +269,7 @@ class Pool:
         # loop through available ticks until the desired swap amount has been met, or available liquidity has been exhausted
         while pool_swap_state["swap_amount_remaining"] != 0 and pool_swap_state["sqrt_price_x96"] != sqrt_price_limit_x96:
 
-            tick_next, tick_initalized = TickMath.next_initialized_tick_within_word(self.ticks, pool_swap_state["tick"], zero_or_one, self.tick_spacing)
+            tick_next, tick_initalized = Tick.next_initialized_tick_within_word(self.ticks, pool_swap_state["tick"], zero_or_one, self.tick_spacing)
 
             step_state = {
                 "sqrt_price_start_x96": pool_swap_state["sqrt_price_x96"],
@@ -283,7 +302,7 @@ class Pool:
 
             if pool_swap_state["sqrt_price_x96"] == step_state["sqrt_price_next_x96"]:
                 if step_state["tick_initalized"]:
-                    net_liquidity = TickMath.get_tick(self.ticks, step_state["tick_next"]).liquidity_net
+                    net_liquidity = Tick.get_tick(self.ticks, step_state["tick_next"]).liquidity_net
                     # when moving left on the tick map, liquidity_net becomes negative
                     if zero_or_one:
                         net_liquidity = net_liquidity * - 1
@@ -451,13 +470,14 @@ class Position:
             return self._mint_amounts
 
     # TODO: determine if conversion to fractions is necessary
-    def _ratios_after_slippage(self, slippage_tolerance: float) -> Tuple:
-        assert isinstance(slippage_tolerance, float)
-        assert (slippage_tolerance < 1 and slippage_tolerance > 0)
+    def _ratios_after_slippage(self, slippage_tolerance: Fraction) -> Tuple:
+        assert isinstance(slippage_tolerance, Fraction)
+        assert (1 > slippage_tolerance.float_quotient() > 0)
 
-        price_lower = self.pool.get_token_0_price().multiply(PriceFraction.from_fraction(PriceFraction.convert_to_fraction((1 - slippage_tolerance)), self.pool.token_0, self.pool.token_1))
-        price_upper = self.pool.get_token_0_price().multiply(PriceFraction.from_fraction(PriceFraction.convert_to_fraction((1 + slippage_tolerance)), self.pool.token_0, self.pool.token_1))
-
+        # TODO: ...convert to PriceFraction?
+        price_lower = self.pool.get_token_0_price().as_fraction().multiply(Fraction(1).subtract(slippage_tolerance))
+        price_upper = self.pool.get_token_0_price().as_fraction().multiply(slippage_tolerance.add(Fraction(1)))
+        print(self.pool.get_token_0_price().as_fraction().float_quotient(), price_lower.float_quotient(), price_upper.float_quotient())
         sqrtRatioX96Lower = encodeSqrtRatioX96(price_lower.numerator, price_lower.denominator)
 
         if sqrtRatioX96Lower < MIN_SQRT_RATIO:
@@ -470,11 +490,13 @@ class Position:
 
         return (sqrtRatioX96Lower, sqrtRatioX96Upper)
 
-    def mint_amounts_with_slippage(self, slippage_tolerance: float) -> Tuple:
+    def mint_amounts_with_slippage(self, slippage_tolerance: Fraction) -> Tuple:
         """ Returns amount0; amount1 to mint after accounting for the given slippage_tolerance
 
             Virtual pools are created for instantiating Position entities that can be used to determin
         """
+        assert isinstance(slippage_tolerance, Fraction)
+        assert (1 > slippage_tolerance.float_quotient() > 0)
 
         sqrtRatioX96Lower, sqrtRatioX96Upper = self._ratios_after_slippage(slippage_tolerance)
 
@@ -512,8 +534,8 @@ class Route:
         for index, pool in enumerate(pools):
             current_input_token = token_path[index]
             # check that input token is in the given pool
-            assert current_input_token == pool.token_0.address.address or current_input_token == pool.token_1.address.address
-            next_token = pool.token_1 if current_input_token.address.address == pool.token_1.address.address else pool.token_0
+            assert current_input_token == pool.token_0 or current_input_token == pool.token_1
+            next_token = pool.token_1 if current_input_token == pool.token_1 else pool.token_0
             token_path.append(next_token)
 
         # TODO: check that every pool has a common chain_id
@@ -552,24 +574,55 @@ class Trade:
         amounts = [None] * len(route.token_path)
 
         if trade_type == "exactInput":
-            assert amount.token.address.address == route.input.address.address
+            assert amount.token == route.input
             amounts[0] = amount
             for index, token in enumerate(route.token_path):
                 pool = route.pools[index]
-                output_amount = pool.get_output_amount(amounts[index])
+                output_amount = pool.get_output_amount(amounts[index], None)
                 amounts[index + 1] = (output_amount)
 
             input_amount = CurrencyAmount.from_fractional_amount(route.input, amount.numerator, amount.denominator)
             output_amount = CurrencyAmount.from_fractional_amount(route.output, amounts[len(amounts) - 1].numerator, amounts[len(amounts) - 1].denominator)
         else:
-            assert amount.token.address.address == route.input.address.address
+            assert amount.token == route.output
             amounts[len(amounts) - 1] = amount
-            for index in range(len(amounts), 0, 1):
+            for index in range(len(amounts) - 1, 0, -1):
+                print(index, route.pools)
                 pool = route.pools[index - 1]
-                input_amount = pool.get_input_amount(amounts[index])
+                input_amount = pool.get_input_amount(amounts[index], None)
                 amounts[index - 1] = input_amount
 
             input_amount = CurrencyAmount.from_fractional_amount(route.input, amounts[0].numerator, amounts[0].denominator)
             output_amount = CurrencyAmount.from_fractional_amount(route.output, amount.numerator, amount.denominator)
 
         return Trade(route, input_amount, output_amount, trade_type)
+
+    # TODO: add slippage_tolerance as a Percent not Fraction...
+    def minimum_amount_out(self, slippage_tolerance: Fraction) -> CurrencyAmount:
+        assert isinstance(slippage_tolerance, Fraction)
+        assert 0 < slippage_tolerance.float_quotient() < 1
+
+        if self.trade_type == TRADE_TYPE.EXACT_OUTPUT.value or self.trade_type == TRADE_TYPE.EXACT_OUTPUT_SINGLE.value:
+            return self.output_amount
+        else:
+            slippage_adjusted_amount = Fraction(1) \
+                .add(slippage_tolerance) \
+                .invert() \
+                .multiply(Fraction(self.output_amount.quotient())) \
+                .quotient()
+
+            return CurrencyAmount.from_raw_amount(self.output_amount.token, slippage_adjusted_amount)
+
+    # TODO: add slippage_tolerance as a Percent not Fraction...
+    def maximum_amount_in(self, slippage_tolerance: Fraction) -> CurrencyAmount:
+        assert isinstance(slippage_tolerance, Fraction)
+        assert 0 < slippage_tolerance.float_quotient() < 1
+
+        if self.trade_type == TRADE_TYPE.EXACT_INPUT.value:
+            return self.input_amount
+        else:
+            slippage_adjusted_amount = Fraction(1) \
+                .add(slippage_tolerance) \
+                .multiply(Fraction(self.input_amount.quotient())).quotient()
+
+            return CurrencyAmount.from_raw_amount(self.input_amount.token, slippage_adjusted_amount)

@@ -16,20 +16,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import time
-
-from fractions import Fraction
-from fxpmath import Fxp
-from typing import List, Optional, Tuple
-from web3 import Web3
-
-from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, SqrtPriceMath
-from pyexchange.uniswapv3_constants import Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, Q96
-from pyexchange.uniswapv3_entities import Pool, Position
+from typing import List
 
 from pymaker import Address, Calldata, Invocation
 from pymaker.model import Token
-from pymaker.numeric import Wad
-from pymaker.util import bytes_to_int, bytes_to_hexstring, int_to_bytes32
+from pymaker.util import bytes_to_hexstring, int_to_bytes32
+from web3 import Web3
+
+from pyexchange.uniswapv3_entities import Pool, Position, PriceFraction, Fraction
 
 
 class Params:
@@ -70,11 +64,11 @@ class MintParams(Params):
 
     # https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.test.ts
 
-    def __init__(self, web3: Web3, position: Position, recipient: Address, slippage_tolerance: float, deadline: int):
+    def __init__(self, web3: Web3, position: Position, recipient: Address, slippage_tolerance: Fraction, deadline: int):
         assert(isinstance(web3, Web3))
         assert(isinstance(position, Position))
         assert(isinstance(recipient, Address))
-        assert(isinstance(slippage_tolerance, float))
+        assert(isinstance(slippage_tolerance, Fraction))
         assert(isinstance(deadline, int) or (deadline is None))
 
         self.position = position
@@ -216,7 +210,7 @@ class ExactInputSingleParams(Params):
         self.token_out = token_out
         self.fee = fee
         self.recipient = recipient
-        self.deadline = deadline
+        self.deadline = deadline if deadline is not None else self._deadline()
         self.amount_in = amount_in
         self.amount_out_minimum = amount_out_minimum
         self.sqrt_price_limit_x96 = sqrt_price_limit_x96
@@ -238,7 +232,7 @@ class ExactInputSingleParams(Params):
 class ExactOutputSingleParams(Params):
 
     def __init__(self, web3: Web3, token_in: Token, token_out: Token, fee: int, recipient: Address, deadline: int,
-                 amount_out: int, amount_in_minimum: int, sqrt_price_limit_x96: int):
+                 amount_out: int, amount_in_maximum: int, sqrt_price_limit_x96: int):
         assert (isinstance(web3, Web3))
         assert (isinstance(token_in, Token))
         assert (isinstance(token_out, Token))
@@ -246,7 +240,7 @@ class ExactOutputSingleParams(Params):
         assert (isinstance(recipient, Address))
         assert (isinstance(deadline, int) or (deadline is None))
         assert (isinstance(amount_out, int))
-        assert (isinstance(amount_in_minimum, int))
+        assert (isinstance(amount_in_maximum, int))
         assert (isinstance(sqrt_price_limit_x96, int))
 
         self.web3 = web3
@@ -254,9 +248,9 @@ class ExactOutputSingleParams(Params):
         self.token_out = token_out
         self.fee = fee
         self.recipient = recipient
-        self.deadline = deadline
+        self.deadline = deadline if deadline is not None else self._deadline()
         self.amount_out = amount_out
-        self.amount_in_minimum = amount_in_minimum
+        self.amount_in_maximum = amount_in_maximum
         self.sqrt_price_limit_x96 = sqrt_price_limit_x96
 
         self.calldata_args = [
@@ -266,7 +260,7 @@ class ExactOutputSingleParams(Params):
             self.recipient.address,
             self.deadline,
             self.amount_out,
-            self.amount_in_minimum,
+            self.amount_in_maximum,
             self.sqrt_price_limit_x96
         ]
 
@@ -276,27 +270,27 @@ class ExactOutputSingleParams(Params):
 
 class ExactInputParams(Params):
 
-    def __init__(self, web3: Web3, path: bytes, recipient: Address, deadline: int, amount_in: int, amount_out_maximum: int):
+    def __init__(self, web3: Web3, path: bytes, recipient: Address, deadline: int, amount_in: int, amount_out_minimum: int):
         assert (isinstance(web3, Web3))
         assert (isinstance(path, bytes))
         assert (isinstance(recipient, Address))
         assert(isinstance(deadline, int) or (deadline is None))
         assert (isinstance(amount_in, int))
-        assert (isinstance(amount_out_maximum, int))
+        assert (isinstance(amount_out_minimum, int))
 
         self.web3 = web3
         self.path = path
         self.recipient = recipient
         self.deadline = deadline if deadline is not None else self._deadline()
         self.amount_in = amount_in
-        self.amount_out_maximum = amount_out_maximum
+        self.amount_out_minimum = amount_out_minimum
 
         self.calldata_args = [
             self.path,
             self.recipient.address,
             self.deadline,
             self.amount_in,
-            self.amount_out_maximum
+            self.amount_out_minimum
         ]
 
         self.method = "exactInput(bytes,address,uint256,uint256,uint256)"

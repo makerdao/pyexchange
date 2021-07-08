@@ -33,15 +33,16 @@
 # Additional guides: https://blog.openzeppelin.com/ethereum-in-depth-part-2-6339cf6bddb9/
 
 import time
+import logging
 
 from web3 import Web3
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from hexbytes import HexBytes
 
 from pyexchange.uniswapv3_calldata_params import BurnParams, CollectParams, DecreaseLiquidityParams, \
     IncreaseLiquidityParams, MintParams, ExactInputSingleParams, ExactInputParams, ExactOutputSingleParams, \
-    ExactOutputParams
-from pyexchange.uniswapv3_entities import Pool, Position
+    ExactOutputParams, Params
+from pyexchange.uniswapv3_entities import Pool, Position, Trade, Route, PriceFraction, Fraction
 from pymaker import Calldata, Contract, Address, Transact, Wad, Receipt
 from pymaker.approval import directly
 from pymaker.model import Token
@@ -123,24 +124,41 @@ class SwapRouter(Contract):
 
     SwapRouter_abi = Contract._load_abi(__name__, 'abi/SwapRouter.abi')['abi']
 
+    logger = logging.getLogger()
+
     def __init__(self, web3: Web3, swap_router_address: Address):
         assert(isinstance(web3, Web3))
         assert(isinstance(swap_router_address, Address))
 
+        self.web3 = web3
         self.swap_router_address = swap_router_address
-        self.swap_router_contract = self._get_contract(self.uniswap_pool.web3, self.Iswap_router_abi, self.swap_router_address)
+        self.swap_router_contract = self._get_contract(self.web3, self.SwapRouter_abi, self.swap_router_address)
 
+    # TODO: remove this?
     # state machine - given route and trades to execute, return transact
     def determine_swap_method(self, trade, route) -> Transact:
         pass
 
+    # TODO: ensure valid return type check ... return Params?
+    def build_swap_multicall(self, trades: List[Trade], options: dict) -> Transact:
+        assert isinstance(trades, List)
+
+        calldata = []
+
+    @staticmethod
+    def encode_route_to_path(route: Route, exact_output: bool) -> str:
+        assert(isinstance(route, Route))
+        assert (isinstance(exact_output, bool))
+
     def swap_exact_output(self, params: ExactOutputParams) -> Transact:
+        """ Swap for a specified output amount across multiple pools """
         assert(isinstance(params, ExactOutputParams))
 
         return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
                         "exactOutput", [tuple(params.calldata_args)])
 
     def swap_exact_output_single(self, params: ExactOutputSingleParams) -> Transact:
+        """ Swap for a specified output amount in one pool hop """
         assert(isinstance(params, ExactOutputSingleParams))
 
         return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
@@ -217,6 +235,8 @@ class PositionManager(Contract):
     UniswapV3Factory_abi = Contract._load_abi(__name__, 'abi/UniswapV3Factory.abi')['abi']
     UniswapV3Pool_abi = Contract._load_abi(__name__, 'abi/UniswapV3Pool.abi')['abi']
 
+    logger = logging.getLogger()
+
     def __init__(self, web3: Web3, nft_position_manager_address: Address, factory_address: Address):
         assert(isinstance(web3, Web3))
         assert(isinstance(nft_position_manager_address, Address))
@@ -237,7 +257,15 @@ class PositionManager(Contract):
         approval_function = directly()
         return approval_function(erc20_token, self.nft_position_manager_address, 'NonfungiblePositionManager')
 
-    def create_pool(self, token_a: Token, token_b: Token, fee: int, initial_price: int) -> Transact:
+    def _set_address_order(self, token_0: Token, token_1: Token) -> Tuple:
+        """ UniswapV3 expects address token_0 to be < token_1 """
+        if token_0.address.address > token_1.address.address:
+            self.logger.info(f"Reversing address order")
+            return token_1, token_0
+        else:
+            return token_0, token_1
+
+    def create_pool(self, token_a: Token, token_b: Token, fee: int, initial_price: int) -> Optional[Transact]:
         """ instantiate new pool and initialize pool fee
             Interacts with contract method defined here: https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/base/PoolInitializer.sol
         """
@@ -245,7 +273,14 @@ class PositionManager(Contract):
         assert (isinstance(token_b, Token))
         assert (isinstance(fee, int))
         assert (isinstance(initial_price, int))
-        
+
+        # check if the pool already exists
+
+        # check if the pool has already been initalized
+
+        # compare the input addresses and reverse if necessary
+        token_a, token_b = self._set_address_order(token_a, token_b)
+
         create_pool_args = [
             token_a.address.address,
             token_b.address.address,
@@ -285,17 +320,6 @@ class PositionManager(Contract):
                             logs.append(log_class.from_event_data(event_data))
 
         return logs
-
-    # TODO: determine if this is redundant with just directly instantiating MintParams?
-    def generate_mint_params(self, web3: Web3, position: Position, recipient: Address, slippage_tolerance: float, deadline: int = None) -> MintParams:
-        """ Returns a MintParams object for use in a mint() call """
-        assert (isinstance(web3, Web3))
-        assert (isinstance(position, Position))
-        assert (isinstance(recipient, Address))
-        assert (isinstance(slippage_tolerance, float))
-        assert (isinstance(deadline, int) or (deadline is None))
-
-        return MintParams(web3, position, recipient, slippage_tolerance, deadline)
 
     # TODO: figure out how to build out the Position object
     def mint(self, params: MintParams) -> Transact:
@@ -347,6 +371,7 @@ class PositionManager(Contract):
         ticks = pool_contract.functions.ticks(current_tick).call()
         return ticks
 
+    # TODO: https://github.com/Uniswap/uniswap-v3-sdk/blob/6c4242f51a51929b0cd4f4e786ba8a7c8fe68443/src/utils/priceTickConversions.ts
     def positions(self, token_id: int) -> Position:
         """ Return liquidity and reserve information for a given NFT's token_id """
         assert (isinstance(token_id, int))

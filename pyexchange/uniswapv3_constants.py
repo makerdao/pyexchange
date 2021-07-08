@@ -49,3 +49,10 @@ class TICK_SPACING(Enum):
     LOW = 10
     MEDIUM = 60
     HIGH = 200
+
+
+class TRADE_TYPE(Enum):
+    EXACT_OUTPUT = "exactOutput"
+    EXACT_OUTPUT_SINGLE = "exactOutputSingle"
+    EXACT_INPUT = "exactInput"
+    EXACT_INPUT_SINGLE = "exactInputSingle"

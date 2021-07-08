@@ -18,7 +18,7 @@
 import math
 
 from pyexchange.uniswapv3_constants import Q96, Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, MAX_UINT256, ZERO, ONE, MAX_FEE, \
-    MAX_UINT160
+    MAX_UINT160, MIN_TICK, MAX_TICK
 from pymaker.numeric import Wad
 from fxpmath import Fxp
 from typing import List, Tuple
@@ -41,7 +41,6 @@ from typing import List, Tuple
 
 # https://www.geeksforgeeks.org/find-significant-set-bit-number/
 # https://www.baeldung.com/cs/most-significant-bit
-from pyexchange.uniswapv3_entities import Tick
 
 
 def most_significant_bit(x: int) -> int:
@@ -184,12 +183,6 @@ def encodeSqrtRatioX96(amount_1: int, amount_0: int) -> int:
 
     return int(math.sqrt(ratio_x_192))
 
-# TODO: finish implementing
-# https://github.com/Uniswap/uniswap-v3-sdk/blob/c8e0d4c56e3b3ebd6446aba66523d20f2ea0fd9c/src/utils/nearestUsableTick.ts
-def nearest_usable_tick(tick: int, tick_spacing: int) -> float:
-    assert (isinstance(tick, int))
-    assert (isinstance(tick_spacing, int))
-
 def mul_div_rounding_up(a: int, b: int, denominator: int):
     assert (isinstance(a, int))
     assert (isinstance(b, int))
@@ -290,15 +283,25 @@ def add_liquidity_delta(x: int, y: int) -> int:
     else:
         return x + y
 
-# TODO: rename this to TickList? group above methods into TickMath
-class TickMath:
+# TODO: rename this to TickList? group above methods into Tick
+class Tick:
+
+    def __init__(self, index: int, liquidity_net: int, liquidity_gross: int):
+        assert (isinstance(index, int) and (index >= MIN_TICK and index <= MAX_TICK))
+        assert isinstance(liquidity_net, int)
+        assert isinstance(liquidity_net, int)
+
+        self.index = index
+        self.liquidity_net = liquidity_net
+        self.liquidity_gross = liquidity_gross
 
     @staticmethod
-    def get_tick(ticks: List[Tick], tick_index: int) -> Tick:
+    def get_tick(ticks: List, tick_index: int):
+        """ Given a list of initalized ticks, and an index return a Tick object """
         assert isinstance(ticks, List)
         assert isinstance(tick_index, int)
 
-        tick = ticks[TickMath._find_largest_tick(ticks, tick_index)]
+        tick = ticks[Tick._find_largest_tick(ticks, tick_index)]
         # check that the given tick_index is contained within the list of initialized ticks
         assert tick.index == tick_index
         return tick
@@ -322,7 +325,7 @@ class TickMath:
         """ Find index of largest tick in list that is less than or equal to given tick using binary search """
         assert (isinstance(ticks, List) and len(ticks) > 0)
         assert isinstance(tick, int)
-        assert TickMath._is_below_smallest_tick(ticks, tick) is not True
+        assert Tick._is_below_smallest_tick(ticks, tick) is not True
 
         l = 0
         r = len(ticks) - 1
@@ -340,27 +343,44 @@ class TickMath:
             else:
                 r = i + 1
 
+    # https://github.com/Uniswap/uniswap-v3-sdk/blob/c8e0d4c56e3b3ebd6446aba66523d20f2ea0fd9c/src/utils/nearestUsableTick.ts
     @staticmethod
-    def next_initialized_tick(ticks: List[Tick], tick: int, zero_or_one: bool) -> Tick:
+    def nearest_usable_tick(tick: int, tick_spacing: int) -> int:
+        """ Return the nearest initalized tick given a tick, and pool tick_spacing """
+        assert (isinstance(tick, int))
+        assert (isinstance(tick_spacing, int) and tick_spacing > 0)
+        assert MIN_TICK < tick < MAX_TICK
+
+        rounded = round(tick / tick_spacing) * tick_spacing
+        if rounded < MIN_TICK:
+            return rounded + tick_spacing
+        elif round > MAX_TICK:
+            return rounded - tick_spacing
+        else:
+            return rounded
+
+    @staticmethod
+    def next_initialized_tick(ticks: List, tick: int, zero_or_one: bool):
+        """ Find the next initialized tick in the tick list """
         assert isinstance(ticks, List)
         assert isinstance(tick, int)
         assert isinstance(zero_or_one, bool)
 
         if zero_or_one:
-            assert TickMath._is_below_smallest_tick(ticks, tick) is not True
-            if TickMath._is_at_or_above_largest_tick(ticks, tick):
+            assert Tick._is_below_smallest_tick(ticks, tick) is not True
+            if Tick._is_at_or_above_largest_tick(ticks, tick):
                 return ticks[len(ticks) - 1]
-            index = TickMath._find_largest_tick(ticks, tick)
+            index = Tick._find_largest_tick(ticks, tick)
             return ticks[index]
         else:
-            assert TickMath._is_at_or_above_largest_tick(ticks, tick) is not True
-            if TickMath._is_below_smallest_tick(ticks, tick):
+            assert Tick._is_at_or_above_largest_tick(ticks, tick) is not True
+            if Tick._is_below_smallest_tick(ticks, tick):
                 return ticks[0]
-            index = TickMath._find_largest_tick(ticks, tick)
+            index = Tick._find_largest_tick(ticks, tick)
             return ticks[index + 1]
 
     @staticmethod
-    def next_initialized_tick_within_word(ticks: List[Tick], tick: int, zero_or_one: bool, tick_spacing: int) -> Tuple:
+    def next_initialized_tick_within_word(ticks: List, tick: int, zero_or_one: bool, tick_spacing: int) -> Tuple:
         """ https://github.com/Uniswap/uniswap-v3-sdk/blob/19a990403817d0359d8f38edfa3b0827d32adc05/src/utils/tickList.ts#L101
             @returns (tick, tick_initalized)
         """
@@ -375,20 +395,20 @@ class TickMath:
             word_position = compressed >> 8
             minimum = (word_position << 8) * tick_spacing
 
-            if TickMath._is_below_smallest_tick(ticks, tick):
+            if Tick._is_below_smallest_tick(ticks, tick):
                 return (minimum, False)
 
-            index = TickMath.next_initialized_tick(ticks, tick, zero_or_one).index
+            index = Tick.next_initialized_tick(ticks, tick, zero_or_one).index
             next_initalized_tick = max(minimum, index)
             return (next_initalized_tick, next_initalized_tick == index)
         else:
             word_position = (compressed + 1) >> 8
             maximum = ((word_position + 1) << 8) * tick_spacing - 1
 
-            if TickMath._is_at_or_above_largest_tick(ticks, tick):
+            if Tick._is_at_or_above_largest_tick(ticks, tick):
                 return (maximum, False)
 
-            index = TickMath.next_initialized_tick(ticks, tick, zero_or_one).index
+            index = Tick.next_initialized_tick(ticks, tick, zero_or_one).index
             next_initalized_tick = min(maximum, index)
             return (next_initalized_tick, next_initalized_tick == index)
 
