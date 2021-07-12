@@ -121,14 +121,28 @@ class BurnParams(Params):
 
 class CollectParams(Params):
 
-    # TODO: pass through the contract, and uniswap_pool
-    def __init__(self, uniswap_pool: Pool, recipient: Address, tick_lower: int, tick_upper: int, amounts: dict) -> None:
-        assert(isinstance(uniswap_pool, Pool))
+    def __init__(self, web3: Web3, token_id: int, recipient: Address, amount_0_max: int, amount_1_max: int):
+        assert(isinstance(web3, Web3))
+        assert(isinstance(token_id, int))
+        assert isinstance(recipient, Address)
+        assert isinstance(amount_0_max, int)
+        assert isinstance(amount_1_max, int)
 
-        self.params = {}
+        self.web3 = web3
+        self.token_id = token_id
+        self.recipient = recipient
+        self.amount_0_max = amount_0_max
+        self.amount_1_max = amount_1_max
 
-        self.params.amount1Min = amounts["amount1Min"]
-        self.deadline = self._deadline()
+
+        self.calldata_args = [
+            self.token_id,
+            self.recipient,
+            self.amount_0_max,
+            self.amount_1_max
+        ]
+        self.method = "collect(uint256,address,uint128,uint128)"
+        self.calldata = self.encode_calldata(self.web3, self.method, self.calldata_args)
 
 
 class DecreaseLiquidityParams(Params):

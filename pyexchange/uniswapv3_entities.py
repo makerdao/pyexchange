@@ -170,6 +170,7 @@ class Pool:
 
         # TODO: dynamincally determine chain_id
         self.chain_id = 1 #hardcode to mainnet
+
         self.token_0 = token_0
         self.token_1 = token_1
         self.fee = fee
@@ -177,10 +178,28 @@ class Pool:
         self.liquidity = liquidity
         self.tick_current = tick_current
         # TODO: call ticks() function here
-        self.ticks = ticks
+        self.ticks = self._map_ticks_to_tick(ticks)
         self.token_0_price = self.get_token_0_price()
         self.token_1_price = self.get_token_1_price()
         self.tick_spacing = TICK_SPACING[FEES(self.fee).name].value
+
+    # TODO: improve naming
+    def _map_ticks_to_tick(self, ticks: List[Tuple]) -> List:
+        """ Convert tuple retrieved from tickLens to List[Tick] """
+        assert isinstance(ticks, List)
+
+        if len(ticks) == 0:
+            return []
+
+        # tick_map = list(map(lambda tick: Tick(tick[0], tick[1], tick[2]), ticks))
+        tick_map = list(map(self._tick_mapper, ticks))
+        return tick_map
+
+    def _tick_mapper(self, tick) -> Tick:
+        if isinstance(tick, Tick):
+            return tick
+        else:
+            return Tick(tick[0], tick[1], tick[2])
 
     def contains_token(self, token_to_check: Token) -> bool:
         """ check that token is available on either side of the pool """
@@ -213,6 +232,7 @@ class Pool:
 
         output_token = self.token_1 if zero_or_one else self.token_0
         output_amount = CurrencyAmount.from_raw_amount(output_token, pool_swap_state["amount_calculated"] * - 1)
+        # TODO: update with the new tick state
         new_pool = Pool(self.token_0, self.token_1, self.fee, pool_swap_state["sqrt_price_x96"], pool_swap_state["liquidity"], pool_swap_state["tick_current"], self.ticks)
 
         return output_amount, new_pool
@@ -230,6 +250,7 @@ class Pool:
 
         input_token = self.token_0 if zero_or_one else self.token_1
         input_amount = CurrencyAmount.from_raw_amount(input_token, pool_swap_state["amount_calculated"])
+        # TODO: update self.ticks with self.get_ticks(pool_address, current_tick)
         new_pool = Pool(self.token_0, self.token_1, self.fee, pool_swap_state["sqrt_price_x96"], pool_swap_state["liquidity"], pool_swap_state["tick_current"], self.ticks)
 
         return input_amount, new_pool
@@ -284,12 +305,11 @@ class Pool:
 
             step_state["sqrt_price_next_x96"] = get_sqrt_ratio_at_tick(step_state["tick_next"])
             if zero_or_one:
-                target_price = step_state["sqrt_price_next_x96"] < sqrt_price_limit_x96
+                use_price_limit = step_state["sqrt_price_next_x96"] < sqrt_price_limit_x96
             else:
-                if step_state["sqrt_price_next_x96"] > sqrt_price_limit_x96:
-                    target_price = sqrt_price_limit_x96
-                else:
-                    target_price = step_state["sqrt_price_next_x96"]
+                use_price_limit = step_state["sqrt_price_next_x96"] > sqrt_price_limit_x96
+
+            target_price = sqrt_price_limit_x96 if use_price_limit else step_state["sqrt_price_next_x96"]
 
             pool_swap_state["sqrt_price_x96"], step_state["amount_in"], step_state["amount_out"], step_state["fee_amount"] = compute_swap_step(pool_swap_state["sqrt_price_x96"], target_price, pool_swap_state["liquidity"], pool_swap_state["swap_amount_remaining"], self.fee)
 
@@ -535,7 +555,7 @@ class Route:
             current_input_token = token_path[index]
             # check that input token is in the given pool
             assert current_input_token == pool.token_0 or current_input_token == pool.token_1
-            next_token = pool.token_1 if current_input_token == pool.token_1 else pool.token_0
+            next_token = pool.token_1 if current_input_token == pool.token_0 else pool.token_0
             token_path.append(next_token)
 
         # TODO: check that every pool has a common chain_id
@@ -573,7 +593,7 @@ class Trade:
         # create a fixed size array of the same length as the token_path
         amounts = [None] * len(route.token_path)
 
-        if trade_type == "exactInput":
+        if trade_type == "exactInput" or trade_type == "exactInputSingle":
             assert amount.token == route.input
             amounts[0] = amount
             for index, token in enumerate(route.token_path):
@@ -589,7 +609,7 @@ class Trade:
             for index in range(len(amounts) - 1, 0, -1):
                 print(index, route.pools)
                 pool = route.pools[index - 1]
-                input_amount = pool.get_input_amount(amounts[index], None)
+                input_amount = pool.get_input_amount(amounts[index], None)[0] # get currency_amount (currency_amount, new_pool)
                 amounts[index - 1] = input_amount
 
             input_amount = CurrencyAmount.from_fractional_amount(route.input, amounts[0].numerator, amounts[0].denominator)

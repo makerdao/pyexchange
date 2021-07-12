@@ -134,6 +134,14 @@ class SwapRouter(Contract):
         self.swap_router_address = swap_router_address
         self.swap_router_contract = self._get_contract(self.web3, self.SwapRouter_abi, self.swap_router_address)
 
+    def approve(self, token: Token):
+        assert (isinstance(token, Token))
+
+        erc20_token = ERC20Token(self.web3, token.address)
+
+        approval_function = directly()
+        return approval_function(erc20_token, self.swap_router_address, 'SwapRouter')
+
     # TODO: remove this?
     # state machine - given route and trades to execute, return transact
     def determine_swap_method(self, trade, route) -> Transact:
@@ -154,29 +162,32 @@ class SwapRouter(Contract):
         """ Swap for a specified output amount across multiple pools """
         assert(isinstance(params, ExactOutputParams))
 
-        return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
+        return Transact(self, self.web3, self.SwapRouter_abi, self.swap_router_address, self.swap_router_contract,
                         "exactOutput", [tuple(params.calldata_args)])
 
     def swap_exact_output_single(self, params: ExactOutputSingleParams) -> Transact:
         """ Swap for a specified output amount in one pool hop """
         assert(isinstance(params, ExactOutputSingleParams))
 
-        return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
+        return Transact(self, self.web3, self.SwapRouter_abi, self.swap_router_address, self.swap_router_contract,
                         "exactOutputSingle", [tuple(params.calldata_args)])
 
     def swap_exact_input(self, params: ExactInputParams) -> Transact:
         """ Given an exact set of inputs, execute swap to target outputs """
         assert(isinstance(params, ExactInputParams))
 
-        return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
+        return Transact(self, self.web3, self.SwapRouter_abi, self.swap_router_address, self.swap_router_contract,
                         "exactInput", [tuple(params.calldata_args)])
 
     def swap_exact_input_single(self, params: ExactInputSingleParams) -> Transact:
         """ Given an exact input, execute a swap to target output """
         assert(isinstance(params, ExactInputSingleParams))
 
-        return Transact(self, self.web3, self.swap_router_abi, self.swap_router_address, self.swap_router_contract,
+        return Transact(self, self.web3, self.SwapRouter_abi, self.swap_router_address, self.swap_router_contract,
                         "exactInputSingle", [tuple(params.calldata_args)])
+
+    def __repr__(self):
+        return f"UniswapV3SwapRouter"
 
 
 # TODO: move this to pymaker and add tests
@@ -234,20 +245,26 @@ class PositionManager(Contract):
     NonfungiblePositionManager_abi = Contract._load_abi(__name__, 'abi/NonfungiblePositionManager.abi')['abi']
     UniswapV3Factory_abi = Contract._load_abi(__name__, 'abi/UniswapV3Factory.abi')['abi']
     UniswapV3Pool_abi = Contract._load_abi(__name__, 'abi/UniswapV3Pool.abi')['abi']
+    UniswapV3TickLens_abi = Contract._load_abi(__name__, 'abi/UniswapV3TickLens.abi')['abi']
 
     logger = logging.getLogger()
 
-    def __init__(self, web3: Web3, nft_position_manager_address: Address, factory_address: Address):
+    def __init__(self, web3: Web3, nft_position_manager_address: Address, factory_address: Address, tick_lens_address: Address):
         assert(isinstance(web3, Web3))
         assert(isinstance(nft_position_manager_address, Address))
         assert(isinstance(factory_address, Address))
+        assert(isinstance(tick_lens_address, Address))
 
         self.web3: Web3 = web3
         self.nft_position_manager_address = nft_position_manager_address
         self.nft_position_manager_contract = self._get_contract(self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address)
 
+        # TODO: possible to get pool address without factory?
         self.factory_address = factory_address
         self.factory_contract = self._get_contract(self.web3, self.UniswapV3Factory_abi, self.factory_address)
+
+        self.tick_lens_address = tick_lens_address
+        self.tick_lens_contract = self._get_contract(self.web3, self.UniswapV3TickLens_abi, self.tick_lens_address)
 
     def approve(self, token: Token):
         assert (isinstance(token, Token))
@@ -367,16 +384,35 @@ class PositionManager(Contract):
         print(struct)
         return struct
 
-    def get_pool_ticks(self, pool_contract, current_tick: int) -> List:
-        ticks = pool_contract.functions.ticks(current_tick).call()
+    def get_tick_state(self, pool_contract, current_tick: int) -> List:
+        """ Retrieve state information for the given tick """
+        tick = pool_contract.functions.ticks(current_tick).call()
+        return tick
+
+    # https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/lens/TickLens.sol
+    def get_ticks(self, pool_address: Address, tick_bitmap_index: int) -> List:
+        """ Get the initialized tick state for a given pool and bitmap index """
+        assert isinstance(pool_address, Address)
+        assert isinstance(tick_bitmap_index, int)
+
+        ticks = self.tick_lens_contract.functions.getPopulatedTicksInWord(pool_address.address, tick_bitmap_index).call()
         return ticks
+
+    def get_position_info(self, token_id) -> List:
+        assert isinstance(token_id, int)
+
+        position = self.nft_position_manager_contract.functions.positions(token_id).call()
+        return position
 
     # TODO: https://github.com/Uniswap/uniswap-v3-sdk/blob/6c4242f51a51929b0cd4f4e786ba8a7c8fe68443/src/utils/priceTickConversions.ts
     def positions(self, token_id: int) -> Position:
-        """ Return liquidity and reserve information for a given NFT's token_id """
+        """ Return position information for a given positions token_id
+
+            pool information is retrieved with getters from: https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/interfaces/pool/IUniswapV3PoolState.sol
+        """
         assert (isinstance(token_id, int))
 
-        position = self.nft_position_manager_contract.functions.positions(token_id).call()
+        position = self.get_position_info(token_id)
 
         # TODO: dynamically retrieve token info from address
         token_0 = Token("DAI", Address(position[2]), 18)
@@ -387,37 +423,47 @@ class PositionManager(Contract):
         pool_contract = self.get_pool_contract(pool_address)
         pool_state = self.get_pool_state(pool_contract)
 
-        # pool_amount_1, pool_amount_0 =
-        # sqrt_ratio_x96 = encodeSqrtRatioX96(pool_amount_1, pool_amount_0)
         price_sqrt_ratio_x96 = pool_state[0]
         tick_current = pool_state[1]
-        ticks = self.get_pool_ticks(pool_contract, tick_current)
+
+        # TODO: figure out how to dynamically retrieve bitmap index
+        tick_bitmap_index = 0
+        ticks = self.get_ticks(pool_address, tick_bitmap_index)
 
         print("pool ticks", ticks)
-        in_range_liquidity = self.sum_liquidity_in_range()
 
-        pool = Pool(token_0, token_1, fee, price_sqrt_ratio_x96, in_range_liquidity, tick_current, ticks)
+        # get current in range liquidity
+        pool_liquidity = pool_contract.functions.liquidity().call()
+        print("pool liquidity", pool_liquidity)
+        pool = Pool(token_0, token_1, fee, price_sqrt_ratio_x96, pool_liquidity, tick_current, ticks)
 
         tick_lower = position[5]
         tick_upper = position[6]
-        liquidity = position[7]
+        position_liquidity = position[7]
 
-        return Position(pool, tick_lower, tick_upper, liquidity)
+        return Position(pool, tick_lower, tick_upper, position_liquidity)
 
     def liquidity_at_price(self, sqrt_price_x96: int) -> int:
         """ Uses equations (L = sqrt(x*y*) and sqrt_price = sqrt(y/x) """
 
-    # TODO: implement: https://github.com/Uniswap/uniswap-v3-periphery/blob/9ca9575d09b0b8d985cc4d9a0f689f7a4470ecb7/contracts/libraries/LiquidityAmounts.sol
-    def sum_liquidity_in_range(self, tick_lower, tick_higher) -> int:
-        pass
 
     # TODO: interact with self.positions() to instantiate NFT and calculate price values
     # NFTs are controlled by NonfungiblePositionManager
-    def price_position(self, token_id: int) -> Wad:
-        """ Return the Wad price of a given token_id """
+    # https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/interfaces/pool/IUniswapV3PoolState.sol#L88
+    def price_position(self, token_id: int, current_price: int) -> Wad:
+        """ Return the Wad price of a given token_id quoted in terms of token_1 """
         assert (isinstance(token_id, int))
+        assert (isinstance(current_price, int))
 
-        position_to_price = positions(token_id)
+        position_info = self.get_position_info(token_id)
+
+        position_token_0 = position_info[10]
+        position_token_1 = position_info[11]
+
+        # token_0 assumed to base, token_1 assumed to be quote
+        position_value = (position_token_0 * current_price) + position_token_1
+
+        return position_value
 
     def increase_liquidity(self, params: IncreaseLiquidityParams) -> Transact:
         assert(isinstance(params, IncreaseLiquidityParams))
@@ -444,6 +490,9 @@ class PositionManager(Contract):
         assert (isinstance(receipt, Receipt))
 
         return list(map(lambda log_mint: log_mint, LogMint.from_receipt(receipt)))
+
+    def __repr__(self):
+        return f"UniswapV3PositionManager"
 
 
 # TODO: figure out which nft will handle abi loading
