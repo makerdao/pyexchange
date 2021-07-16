@@ -31,7 +31,7 @@ from web3 import Web3, HTTPProvider
 from pyexchange.uniswapv3 import PositionManager, SwapRouter
 from pyexchange.uniswapv3_constants import FEES, TICK_SPACING, TRADE_TYPE, MIN_TICK
 from pyexchange.uniswapv3_calldata_params import BurnParams, CollectParams, DecreaseLiquidityParams, MintParams, \
-    ExactOutputSingleParams, ExactInputSingleParams
+    ExactOutputSingleParams, ExactInputSingleParams, MulticallParams
 from pyexchange.uniswapv3_entities import Pool, Position, Route, Trade, CurrencyAmount, Fraction, PriceFraction
 from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, Tick
 from pymaker import Address, Contract, Receipt, Transact
@@ -94,7 +94,7 @@ class TestUniswapV3PositionManager(Contract):
         ## Useful for debugging failing transactions
         logger = logging.getLogger('eth')
         logger.setLevel(8)
-        # Transact.gas_estimate_for_bad_txs = 210000
+        Transact.gas_estimate_for_bad_txs = 210000
 
     # TODO: add support for approving for swap router
     def mint_tokens(self, token_0_mint_amount: Wad, token_1_mint_amount: Wad):
@@ -138,6 +138,7 @@ class TestUniswapV3PositionManager(Contract):
         amount_1 = 100 * 10 ** 18
         self.mint_tokens(Wad.from_number(amount_0), Wad.from_number(amount_1))
 
+        print(Wad.from_number(79228162514264337593543950336), Wad.from_number(79228162514264337593543950336).value)
         # starting_square_root_ratio_x96 = self.get_starting_sqrt_ratio(amount_0, amount_1)
         # liquidity = 0 # liquidity is 0 upon initalization
         # # TODO: if using formula to establish starting sqrt_ratio need to corresponding offest tick lower and higher
@@ -159,7 +160,7 @@ class TestUniswapV3PositionManager(Contract):
         slippage_tolerance = Fraction(20, 100)
         recipient = self.our_address
 
-        mint_params = MintParams(self.web3, position, recipient, slippage_tolerance, deadline)
+        mint_params = MintParams(self.web3, self.NonfungiblePositionManager_abi, position, recipient, slippage_tolerance, deadline)
         return mint_params
 
     # def test_create_and_initalize_pool(self):
@@ -180,7 +181,7 @@ class TestUniswapV3PositionManager(Contract):
         # return self.position_manager.get_pool_ticks(pool_contract, current_tick)
 
     # TODO: tie newly minted underlying assets to minted amount
-    def xtest_mint(self):
+    def test_mint(self):
         amount_0 = 100 * 10 ** 6
         amount_1 = 100 * 10 ** 18
         # create and intialize pool
@@ -250,19 +251,19 @@ class TestUniswapV3PositionManager(Contract):
         amount_1 = mint_receipt.result[0].amount_1
 
         # decrease liquidity - remove all minted liquidity
-        decrease_liquidity_params = DecreaseLiquidityParams(self.web3, token_id, liquidity, amount_0 - 1, amount_1 - 1, None)
+        decrease_liquidity_params = DecreaseLiquidityParams(self.web3, self.NonfungiblePositionManager_abi, token_id, liquidity, amount_0 - 1, amount_1 - 1, None)
         decrease_liquidity_receipt = self.position_manager.decrease_liquidity(decrease_liquidity_params).transact()
 
         assert decrease_liquidity_receipt is not None and decrease_liquidity_receipt.successful
 
         # burn previously created position
-        burn_params = BurnParams(self.web3, token_id)
+        burn_params = BurnParams(self.web3, self.NonfungiblePositionManager_abi, token_id)
         burn_receipt = self.position_manager.burn(burn_params).transact()
 
         assert burn_receipt is not None and burn_receipt.successful
 
     # multicall(decreaseLiquidity, burn)
-    def xtest_multicall_burn(self):
+    def test_multicall_burn(self):
         # create and intialize pool
         pool = self.create_and_initialize_pool(self.get_starting_sqrt_ratio(1, 1))
 
@@ -277,17 +278,20 @@ class TestUniswapV3PositionManager(Contract):
         amount_1 = mint_receipt.result[0].amount_1
 
         # decrease liquidity - remove all minted liquidity
-        decrease_liquidity_params = DecreaseLiquidityParams(self.web3, token_id, liquidity, amount_0 - 1, amount_1 - 1, None)
+        decrease_liquidity_params = DecreaseLiquidityParams(self.web3, self.NonfungiblePositionManager_abi, token_id, liquidity, amount_0 - 1, amount_1 - 1, None)
+
         # burn position following liquidity removal
-        burn_params = BurnParams(self.web3, token_id)
+        burn_params = BurnParams(self.web3, self.NonfungiblePositionManager_abi, token_id)
 
         multicall_calldata = [
-            decrease_liquidity_params.calldata.as_bytes(),
-            burn_params.calldata.as_bytes()
+            decrease_liquidity_params.calldata.value,
+            burn_params.calldata.value
         ]
-        print("burn multicall calldata", decrease_liquidity_params.calldata, burn_params.calldata)
-        multicall_receipt = self.position_manager.multicall(multicall_calldata).transact()
 
+        multicall_params = MulticallParams(self.web3, self.NonfungiblePositionManager_abi, multicall_calldata).calldata.value
+        multicall_receipt = self.position_manager.multicall([multicall_params]).transact()
+        # print("burn multicall calldata", decrease_liquidity_params.calldata, burn_params.calldata)
+        # multicall_receipt = self.position_manager.multicall(multicall_calldata).transact(from_address=self.our_address)
         assert multicall_receipt is not None and multicall_receipt.successful
 
     # TODO: add support for swaps to generate fees
@@ -324,7 +328,7 @@ class TestUniswapV3PositionManager(Contract):
 
         amount_in = trade.input_amount.quotient()
 
-        exact_output_single_params = ExactOutputSingleParams(self.web3, trade.route.token_path[0], trade.route.token_path[1], trade.route.pools[0].fee, recipient, deadline, amount_out, amount_in, price_limit)
+        exact_output_single_params = ExactOutputSingleParams(self.web3, self.SwapRouter_abi, trade.route.token_path[0], trade.route.token_path[1], trade.route.pools[0].fee, recipient, deadline, amount_out, amount_in, price_limit)
         swap = self.swap_router.swap_exact_output_single(exact_output_single_params).transact()
         assert swap is not None and swap.successful
 
@@ -332,7 +336,7 @@ class TestUniswapV3PositionManager(Contract):
         position_amount_1 = self.position_manager.get_position_info(token_id)[11]
 
         # collect fees from position
-        collect_params = CollectParams(self.web3, token_id, self.our_address, position_amount_0, position_amount_1)
+        collect_params = CollectParams(self.web3, self.NonfungiblePositionManager_abi, token_id, self.our_address, position_amount_0, position_amount_1)
         collect_receipt = self.position_manager.collect(collect_params).transact()
 
         assert collect_receipt is not None and collect_receipt.successful
@@ -349,10 +353,13 @@ class TestUniswapV3PositionManager(Contract):
         # get the token_id out of the mint transaction receipt
         token_id = mint_receipt.result[0].token_id
 
+        position_amount_0 = self.position_manager.get_position_info(token_id)[10]
+        position_amount_1 = self.position_manager.get_position_info(token_id)[11]
+        print("before swap, amounts", position_amount_0, position_amount_1)
         # TODO: need to get a new pool entity that reflects the new ticks[] reflecting the added liquidity
         minted_position = self.position_manager.positions(token_id)
 
-        amount_in = 25
+        amount_in = 1
         recipient = self.our_address
         deadline = int(time.time() + 10000)
         price_limit = 0
@@ -362,19 +369,25 @@ class TestUniswapV3PositionManager(Contract):
                                  TRADE_TYPE.EXACT_INPUT_SINGLE.value)
 
         amount_out = trade.output_amount.quotient()
-        exact_input_single_params = ExactInputSingleParams(self.web3, trade.route.token_path[0], trade.route.token_path[1], trade.route.pools[0].fee, recipient, deadline, amount_in, amount_out, price_limit)
+        exact_input_single_params = ExactInputSingleParams(self.web3, self.SwapRouter_abi, trade.route.token_path[0], trade.route.token_path[1], trade.route.pools[0].fee, recipient, deadline, amount_in, amount_out, price_limit)
 
         swap = self.swap_router.swap_exact_input_single(exact_input_single_params).transact()
         assert swap is not None and swap.successful
 
-        position_amount_0 = self.position_manager.get_position_info(token_id)[10]
-        position_amount_1 = self.position_manager.get_position_info(token_id)[11]
+        # position_amount_0 = self.position_manager.get_position_info(token_id)[10]
+        # position_amount_1 = self.position_manager.get_position_info(token_id)[11]
+        position_amount_0 = 0
+        position_amount_1 = 1
 
         # collect fees from position
-        collect_params = CollectParams(self.web3, token_id, self.our_address, position_amount_0, position_amount_1)
+        collect_params = CollectParams(self.web3, self.NonfungiblePositionManager_abi, token_id, self.our_address, position_amount_0, position_amount_1)
         collect_receipt = self.position_manager.collect(collect_params).transact()
 
         assert collect_receipt is not None and collect_receipt.successful
+
+        post_collect_position = self.position_manager.positions(token_id)
+        print("post collect", post_collect_position)
+        assert False
 
     # TODO: multicall[collect, decreaseLiquidity, burn]
     def test_collect_and_burn(self):

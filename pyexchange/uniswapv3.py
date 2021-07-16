@@ -54,65 +54,9 @@ from eth_abi.registry import registry as default_registry
 from web3._utils.events import get_event_data
 from web3.types import EventData
 
-# TODO: figure out division of responsibiliies between uniswapv3_entitites.Pool and UniswapV3
+from pyexchange.uniswapv3_logs import LogIncreaseLiquidity, LogDecreaseLiquidity, LogCollect
 from pyexchange.uniswapv3_math import encodeSqrtRatioX96
 
-
-class UniswapV3(Contract):
-    """
-    UniswapV3 Python Client
-
-    Each UniswapV3 instance is intended to be used with a single token pair at a time. 
-    Multiple fee pools per token pair are supported.
-
-
-    Interacting with pool, router, and if deploying a new pool, factory contracts.
-    Pool: https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/UniswapV3Pool.sol
-
-    Documentation is available here: https://docs.uniswap.org/concepts/V3-overview/glossary
-    """
-
-    # IUniswapV3Pool_abi = Contract._load_abi(__name__, 'abi/IUniswapV3Pool.abi')['abi']
-
-    def __init__(self, web3: Web3, token_a: Token, token_b: Token, keeper_address: Address, swap_router_address: Address, factory_address: Address, pool_fee: Wad):
-        assert (isinstance(web3, Web3))
-        assert (isinstance(token_a, Token))
-        assert (isinstance(token_b, Token))
-        assert (isinstance(keeper_address, Address))
-        assert (isinstance(swap_router_address, Address))
-        assert (isinstance(factory_address, Address))
-        assert (isinstance(pool_fee, Wad))
-
-        self.web3 = web3
-        self.pool_fee = pool_fee
-        self.token_a = token_a
-        self.token_b = token_b
-
-    def get_pool_balance_of_token(self, token: Token, pool_address: Address) -> Wad:
-        assert (isinstance(token, Token))
-        assert (isinstance(pool_address, Address))
-
-        return token.normalize_amount(ERC20Token(web3=self.web3, address=token.address).balance_of(pool_address))
-
-    def get_account_token_balance(self, token: Token) -> Wad:
-        assert (isinstance(token, Token))
-
-        return token.normalize_amount(ERC20Token(web3=self.web3, address=token.address).balance_of(self.account_address))
-
-    def get_account_eth_balance(self) -> Wad:
-        return Wad.from_number(Web3.fromWei(self.web3.eth.getBalance(self.account_address.address), 'ether'))
-
-    # TODO: determine if other abstractions should be used instead
-    def get_pool_info(self):
-        """ call slot0 which stores current price, tick, fees, and oracle information for a pool"""
-        pool.get_pool_info()
-
-    def observe_price(self, seconds_ago: int) -> Wad:
-        """ observe price over specified number of seconds  """
-        assert (isinstance(seconds_ago, int))
-
-        # TODO: finish implementing
-        return Wad.from_number(pool_contract.functions.observe(seconds_ago).call())
 
 
 # TODO: add registering keys directly to SwapRouter?
@@ -142,21 +86,17 @@ class SwapRouter(Contract):
         approval_function = directly()
         return approval_function(erc20_token, self.swap_router_address, 'SwapRouter')
 
-    # TODO: remove this?
-    # state machine - given route and trades to execute, return transact
-    def determine_swap_method(self, trade, route) -> Transact:
-        pass
-
-    # TODO: ensure valid return type check ... return Params?
-    def build_swap_multicall(self, trades: List[Trade], options: dict) -> Transact:
-        assert isinstance(trades, List)
-
-        calldata = []
-
     @staticmethod
     def encode_route_to_path(route: Route, exact_output: bool) -> str:
         assert(isinstance(route, Route))
         assert (isinstance(exact_output, bool))
+
+    def multicall(self, calldata: List[bytes]) -> Transact:
+        """ multicall takes as input List[bytes[]] corresponding to each method call to be bundled """
+        assert(isinstance(calldata, List))
+
+        return Transact(self, self.web3, self.SwapRouter_abi, self.swap_router_address, self.swap_router_contract,
+                        'multicall', [calldata])
 
     def swap_exact_output(self, params: ExactOutputParams) -> Transact:
         """ Swap for a specified output amount across multiple pools """
@@ -188,51 +128,6 @@ class SwapRouter(Contract):
 
     def __repr__(self):
         return f"UniswapV3SwapRouter"
-
-
-# TODO: move this to pymaker and add tests
-# TODO: paramaterize abi as well, as opposed to hardcoding to position manager
-# TODO: figure out how to handle arbitrary event shapes -> conform to common interface (from_log)
-class LogEvent:
-    """ subclass this method with a given events shape """
-    @staticmethod
-    def from_event_data(self, event_data: EventData):
-        assert (isinstance(event_data, EventData))
-        raise NotImplementedError
-
-
-# TODO: make this generalizable?
-class LogMint:
-    """ seth keccak $(seth --from-ascii "IncreaseLiquidity(uint256,uint128,uint256,uint256)") == 0x3067048beee31b25b2f1681f88dac838c8bba36af25bfb2b7cf7473a5847e35f """
-    def __init__(self, log):
-        self.token_id = log["args"]["tokenId"]
-        self.liquidity = log["args"]["liquidity"]
-        self.amount_0 = log["args"]["amount0"]
-        self.amount_1 = log["args"]["amount1"]
-
-    @classmethod
-    def from_receipt(cls, receipt: Receipt):
-        assert (isinstance(receipt, Receipt))
-
-        liquidity_logs = []
-
-        if receipt.logs is not None:
-            for log in receipt.logs:
-                if len(log['topics']) > 0 and log['topics'][0] == HexBytes('0x3067048beee31b25b2f1681f88dac838c8bba36af25bfb2b7cf7473a5847e35f'):
-                    log_token_a_transfer_out_abi = [abi for abi in PositionManager.NonfungiblePositionManager_abi if abi.get('name') == 'IncreaseLiquidity'][0]
-                    codec = ABICodec(default_registry)
-                    event_data = get_event_data(codec, log_token_a_transfer_out_abi, log)
-
-                    liquidity_logs.append(LogMint(event_data))
-
-        return liquidity_logs
-
-class CreatePoolLogEvent(LogEvent):
-    def __init__(self):
-        pass
-
-    def from_event_data(self, event_data: EventData):
-        pass
 
 
 class PositionManager(Contract):
@@ -312,46 +207,15 @@ class PositionManager(Contract):
         assert(isinstance(params, DecreaseLiquidityParams))
 
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
-                        'decreaseLiquidity', [tuple(params.calldata_args)])
-
-    def get_logs_from_receipt(self, receipt: Receipt, topics: List[HexBytes], event_names: List[str], log_class: LogEvent) -> List:
-        """ Retrieve method call return data from log events
-            topic can be generated by running on seth CLI:  seth keccak $(seth --from-ascii "{event_name}({method_signature})")
-        """
-        assert (isinstance(receipt, Receipt))
-        assert (isinstance(topics, List))
-        assert (isinstance(event_names, str))
-        # assert (isinstance(log_class, LogEvent))
-
-        logs = []
-
-        if receipt.logs is not None:
-            for log in receipt.logs:
-                for topic in topics:
-                    if len(log['topics']) > 0 and log['topics'][0] == topic:
-                        for event_name in event_names:
-                            log_event_abi = [abi for abi in self.NonfungiblePositionManager_abi if abi.get('name') == event_name][0]
-                            codec = ABICodec(default_registry)
-                            event_data = get_event_data(codec, log_event_abi, log)
-
-                            logs.append(log_class.from_event_data(event_data))
-
-        return logs
+                        'decreaseLiquidity', [tuple(params.calldata_args)], None, self._get_decrease_liquidity_result_function())
 
     # TODO: figure out how to build out the Position object
     def mint(self, params: MintParams) -> Transact:
         """ Mint a new position NFT by adding liquidity to the specified tick range """
         assert(isinstance(params, MintParams))
 
-        # get Invocation
-        # mint_invocation = params.prepare_invocation()
-        # get Transact
-        # transact = mint_invocation.invoke()
-        # return transact
-
-        # print([params.calldata.as_bytes()], type([params.calldata.as_bytes()]), type(params.calldata.as_bytes()))
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
-                        'mint', [tuple(params.calldata_args)], None, self._get_minted_token_id_result_function)
+                        'mint', [tuple(params.calldata_args)], None, self._get_increase_liquidity_result_function())
 
     # TODO: change return type to UniV3NFT
     def migrate_position(self, lp_token_address: Address) -> NFT:
@@ -466,30 +330,48 @@ class PositionManager(Contract):
         return position_value
 
     def increase_liquidity(self, params: IncreaseLiquidityParams) -> Transact:
-        assert(isinstance(params, IncreaseLiquidityParams))
+        assert isinstance(params, IncreaseLiquidityParams)
 
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
-                        'increaseLiquidity', [tuple(params.calldata_args)])
+                        'increaseLiquidity', [tuple(params.calldata_args)], None, self._get_increase_liquidity_result_function())
 
     def collect(self, params: CollectParams) -> Transact:
         """ Collect fees that have accrued to a given position """
-        assert (isinstance(params, CollectParams))
+        assert isinstance(params, CollectParams)
 
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
-                        'collect', params.calldata_args)
+                        'collect', [tuple(params.calldata_args)], None, self._get_collect_result_function())
 
     def burn(self, params: BurnParams) -> Transact:
         """ Burn NFT by token_id and redeem for underlying tokens """
-        assert (isinstance(params, BurnParams))
+        assert isinstance(params, BurnParams)
 
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
-                        'burn', params.calldata_args)
+                        'burn', params.calldata_args, None, self._get_decrease_liquidity_result_function())
 
-    @staticmethod
-    def _get_minted_token_id_result_function(receipt: Receipt):
-        assert (isinstance(receipt, Receipt))
+    def _get_increase_liquidity_result_function(self):
 
-        return list(map(lambda log_mint: log_mint, LogMint.from_receipt(receipt)))
+        def receipt_mapper(receipt: Receipt):
+            assert (isinstance(receipt, Receipt))
+            return list(map(lambda log: log, LogIncreaseLiquidity.from_receipt(self.NonfungiblePositionManager_abi, receipt)))
+
+        return receipt_mapper
+
+    def _get_decrease_liquidity_result_function(self):
+
+        def receipt_mapper(receipt: Receipt):
+            assert (isinstance(receipt, Receipt))
+            return list(map(lambda log: log, LogDecreaseLiquidity.from_receipt(self.NonfungiblePositionManager_abi, receipt)))
+
+        return receipt_mapper
+
+    def _get_collect_result_function(self):
+
+        def receipt_mapper(receipt: Receipt):
+            assert (isinstance(receipt, Receipt))
+            return list(map(lambda log: log, LogCollect.from_receipt(self.NonfungiblePositionManager_abi, receipt)))
+
+        return receipt_mapper
 
     def __repr__(self):
         return f"UniswapV3PositionManager"
