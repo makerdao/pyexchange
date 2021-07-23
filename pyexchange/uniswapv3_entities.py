@@ -156,6 +156,7 @@ class PriceFraction(Fraction):
         return PriceFraction(base_token, quote_token, fraction.denominator, fraction.numerator)
 
 
+# TODO: add pool address?
 class Pool:
     """ https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/entities/pool.ts """
     def __init__(self, token_0: Token, token_1: Token, fee: int, square_root_ratio_x96: int, liquidity: int, tick_current: int, ticks: List):
@@ -527,12 +528,9 @@ class Position:
         position_to_create_amount_0, position_to_create_amount_1 = self.mint_amounts()
         position_to_create = Position.from_amounts(self.pool, self.tick_lower, self.tick_upper, position_to_create_amount_0, position_to_create_amount_1, False)
 
-        # amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[0]
-        # amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[1]
-        # TODO: figure out why this worksish?
-        # using position_to_create.liquidity results in reversed amounts...
-        amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, 1).mint_amounts()[0]
-        amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, 1).mint_amounts()[1]
+        amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[0]
+        amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[1]
+
         return amount_0, amount_1
 
     # TODO: is this still necessary?
@@ -598,7 +596,6 @@ class Trade:
             amounts[0] = amount
             # for index, token in enumerate(route.token_path):
             for index in range(len(route.token_path) - 1):
-                print(index, route.pools)
                 pool = route.pools[index]
                 output_amount = pool.get_output_amount(amounts[index], None)[0]
                 amounts[index + 1] = (output_amount)
@@ -609,7 +606,6 @@ class Trade:
             assert amount.token == route.output
             amounts[len(amounts) - 1] = amount
             for index in range(len(amounts) - 1, 0, -1):
-                print(index, route.pools)
                 pool = route.pools[index - 1]
                 input_amount = pool.get_input_amount(amounts[index], None)[0] # get currency_amount (currency_amount, new_pool)
                 amounts[index - 1] = input_amount

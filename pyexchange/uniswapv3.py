@@ -31,7 +31,7 @@
 ## This will reduce the number of approvals, but would require transfering lp tokens to the contract first
 
 # Additional guides: https://blog.openzeppelin.com/ethereum-in-depth-part-2-6339cf6bddb9/
-
+import math
 import time
 import logging
 
@@ -58,25 +58,30 @@ from pyexchange.uniswapv3_logs import LogIncreaseLiquidity, LogDecreaseLiquidity
 from pyexchange.uniswapv3_math import encodeSqrtRatioX96
 
 
-
 # TODO: add registering keys directly to SwapRouter?
 class SwapRouter(Contract):
     """ Class to handle any interactions with UniswapV3 SwapRouter
     
     Code for SwapRouter.sol: https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/SwapRouter.sol
+    Code for Quoter.sol: https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/lens/Quoter.sol
     """
 
     SwapRouter_abi = Contract._load_abi(__name__, 'abi/SwapRouter.abi')['abi']
+    Quoter_abi = Contract._load_abi(__name__, 'abi/Quoter.abi')['abi']
 
     logger = logging.getLogger()
 
-    def __init__(self, web3: Web3, swap_router_address: Address):
+    def __init__(self, web3: Web3, swap_router_address: Address, quoter_address: Address):
         assert(isinstance(web3, Web3))
         assert(isinstance(swap_router_address, Address))
+        assert(isinstance(quoter_address, Address))
 
         self.web3 = web3
         self.swap_router_address = swap_router_address
         self.swap_router_contract = self._get_contract(self.web3, self.SwapRouter_abi, self.swap_router_address)
+
+        self.quoter_address = quoter_address
+        self.quoter_contract = self._get_contract(self.web3, self.Quoter_abi, self.quoter_address)
 
     def approve(self, token: Token):
         assert (isinstance(token, Token))
@@ -90,6 +95,42 @@ class SwapRouter(Contract):
     def encode_route_to_path(route: Route, exact_output: bool) -> str:
         assert(isinstance(route, Route))
         assert (isinstance(exact_output, bool))
+
+    # https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/interfaces/IQuoter.sol
+    def quote_exact_input_single(self, token_0: Token, token_1: Token, fee: int, amount_in: int, sqrt_price_limit: int) -> int:
+        """ returns the amount of tokens that would be received for a given input on a path """
+        assert isinstance(token_0, Token)
+        assert isinstance(token_1, Token)
+        assert isinstance(fee, int)
+        assert isinstance(amount_in, int)
+        assert isinstance(sqrt_price_limit, int)
+
+        amount_out = self.quoter_contract.functions.quoteExactInputSingle(token_0.address.address, token_1.address.address, fee, amount_in, sqrt_price_limit).call()
+        return amount_out
+
+    def quote_exact_input(self, path: List, amount_in: int) -> int:
+        assert isinstance(path, List)
+        assert isinstance(amount_in, int)
+
+        # TODO: convert path to bytes
+
+        amount_out = self.quoter_contract.functions.quoteExactInput()
+        return amount_out
+
+    def quote_exact_output_single(self, token_0: Token, token_1: Token, fee: int, amount_out: int, sqrt_price_limit: int) -> int:
+        assert isinstance(token_0, Token)
+        assert isinstance(token_1, Token)
+        assert isinstance(fee, int)
+        assert isinstance(amount_out, int)
+        assert isinstance(sqrt_price_limit, int)
+
+        amount_in = self.quoter_contract.functions.quoteExactOutputSingle(token_0.address.address, token_1.address.address,
+                                                                          fee, amount_out, sqrt_price_limit).call()
+        return amount_in
+
+    def quote_exact_output(self, path: List, amount_out: int) -> int:
+        assert isinstance(path, List)
+        assert isinstance(amount_out, int)
 
     def multicall(self, calldata: List[bytes]) -> Transact:
         """ multicall takes as input List[bytes[]] corresponding to each method call to be bundled """
@@ -141,14 +182,16 @@ class PositionManager(Contract):
     UniswapV3Factory_abi = Contract._load_abi(__name__, 'abi/UniswapV3Factory.abi')['abi']
     UniswapV3Pool_abi = Contract._load_abi(__name__, 'abi/UniswapV3Pool.abi')['abi']
     UniswapV3TickLens_abi = Contract._load_abi(__name__, 'abi/UniswapV3TickLens.abi')['abi']
+    weth_abi = Contract._load_abi(__name__, 'abi/WETH.abi')
 
     logger = logging.getLogger()
 
-    def __init__(self, web3: Web3, nft_position_manager_address: Address, factory_address: Address, tick_lens_address: Address):
+    def __init__(self, web3: Web3, nft_position_manager_address: Address, factory_address: Address, tick_lens_address: Address, weth_address: Address):
         assert(isinstance(web3, Web3))
         assert(isinstance(nft_position_manager_address, Address))
         assert(isinstance(factory_address, Address))
         assert(isinstance(tick_lens_address, Address))
+        assert(isinstance(weth_address, Address))
 
         self.web3: Web3 = web3
         self.nft_position_manager_address = nft_position_manager_address
@@ -161,6 +204,9 @@ class PositionManager(Contract):
         self.tick_lens_address = tick_lens_address
         self.tick_lens_contract = self._get_contract(self.web3, self.UniswapV3TickLens_abi, self.tick_lens_address)
 
+        self.weth_address = weth_address
+        self.weth_contract = self._get_contract(self.web3, self.weth_abi, self.weth_address)
+
     def approve(self, token: Token):
         assert (isinstance(token, Token))
 
@@ -171,7 +217,11 @@ class PositionManager(Contract):
 
     def _set_address_order(self, token_0: Token, token_1: Token) -> Tuple:
         """ UniswapV3 expects address token_0 to be < token_1 """
-        if token_0.address.address > token_1.address.address:
+        assert isinstance(token_0, Token)
+        assert isinstance(token_1, Token)
+
+        # convert hexstring to int for comparison
+        if int(token_0.address.address, 16) > int(token_1.address.address, 16):
             self.logger.info(f"Reversing address order")
             return token_1, token_0
         else:
@@ -202,6 +252,12 @@ class PositionManager(Contract):
 
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         "createAndInitializePoolIfNecessary", create_pool_args)
+
+    def wrap_eth(self, eth_to_wrap: Wad) -> Transact:
+        """ Amount of eth (in wei) to deposit into the weth contract """
+        assert(isinstance(eth_to_wrap, Wad))
+
+        return Transact(self, self.web3, self.weth_abi, self.weth_address, self.weth_contract, "deposit", [], {"value": eth_to_wrap.value})
 
     def decrease_liquidity(self, params: DecreaseLiquidityParams) -> Transact:
         assert(isinstance(params, DecreaseLiquidityParams))
@@ -243,10 +299,14 @@ class PositionManager(Contract):
         pool_contract = self._get_contract(self.web3, self.UniswapV3Pool_abi, pool_address)
         return pool_contract
 
-    def get_pool_state(self, pool_contract) -> dict:
+    def get_pool_state(self, pool_contract) -> List:
         struct = pool_contract.functions.slot0().call()
         print(struct)
         return struct
+
+    def get_pool_price(self, pool_contract) -> int:
+        """ Get the current sqrt price of the given pool """
+        return self.get_pool_state(pool_contract)[0]
 
     def get_tick_state(self, pool_contract, current_tick: int) -> List:
         """ Retrieve state information for the given tick """
@@ -314,20 +374,32 @@ class PositionManager(Contract):
     # TODO: interact with self.positions() to instantiate NFT and calculate price values
     # NFTs are controlled by NonfungiblePositionManager
     # https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/interfaces/pool/IUniswapV3PoolState.sol#L88
+    # https://www.nansen.ai/research/the-market-making-landscape-of-uniswap-v3
     def price_position(self, token_id: int, current_price: int) -> Wad:
         """ Return the Wad price of a given token_id quoted in terms of token_1 """
         assert (isinstance(token_id, int))
         assert (isinstance(current_price, int))
 
-        position_info = self.get_position_info(token_id)
-
-        position_token_0 = position_info[10]
-        position_token_1 = position_info[11]
+        position_token_0, position_token_1 = self.get_position_reserves(token_id)
 
         # token_0 assumed to base, token_1 assumed to be quote
         position_value = (position_token_0 * current_price) + position_token_1
+        return Wad.from_number(position_value)
 
-        return position_value
+    def get_position_reserves(self, token_id) -> Tuple:
+        """ Given a token_id, return a tuple of a positions asset x, and asset y reserves """
+        assert (isinstance(token_id, int))
+
+        position_info = self.get_position_info(token_id)
+
+        liquidity = position_info[7]
+        price_upper_tick = 1.0001 ** position_info[5]
+        price_lower_tick = 1.0001 ** position_info[6]
+
+        position_token_0 = liquidity / math.sqrt(price_upper_tick)  # L / sqrt(pUpper)
+        position_token_1 = liquidity * math.sqrt(price_lower_tick)  # L * sqrt(pLower)
+
+        return position_token_0, position_token_1
 
     def increase_liquidity(self, params: IncreaseLiquidityParams) -> Transact:
         assert isinstance(params, IncreaseLiquidityParams)
