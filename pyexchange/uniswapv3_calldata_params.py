@@ -203,7 +203,7 @@ class IncreaseLiquidityParams(Params):
     def __init__(self, web3: Web3, contract_abi: List, token_id: int, amount_0_desired: int, amount_1_desired: int, amount_0_min: int, amount_1_min: int, deadline: int):
         assert (isinstance(web3, Web3))
         assert(isinstance(contract_abi, List))
-        assert (isinstance(token_id, int))
+        assert(isinstance(token_id, int))
         assert(isinstance(amount_0_desired, int))
         assert(isinstance(amount_1_desired, int))
         assert(isinstance(amount_0_min, int))
@@ -311,10 +311,10 @@ class ExactOutputSingleParams(Params):
 
 class ExactInputParams(Params):
 
-    def __init__(self, web3: Web3, contract_abi: List, path: bytes, recipient: Address, deadline: int, amount_in: int, amount_out_minimum: int):
+    def __init__(self, web3: Web3, contract_abi: List, path: str, recipient: Address, deadline: int, amount_in: int, amount_out_minimum: int):
         assert (isinstance(web3, Web3))
         assert(isinstance(contract_abi, List))
-        assert (isinstance(path, bytes))
+        assert (isinstance(path, str))
         assert (isinstance(recipient, Address))
         assert(isinstance(deadline, int) or (deadline is None))
         assert (isinstance(amount_in, int))
@@ -341,10 +341,10 @@ class ExactInputParams(Params):
 
 class ExactOutputParams(Params):
 
-    def __init__(self, web3: Web3, contract_abi: List, path: bytes, recipient: Address, deadline: int, amount_out: int, amount_in_maximum: int):
+    def __init__(self, web3: Web3, contract_abi: List, path: str, recipient: Address, deadline: int, amount_out: int, amount_in_maximum: int):
         assert (isinstance(web3, Web3))
         assert (isinstance(contract_abi, List))
-        assert (isinstance(path, bytes))
+        assert (isinstance(path, str))
         assert (isinstance(recipient, Address))
         assert(isinstance(deadline, int) or (deadline is None))
         assert (isinstance(amount_out, int))

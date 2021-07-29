@@ -159,7 +159,7 @@ class PriceFraction(Fraction):
 # TODO: add pool address?
 class Pool:
     """ https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/entities/pool.ts """
-    def __init__(self, token_0: Token, token_1: Token, fee: int, square_root_ratio_x96: int, liquidity: int, tick_current: int, ticks: List):
+    def __init__(self, token_0: Token, token_1: Token, fee: int, square_root_ratio_x96: int, liquidity: int, tick_current: int, ticks: List, chain_id: int = 1):
         assert isinstance(token_0, Token)
         assert isinstance(token_1, Token)
         assert isinstance(fee, int)
@@ -168,9 +168,9 @@ class Pool:
         assert isinstance(tick_current, int)
         # TODO: remove None check?
         assert (isinstance(ticks, List) or (ticks is None))
+        assert isinstance(chain_id, int)
 
-        # TODO: dynamincally determine chain_id
-        self.chain_id = 1 #hardcode to mainnet
+        self.chain_id = chain_id #hardcode to mainnet
 
         self.token_0 = token_0
         self.token_1 = token_1
@@ -556,8 +556,9 @@ class Route:
             next_token = pool.token_1 if current_input_token == pool.token_0 else pool.token_0
             token_path.append(next_token)
 
-        # TODO: check that every pool has a common chain_id
+        # check that every pool in the route is on the same network
         self.chain_id = pools[0].chain_id
+        assert all(p.chain_id == self.chain_id for p in pools)
 
         self.pools = pools
         self.token_path = token_path
@@ -580,7 +581,6 @@ class Trade:
         self.output_amount = output_amount
         self.trade_type = trade_type
 
-    # TODO: make trade types an explicit enum?
     @staticmethod
     def from_route(route: Route, amount: CurrencyAmount, trade_type: str):
         """ Construct a new Trade entity from the simulated result of swapping across the given route """

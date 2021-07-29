@@ -39,6 +39,9 @@ from web3 import Web3
 from typing import List, Tuple, Optional
 from hexbytes import HexBytes
 
+from eth_abi import encode_abi
+from eth_abi.packed import encode_abi_packed
+
 from pyexchange.uniswapv3_calldata_params import BurnParams, CollectParams, DecreaseLiquidityParams, \
     IncreaseLiquidityParams, MintParams, ExactInputSingleParams, ExactInputParams, ExactOutputSingleParams, \
     ExactOutputParams, Params
@@ -47,6 +50,7 @@ from pymaker import Calldata, Contract, Address, Transact, Wad, Receipt
 from pymaker.approval import directly
 from pymaker.model import Token
 from pymaker.token import ERC20Token, NFT
+from pymaker.util import bytes_to_hexstring
 
 # TODO: move this elsewhere when LogEvent location is determined
 from eth_abi.codec import ABICodec
@@ -58,7 +62,53 @@ from pyexchange.uniswapv3_logs import LogIncreaseLiquidity, LogDecreaseLiquidity
 from pyexchange.uniswapv3_math import encodeSqrtRatioX96
 
 
+class PermitOptions:
+
+    # TODO: handle selfPermit vs selfPermitAllowed options
+    def __init__(self, v: int, r: str, s: str, amount: int, deadline: int):
+        assert isinstance(v, int)
+        assert isinstance(r, str)
+        assert isinstance(s, str)
+        assert isinstance(amount, int)
+        assert isinstance(deadline, int)
+
+
+class Permit:
+    """ https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/selfPermit.ts """
+
+    # TODO: generalize usage with calldata_params
+    def encode_calldata(self, web3: Web3, fn_signature: str, arguments: List, contract_abi) -> Calldata:
+        """ encode inputted contract and methods with call arguments as pymaker.Calldata """
+        assert isinstance(web3, Web3)
+        assert isinstance(fn_signature, str)
+        assert isinstance(arguments, List)
+
+        # TODO: add Invocation support
+        return Calldata.from_contract_abi(web3, fn_signature, arguments, contract_abi)
+
+    def encode_permit(self, token: Token, permit_options: PermitOptions, web3: Web3, abi: List) -> Calldata:
+        is_allowed_permit = 'nonce' in permit_options
+
+        self_permit_method = "selfPermit(address,uint256,uint256,uint8,bytes32,bytes32)"
+        self_permit_allowed_method = "selfPermitAllowed(address,uint256,uint256,uint8,bytes32,bytes32)"
+
+        if is_allowed_permit:
+            permit_allowed_calldata = self.encode_calldata(web3, self_permit_allowed_method, [
+                token.address.address,
+                HexBytes(permit_options.nonce),
+                HexBytes(permit_options.expiry),
+                permit_options.v,
+                permit_options.r,
+                permit_options.s
+            ], abi)
+            return permit_allowed_calldata
+        else:
+            permit_calldata = self.encode_calldata(web3, self_permit_method, [permit_options], abi)
+            return permit_calldata
+
+
 # TODO: add registering keys directly to SwapRouter?
+# TODO: Inherit from permit class as well
 class SwapRouter(Contract):
     """ Class to handle any interactions with UniswapV3 SwapRouter
     
@@ -80,6 +130,9 @@ class SwapRouter(Contract):
         self.swap_router_address = swap_router_address
         self.swap_router_contract = self._get_contract(self.web3, self.SwapRouter_abi, self.swap_router_address)
 
+        # quoter implemented for simple use cases.
+        ## This doesn't account for slippage or front running, as it is executed at the current chain state,
+        ## and will introduce an additional time delay into client actions while the call is processed.
         self.quoter_address = quoter_address
         self.quoter_contract = self._get_contract(self.web3, self.Quoter_abi, self.quoter_address)
 
@@ -91,10 +144,41 @@ class SwapRouter(Contract):
         approval_function = directly()
         return approval_function(erc20_token, self.swap_router_address, 'SwapRouter')
 
+    # TODO: move this to route entity
     @staticmethod
     def encode_route_to_path(route: Route, exact_output: bool) -> str:
+        """ Convert a route to a hex encoded path"""
         assert(isinstance(route, Route))
         assert (isinstance(exact_output, bool))
+
+        route_input_token = route.input
+
+        path_to_encode = {}
+        path_to_encode["input_token"] = route_input_token
+
+        for i, pool in enumerate(route.pools):
+            output_token = pool.token_1 if pool.token_0 == path_to_encode["input_token"] else pool.token_0
+            print("pool tokens", pool.token_0, pool.token_1, pool.token_0.address, pool.token_1.address)
+            if i == 0:
+                path_to_encode["input_token"] = output_token
+                path_to_encode["types"] = ['address','uint24','address']
+                path_to_encode["path"] = [route_input_token.address.address, pool.fee, output_token.address.address]
+            else:
+                path_to_encode["input_token"] = output_token
+                path_to_encode["types"] = path_to_encode["types"] + ['uint24','address']
+                path_to_encode["path"] = path_to_encode["path"] + [pool.fee, output_token.address.address]
+
+        # encode
+        print("pre encoding state", path_to_encode, path_to_encode["types"].reverse())
+        if exact_output:
+            path_to_encode["types"].reverse()
+            path_to_encode["path"].reverse()
+
+        encoded_path = encode_abi_packed(path_to_encode["types"], path_to_encode["path"])
+        encoded_path_test = Web3.test_pack_encoder(path_to_encode["types"], path_to_encode["path"])
+        print("encoded path", encoded_path, bytes_to_hexstring(encoded_path), encoded_path_test)
+
+        return bytes_to_hexstring(encoded_path)
 
     # https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/interfaces/IQuoter.sol
     def quote_exact_input_single(self, token_0: Token, token_1: Token, fee: int, amount_in: int, sqrt_price_limit: int) -> int:
@@ -108,13 +192,12 @@ class SwapRouter(Contract):
         amount_out = self.quoter_contract.functions.quoteExactInputSingle(token_0.address.address, token_1.address.address, fee, amount_in, sqrt_price_limit).call()
         return amount_out
 
-    def quote_exact_input(self, path: List, amount_in: int) -> int:
-        assert isinstance(path, List)
+    def quote_exact_input(self, path: str, amount_in: int) -> int:
+        """ Given a hex encoded path, and a desired amount_in, return the required amount_out """
+        assert isinstance(path, str)
         assert isinstance(amount_in, int)
 
-        # TODO: convert path to bytes
-
-        amount_out = self.quoter_contract.functions.quoteExactInput()
+        amount_out = self.quoter_contract.functions.quoteExactInput(path, amount_in).call()
         return amount_out
 
     def quote_exact_output_single(self, token_0: Token, token_1: Token, fee: int, amount_out: int, sqrt_price_limit: int) -> int:
@@ -128,9 +211,13 @@ class SwapRouter(Contract):
                                                                           fee, amount_out, sqrt_price_limit).call()
         return amount_in
 
-    def quote_exact_output(self, path: List, amount_out: int) -> int:
-        assert isinstance(path, List)
+    def quote_exact_output(self, path: str, amount_out: int) -> int:
+        """ Given a hex encoded path, and a desired amount_out, return the required amount_in"""
+        assert isinstance(path, str)
         assert isinstance(amount_out, int)
+
+        amount_in = self.quoter_contract.functions.quoteExactInput(path, amount_out).call()
+        return amount_in
 
     def multicall(self, calldata: List[bytes]) -> Transact:
         """ multicall takes as input List[bytes[]] corresponding to each method call to be bundled """
