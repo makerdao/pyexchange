@@ -53,7 +53,7 @@ class TestUniswapV3SwapRouter(Contract):
     Quoter_bin = Contract._load_bin(__name__, '../pyexchange/abi/Quoter.bin')
 
     def setup_class(self):
-        # time.sleep(10)
+        time.sleep(10)
         self.web3 = Web3(HTTPProvider("http://0.0.0.0:8555"))
         self.web3.eth.defaultAccount = Web3.toChecksumAddress("0x9596C16D7bF9323265C2F2E22f43e6c80eB3d943")
         register_private_key(self.web3, "0x91cf2cc3671a365fcbf38010ff97ee31a5b7e674842663c56769e41600696ead")
@@ -121,8 +121,10 @@ class TestUniswapV3SwapRouter(Contract):
 
 
         token_id = weth_dai_mint_receipt.result[0].token_id
-        print("minted dai_usdc value", self.position_manager.price_position(token_id, 1900))
-        return weth_dai_pool
+        print("minted_pool token_id", token_id)
+        minted_position = self.position_manager.positions(token_id, weth_dai_pool.token_0, weth_dai_pool.token_1)
+        print("minted weth_dai value", self.position_manager.price_position(token_id, 1900))
+        return minted_position.pool
 
     def deploy_and_mint_dai_usdc(self, position_manager_helpers) -> Pool:
         # deploy dai_usdc pool and mint initial liquidity to swap against
@@ -140,8 +142,10 @@ class TestUniswapV3SwapRouter(Contract):
 
 
         token_id = dai_usdc_mint_receipt.result[0].token_id
+        print("minted_pool token_id", token_id)
+        minted_position = self.position_manager.positions(token_id, dai_usdc_pool.token_0, dai_usdc_pool.token_1)
         print("minted dai_usdc value", self.position_manager.price_position(token_id, 1))
-        return dai_usdc_pool
+        return minted_position.pool
 
     # def test_should_swap_usdc_for_dai_exact_output_single(self):
         # amount_out = 100
@@ -192,7 +196,7 @@ class TestUniswapV3SwapRouter(Contract):
         dai_usdc_pool = self.deploy_and_mint_dai_usdc(position_manager_helpers)
 
         # set trade params
-        weth_in = 0
+        weth_in = 1
         recipient = self.our_address
         slippage_tolerance = Fraction(20, 100)
         price_limit = 0
@@ -200,16 +204,16 @@ class TestUniswapV3SwapRouter(Contract):
 
         # define route from weth to usdc via dai
         path = [weth_dai_pool, dai_usdc_pool]
-        # path = [weth_dai_pool]
         route = Route(path, self.token_weth, self.token_usdc)
 
         encoded_path = self.swap_router.encode_route_to_path(route, False)
 
         # TODO: fix this calculation
-        # trade = Trade.from_route(route, CurrencyAmount.from_raw_amount(self.token_weth, weth_in), TRADE_TYPE.EXACT_INPUT.value)
+        trade = Trade.from_route(route, CurrencyAmount.from_raw_amount(self.token_weth, weth_in), TRADE_TYPE.EXACT_INPUT.value)
         # usdc_out = trade.minimum_amount_out(slippage_tolerance)
+        usdc_out = 0
 
-        usdc_out = self.swap_router.quote_exact_input(encoded_path, weth_in)
+        # usdc_out = self.swap_router.quote_exact_input(encoded_path, weth_in)
 
         exact_input_params = ExactInputParams(self.web3, self.SwapRouter_abi, encoded_path, recipient, deadline, weth_in, usdc_out)
 

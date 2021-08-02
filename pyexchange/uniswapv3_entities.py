@@ -594,7 +594,6 @@ class Trade:
         if trade_type == "exactInput" or trade_type == "exactInputSingle":
             assert amount.token == route.input
             amounts[0] = amount
-            # for index, token in enumerate(route.token_path):
             for index in range(len(route.token_path) - 1):
                 pool = route.pools[index]
                 output_amount = pool.get_output_amount(amounts[index], None)[0]

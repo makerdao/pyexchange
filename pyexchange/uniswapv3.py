@@ -15,22 +15,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
-##############################
-
-# SWAP is nodelegatecall
-## uniswapv3 router simply acts to calculate the exact input amounts, and generate a callback, that can be retrieved by the front end and then used to seperately call out to the pool contract.
-## unlike univ2 there's msg.sender is only used to check implementation of IUniswapV3SwapCallback interface. Recipient is otherwise available as a callback param
-
-# other pool functions are open
-## contracts can call mint, burn, collect for position management and fee collection.
-## Fees need to be manually collected by NFT holder.
-
-# TODO:
-## update pool token liquidator to call removeLiquidity() directly on router, and then transfer instead of transerFrom as tokens are now hold by the smart contract.
-## This will reduce the number of approvals, but would require transfering lp tokens to the contract first
-
-# Additional guides: https://blog.openzeppelin.com/ethereum-in-depth-part-2-6339cf6bddb9/
 import math
 import time
 import logging
@@ -158,7 +142,6 @@ class SwapRouter(Contract):
 
         for i, pool in enumerate(route.pools):
             output_token = pool.token_1 if pool.token_0 == path_to_encode["input_token"] else pool.token_0
-            print("pool tokens", pool.token_0, pool.token_1, pool.token_0.address, pool.token_1.address)
             if i == 0:
                 path_to_encode["input_token"] = output_token
                 path_to_encode["types"] = ['address','uint24','address']
@@ -169,14 +152,12 @@ class SwapRouter(Contract):
                 path_to_encode["path"] = path_to_encode["path"] + [pool.fee, output_token.address.address]
 
         # encode
-        print("pre encoding state", path_to_encode, path_to_encode["types"].reverse())
         if exact_output:
             path_to_encode["types"].reverse()
             path_to_encode["path"].reverse()
 
         encoded_path = encode_abi_packed(path_to_encode["types"], path_to_encode["path"])
         encoded_path_test = Web3.test_pack_encoder(path_to_encode["types"], path_to_encode["path"])
-        print("encoded path", encoded_path, bytes_to_hexstring(encoded_path), encoded_path_test)
 
         return bytes_to_hexstring(encoded_path)
 
@@ -258,6 +239,7 @@ class SwapRouter(Contract):
         return f"UniswapV3SwapRouter"
 
 
+# TODO: add inheritance from Permit
 class PositionManager(Contract):
     """
 
@@ -352,7 +334,6 @@ class PositionManager(Contract):
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         'decreaseLiquidity', [tuple(params.calldata_args)], None, self._get_decrease_liquidity_result_function())
 
-    # TODO: figure out how to build out the Position object
     def mint(self, params: MintParams) -> Transact:
         """ Mint a new position NFT by adding liquidity to the specified tick range """
         assert(isinstance(params, MintParams))
@@ -360,7 +341,7 @@ class PositionManager(Contract):
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         'mint', [tuple(params.calldata_args)], None, self._get_increase_liquidity_result_function())
 
-    # TODO: change return type to UniV3NFT
+    # TODO: implement && change return type to UniV3NFT
     def migrate_position(self, lp_token_address: Address) -> NFT:
         """ migrate UniV2LP tokens to a v3 NFT """
         assert (isinstance(lp_token_address, Address))
@@ -400,9 +381,10 @@ class PositionManager(Contract):
         tick = pool_contract.functions.ticks(current_tick).call()
         return tick
 
-    # https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/lens/TickLens.sol
     def get_ticks(self, pool_address: Address, tick_bitmap_index: int) -> List:
-        """ Get the initialized tick state for a given pool and bitmap index """
+        """ Get the initialized tick state for a given pool and bitmap index,
+         by calling the TickLens contract: https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/lens/TickLens.sol
+        """
         assert isinstance(pool_address, Address)
         assert isinstance(tick_bitmap_index, int)
 
@@ -415,19 +397,19 @@ class PositionManager(Contract):
         position = self.nft_position_manager_contract.functions.positions(token_id).call()
         return position
 
-    # TODO: https://github.com/Uniswap/uniswap-v3-sdk/blob/6c4242f51a51929b0cd4f4e786ba8a7c8fe68443/src/utils/priceTickConversions.ts
-    def positions(self, token_id: int) -> Position:
-        """ Return position information for a given positions token_id
+    def positions(self, token_id: int, token_0: Token, token_1: Token) -> Position:
+        """ Return position information for a given positions token_id, and token pair
 
-            pool information is retrieved with getters from: https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/interfaces/pool/IUniswapV3PoolState.sol
+            pool information is retrieved with getters defined: https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/interfaces/pool/IUniswapV3PoolState.sol
         """
         assert (isinstance(token_id, int))
+        assert isinstance(token_0, Token)
+        assert isinstance(token_1, Token)
 
         position = self.get_position_info(token_id)
 
-        # TODO: dynamically retrieve token info from address
-        token_0 = Token("DAI", Address(position[2]), 18)
-        token_1 = Token("USDC", Address(position[3]), 6)
+        assert token_0.address == Address(position[2]) and token_1.address == Address(position[3])
+
         fee = position[4]
 
         pool_address = self.get_pool_address(token_0, token_1, fee)
@@ -454,11 +436,11 @@ class PositionManager(Contract):
 
         return Position(pool, tick_lower, tick_upper, position_liquidity)
 
+    # TODO: implement
     def liquidity_at_price(self, sqrt_price_x96: int) -> int:
         """ Uses equations (L = sqrt(x*y*) and sqrt_price = sqrt(y/x) """
+        pass
 
-
-    # TODO: interact with self.positions() to instantiate NFT and calculate price values
     # NFTs are controlled by NonfungiblePositionManager
     # https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/interfaces/pool/IUniswapV3PoolState.sol#L88
     # https://www.nansen.ai/research/the-market-making-landscape-of-uniswap-v3
@@ -489,6 +471,7 @@ class PositionManager(Contract):
         return position_token_0, position_token_1
 
     def increase_liquidity(self, params: IncreaseLiquidityParams) -> Transact:
+        """ Add liquidity to an extant position """
         assert isinstance(params, IncreaseLiquidityParams)
 
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
