@@ -34,56 +34,12 @@ from pyexchange.uniswapv3_constants import FEES
 from pyexchange.uniswapv3_entities import Pool, Position, Fraction
 
 
-# @pytest.fixture(scope="session")
-# def web3() -> Web3:
-#     # for local dockerized parity testchain
-#     web3 = web3_via_http("http://0.0.0.0:8555")
-#     web3.eth.defaultAccount = Web3.toChecksumAddress("0x9596C16D7bF9323265C2F2E22f43e6c80eB3d943")
-#     register_private_key(web3, "0x91cf2cc3671a365fcbf38010ff97ee31a5b7e674842663c56769e41600696ead")
-#     return web3
+class PriceTickRatios:
 
-# @pytest.fixture()
-# def uniswapv3_contract_artifacts() -> set:
-#     UniswapV3Factory_abi = Contract._load_abi(__name__, '../pyexchange/abi/UniswapV3Factory.abi')['abi']
-#     UniswapV3Factory_bin = Contract._load_bin(__name__, '../pyexchange/abi/UniswapV3Factory.bin')
-#     NFTDescriptor_abi = Contract._load_abi(__name__, '../pyexchange/abi/NFTDescriptor.abi')['abi']
-#     NFTDescriptor_bin = Contract._load_bin(__name__, '../pyexchange/abi/NFTDescriptor.bin')
-#     weth_abi = Contract._load_abi(__name__, '../pyexchange/abi/WETH.abi')
-#     weth_bin = Contract._load_bin(__name__, '../pyexchange/abi/WETH.bin')
-#     NonfungiblePositionManager_abi = Contract._load_abi(__name__, '../pyexchange/abi/NonfungiblePositionManager.abi')['abi']
-#     NonfungiblePositionManager_bin = Contract._load_bin(__name__, '../pyexchange/abi/NonfungiblePositionManager.bin')
-#     SwapRouter_abi = Contract._load_abi(__name__, '../pyexchange/abi/SwapRouter.abi')['abi']
-#     SwapRouter_bin = Contract._load_abi(__name__, '../pyexchange/abi/SwapRouter.bin')
-#
-#     return {
-#         UniswapV3Factory_abi,
-#         UniswapV3Factory_bin,
-#         NFTDescriptor_abi,
-#         NFTDescriptor_bin,
-#         weth_abi,
-#         weth_bin,
-#         NonfungiblePositionManager_abi,
-#         NonfungiblePositionManager_bin,
-#         SwapRouter_abi,
-#         SwapRouter_bin
-#     }
+    starting_sqrt_price = (1900, 1)
 
-# @pytest.fixture()
-# def deploy_uniswapv3_position_manager(web3, uniswapv3_contract_artifacts) -> PositionManager:
-#     self.nonfungiblePositionManager_address = Contract._deploy(web3, self.NonfungiblePositionManager_abi,
-#                                                            self.NonfungiblePositionManager_bin,
-#                                                            [self.factory_address.address, self.weth_address.address,
-#                                                             self.token_descriptor_address.address])
-#
-#     # TODO: use PositionManager.nft_position_manager_contract instead
-#     self.nonfungiblePositionManager_contract = self._get_contract(self.web3, self.NonfungiblePositionManager_abi,
-#                                                                   self.nonfungiblePositionManager_address)
-#     self.position_manager = PositionManager(self.web3, self.nonfungiblePositionManager_address, self.factory_address)
-#     return PositionManager()
-#
-# @pytest.fixture()
-# def deploy_uniswapv3_swap_router(web3, uniswapv3_contract_artifacts) -> SwapRouter:
-#     return SwapRouter()
+def price_tick_ratios():
+    return PriceTickRatios
 
 
 # https://stackoverflow.com/a/42156088
@@ -112,18 +68,17 @@ class PositionManagerHelpers:
 
         assert create_pool_receipt is not None and create_pool_receipt.successful
 
+        initialized_price = create_pool_receipt.result[0].sqrt_price_x96
+        initialized_tick = create_pool_receipt.result[0].tick
         liquidity = 0  # liquidity is 0 upon initalization
 
-        tick_current = 0
-
-        # TODO: dynamically retrieve token ordering based on comparison operator
         pool = Pool(
             token_0,
             token_1,
             fee,
-            starting_sqrt_price_x96,
+            initialized_price,
             liquidity,
-            tick_current,
+            initialized_tick,
             []
         )
         return pool
@@ -147,6 +102,7 @@ class PositionManagerHelpers:
         assert deposit_eth_receipt is not None and deposit_eth_receipt.successful
         weth_balance = self.position_manager.weth_contract.functions.balanceOf(address.address).call()
         assert weth_balance > 0
+        # assert Wad.from_number(weth_balance) == wrap_amount
 
         return weth_balance
 

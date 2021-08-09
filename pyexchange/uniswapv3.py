@@ -42,7 +42,8 @@ from eth_abi.registry import registry as default_registry
 from web3._utils.events import get_event_data
 from web3.types import EventData
 
-from pyexchange.uniswapv3_logs import LogIncreaseLiquidity, LogDecreaseLiquidity, LogCollect
+from pyexchange.uniswapv3_logs import LogIncreaseLiquidity, LogDecreaseLiquidity, LogCollect, LogInitialize, LogMint, \
+    LogSwap
 from pyexchange.uniswapv3_math import encodeSqrtRatioX96
 
 
@@ -101,6 +102,7 @@ class SwapRouter(Contract):
     """
 
     SwapRouter_abi = Contract._load_abi(__name__, 'abi/SwapRouter.abi')['abi']
+    UniswapV3Pool_abi = Contract._load_abi(__name__, 'abi/UniswapV3Pool.abi')['abi']
     Quoter_abi = Contract._load_abi(__name__, 'abi/Quoter.abi')['abi']
 
     logger = logging.getLogger()
@@ -157,7 +159,6 @@ class SwapRouter(Contract):
             path_to_encode["path"].reverse()
 
         encoded_path = encode_abi_packed(path_to_encode["types"], path_to_encode["path"])
-        encoded_path_test = Web3.test_pack_encoder(path_to_encode["types"], path_to_encode["path"])
 
         return bytes_to_hexstring(encoded_path)
 
@@ -173,12 +174,12 @@ class SwapRouter(Contract):
         amount_out = self.quoter_contract.functions.quoteExactInputSingle(token_0.address.address, token_1.address.address, fee, amount_in, sqrt_price_limit).call()
         return amount_out
 
-    def quote_exact_input(self, path: str, amount_in: int) -> int:
+    def quote_exact_input(self, path: str, amount_in: Wad) -> int:
         """ Given a hex encoded path, and a desired amount_in, return the required amount_out """
         assert isinstance(path, str)
-        assert isinstance(amount_in, int)
+        # assert isinstance(amount_in, Wad)
 
-        amount_out = self.quoter_contract.functions.quoteExactInput(path, amount_in).call()
+        amount_out = self.quoter_contract.functions.quoteExactInput(path, amount_in.value).call()
         return amount_out
 
     def quote_exact_output_single(self, token_0: Token, token_1: Token, fee: int, amount_out: int, sqrt_price_limit: int) -> int:
@@ -192,12 +193,12 @@ class SwapRouter(Contract):
                                                                           fee, amount_out, sqrt_price_limit).call()
         return amount_in
 
-    def quote_exact_output(self, path: str, amount_out: int) -> int:
+    def quote_exact_output(self, path: str, amount_out: Wad) -> int:
         """ Given a hex encoded path, and a desired amount_out, return the required amount_in"""
         assert isinstance(path, str)
-        assert isinstance(amount_out, int)
+        assert isinstance(amount_out, Wad)
 
-        amount_in = self.quoter_contract.functions.quoteExactInput(path, amount_out).call()
+        amount_in = self.quoter_contract.functions.quoteExactOutput(path, amount_out.value).call()
         return amount_in
 
     def multicall(self, calldata: List[bytes]) -> Transact:
@@ -212,28 +213,36 @@ class SwapRouter(Contract):
         assert(isinstance(params, ExactOutputParams))
 
         return Transact(self, self.web3, self.SwapRouter_abi, self.swap_router_address, self.swap_router_contract,
-                        "exactOutput", [tuple(params.calldata_args)])
+                        "exactOutput", [tuple(params.calldata_args)], None, self._get_swap_result_function())
 
     def swap_exact_output_single(self, params: ExactOutputSingleParams) -> Transact:
         """ Swap for a specified output amount in one pool hop """
         assert(isinstance(params, ExactOutputSingleParams))
 
         return Transact(self, self.web3, self.SwapRouter_abi, self.swap_router_address, self.swap_router_contract,
-                        "exactOutputSingle", [tuple(params.calldata_args)])
+                        "exactOutputSingle", [tuple(params.calldata_args)], None, self._get_swap_result_function())
 
     def swap_exact_input(self, params: ExactInputParams) -> Transact:
         """ Given an exact set of inputs, execute swap to target outputs """
         assert(isinstance(params, ExactInputParams))
 
         return Transact(self, self.web3, self.SwapRouter_abi, self.swap_router_address, self.swap_router_contract,
-                        "exactInput", [tuple(params.calldata_args)])
+                        "exactInput", [tuple(params.calldata_args)], None, self._get_swap_result_function())
 
     def swap_exact_input_single(self, params: ExactInputSingleParams) -> Transact:
         """ Given an exact input, execute a swap to target output """
         assert(isinstance(params, ExactInputSingleParams))
 
         return Transact(self, self.web3, self.SwapRouter_abi, self.swap_router_address, self.swap_router_contract,
-                        "exactInputSingle", [tuple(params.calldata_args)])
+                        "exactInputSingle", [tuple(params.calldata_args)], None, self._get_swap_result_function())
+
+    def _get_swap_result_function(self):
+
+        def receipt_mapper(receipt: Receipt):
+            assert (isinstance(receipt, Receipt))
+            return list(map(lambda log: log, LogSwap.from_receipt(self.UniswapV3Pool_abi, receipt)))
+
+        return receipt_mapper
 
     def __repr__(self):
         return f"UniswapV3SwapRouter"
@@ -320,7 +329,7 @@ class PositionManager(Contract):
         ]
 
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
-                        "createAndInitializePoolIfNecessary", create_pool_args)
+                        "createAndInitializePoolIfNecessary", create_pool_args, None, self._get_initialize_result_function())
 
     def wrap_eth(self, eth_to_wrap: Wad) -> Transact:
         """ Amount of eth (in wei) to deposit into the weth contract """
@@ -334,6 +343,7 @@ class PositionManager(Contract):
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         'decreaseLiquidity', [tuple(params.calldata_args)], None, self._get_decrease_liquidity_result_function())
 
+    # TODO: update to use get_mint_result_function()
     def mint(self, params: MintParams) -> Transact:
         """ Mint a new position NFT by adding liquidity to the specified tick range """
         assert(isinstance(params, MintParams))
@@ -352,6 +362,13 @@ class PositionManager(Contract):
 
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         'multicall', [calldata])
+
+    # TODO: move this to uniswap_math?
+    def round_to_nearest_whole_tick(self, tick: int, tick_spacing: int) -> int:
+        assert isinstance(tick, int)
+        assert isinstance(tick_spacing, int)
+
+        return int(tick_spacing * round(tick / tick_spacing))
 
     def get_pool_address(self, token_0: Token, token_1: Token, fee: int) -> Address:
         assert isinstance(token_0, Token)
@@ -490,6 +507,22 @@ class PositionManager(Contract):
 
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         'burn', params.calldata_args, None, self._get_decrease_liquidity_result_function())
+
+    def _get_mint_result_function(self):
+
+        def receipt_mapper(receipt: Receipt):
+            assert (isinstance(receipt, Receipt))
+            return list(map(lambda log: log, LogMint.from_receipt(self.UniswapV3Pool_abi, receipt)))
+
+        return receipt_mapper
+
+    def _get_initialize_result_function(self):
+
+        def receipt_mapper(receipt: Receipt):
+            assert (isinstance(receipt, Receipt))
+            return list(map(lambda log: log, LogInitialize.from_receipt(self.UniswapV3Pool_abi, receipt)))
+
+        return receipt_mapper
 
     def _get_increase_liquidity_result_function(self):
 

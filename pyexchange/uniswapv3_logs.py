@@ -63,6 +63,67 @@ class LogEvent:
 #     return logs
 
 
+class LogInitialize:
+    """ seth keccak $(seth --from-ascii "Initialize(uint160,int24)") == 0x98636036cb66a9c19a37435efc1e90142190214e8abeb821bdba3f2990dd4c95
+        Initialize is defined in uniswap-v3-core: https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/interfaces/pool/IUniswapV3PoolEvents.sol
+
+    """
+    def __init__(self, log):
+        self.sqrt_price_x96 = log["args"]["sqrtPriceX96"]
+        self.tick = log["args"]["tick"]
+
+    @classmethod
+    def from_receipt(cls, contract_abi: List, receipt: Receipt):
+        assert (isinstance(contract_abi, List))
+        assert (isinstance(receipt, Receipt))
+
+        initialize_logs = []
+
+        if receipt.logs is not None:
+            for log in receipt.logs:
+                if len(log['topics']) > 0 and log['topics'][0] == HexBytes('0x98636036cb66a9c19a37435efc1e90142190214e8abeb821bdba3f2990dd4c95'):
+                    log_initialize_abi = [abi for abi in contract_abi if abi.get('name') == 'Initialize'][0]
+                    codec = ABICodec(default_registry)
+                    event_data = get_event_data(codec, log_initialize_abi, log)
+
+                    initialize_logs.append(LogInitialize(event_data))
+
+        return initialize_logs
+
+
+class LogMint:
+    """ seth keccak $(seth --from-ascii "Mint(address,address,int24,int24,uint128,uint256,uint256)") == 0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde
+
+        Mint is defined in uniswap-v3-core: https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/interfaces/pool/IUniswapV3PoolEvents.sol
+    """
+    def __init__(self, log):
+        self.sender = log["args"]["sender"]
+        self.owner = log["args"]["owner"]
+        self.tick_lower = log["args"]["tickLower"]
+        self.tick_upper = log["args"]["tickUpper"]
+        self.liquidity = log["args"]["amount"]
+        self.amount_0 = log["args"]["amount0"]
+        self.amount_1 = log["args"]["amount1"]
+
+    @classmethod
+    def from_receipt(cls, contract_abi: List, receipt: Receipt):
+        assert (isinstance(contract_abi, List))
+        assert (isinstance(receipt, Receipt))
+
+        mint_logs = []
+
+        if receipt.logs is not None:
+            for log in receipt.logs:
+                if len(log['topics']) > 0 and log['topics'][0] == HexBytes('0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde'):
+                    log_mint_abi = [abi for abi in contract_abi if abi.get('name') == 'Mint'][0]
+                    codec = ABICodec(default_registry)
+                    event_data = get_event_data(codec, log_mint_abi, log)
+
+                    mint_logs.append(LogMint(event_data))
+
+        return mint_logs
+
+
 class LogIncreaseLiquidity:
     """ seth keccak $(seth --from-ascii "IncreaseLiquidity(uint256,uint128,uint256,uint256)") == 0x3067048beee31b25b2f1681f88dac838c8bba36af25bfb2b7cf7473a5847e35f
 
@@ -151,3 +212,35 @@ class LogCollect:
                     liquidity_logs.append(LogCollect(event_data))
 
         return liquidity_logs
+
+
+class LogSwap:
+    """ seth keccak $(seth --from-ascii "Swap(address,address,int256,int256,uint160,uint128,int24)") == 0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67
+    """
+    def __init__(self, log):
+        self.sender = log["args"]["sender"]
+        self.owner = log["args"]["recipient"]
+        self.amount_0 = log["args"]["amount0"]
+        self.amount_1 = log["args"]["amount1"]
+        self.sqrt_price_x96 = log["args"]["sqrtPriceX96"]
+        self.liquidity = log["args"]["liquidity"]
+        self.tick = log["args"]["tick"]
+
+    @classmethod
+    def from_receipt(cls, contract_abi: List, receipt: Receipt):
+        assert (isinstance(contract_abi, List))
+        assert (isinstance(receipt, Receipt))
+
+        swap_logs = []
+
+        if receipt.logs is not None:
+            for log in receipt.logs:
+                if len(log['topics']) > 0 and log['topics'][0] == HexBytes(
+                        '0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67'):
+                    log_swap_abi = [abi for abi in contract_abi if abi.get('name') == 'Swap'][0]
+                    codec = ABICodec(default_registry)
+                    event_data = get_event_data(codec, log_swap_abi, log)
+
+                    swap_logs.append(LogSwap(event_data))
+
+        return swap_logs

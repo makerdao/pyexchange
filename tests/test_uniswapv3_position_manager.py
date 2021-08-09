@@ -170,6 +170,47 @@ class TestUniswapV3PositionManager(Contract):
         mint_params = MintParams(self.web3, self.NonfungiblePositionManager_abi, position, recipient, slippage_tolerance, deadline)
         return mint_params
 
+    def test_get_tick_at_sqrt_ratio(self):
+
+        calculated_sqrt_price_ratio = self.get_starting_sqrt_ratio(1900, 1)
+        sqrt_price_ratio_expected = 1817618704642608387686662144
+
+        assert calculated_sqrt_price_ratio == sqrt_price_ratio_expected
+
+        tick = get_tick_at_sqrt_ratio(calculated_sqrt_price_ratio)
+
+        assert tick == -75500
+
+    def test_liquidity_given_balance(self):
+        test_token_1 = Token("test_1", Address("0x0000000000000000000000000000000000000001"), 18)
+        test_token_2 = Token("test_2", Address("0x0000000000000000000000000000000000000002"), 18)
+        # TODO: switch to passing in Wad?
+        # token_1_balance = Wad.from_number(10)
+        # token_2_balance = Wad.from_number(100)
+        token_1_balance = 10
+        token_2_balance = 500
+
+        sqrt_price_ratio = self.get_starting_sqrt_ratio(1, 3000)
+        current_tick = get_tick_at_sqrt_ratio(sqrt_price_ratio)
+        ticks = []
+        test_pool = Pool(test_token_1, test_token_2, FEES.MEDIUM.value, sqrt_price_ratio, 0, current_tick, ticks)
+
+        tick_lower = current_tick - TICK_SPACING.MEDIUM.value * 5
+        tick_upper = current_tick + TICK_SPACING.MEDIUM.value * 7
+        rounded_tick_lower = self.position_manager.round_to_nearest_whole_tick(tick_lower, TICK_SPACING.MEDIUM.value)
+        rounded_tick_upper = self.position_manager.round_to_nearest_whole_tick(tick_upper, TICK_SPACING.MEDIUM.value)
+        calculated_position = Position.from_amounts(test_pool, rounded_tick_lower, rounded_tick_upper, token_1_balance, token_2_balance, False)
+
+        test_liquidity = calculated_position.liquidity
+        print("test liquidity", test_liquidity)
+        assert test_liquidity == 253
+
+        test_position = Position(test_pool, rounded_tick_lower, rounded_tick_upper, test_liquidity)
+
+        amount_0, amount_1 = test_position.mint_amounts()
+        assert amount_0 == 1
+        assert amount_1 == 275
+
     # TODO: tie newly minted underlying assets to minted amount
     def test_mint_token_pool(self, position_manager_helpers):
         position_manager_helper = position_manager_helpers(self.web3, self.position_manager, self.NonfungiblePositionManager_abi, self.token_dai, self.token_usdc)
@@ -188,7 +229,7 @@ class TestUniswapV3PositionManager(Contract):
 
         position_manager_helper = position_manager_helpers(self.web3, self.position_manager, self.NonfungiblePositionManager_abi, self.token_weth, self.token_dai)
 
-        pool = position_manager_helper.create_and_initialize_pool(self.get_starting_sqrt_ratio(1900, 1), FEES.MEDIUM.value)
+        pool = position_manager_helper.create_and_initialize_pool(self.get_starting_sqrt_ratio(1, 1900), FEES.MEDIUM.value)
 
         position_manager_helper.wrap_eth(Wad.from_number(1), self.our_address)
 
@@ -196,6 +237,10 @@ class TestUniswapV3PositionManager(Contract):
 
         mint_receipt = self.position_manager.mint(mint_params).transact()
         assert mint_receipt is not None and mint_receipt.successful
+
+    def test_mint_token_pool_low_price(self):
+        """ Test minting a position for a pool that is a small fraction """
+        pass
 
     def test_get_position_from_id(self):
         # create and intialize pool
@@ -209,7 +254,7 @@ class TestUniswapV3PositionManager(Contract):
         # get the token_id out of the mint transaction receipt
         token_id = mint_receipt.result[0].token_id
 
-        position = self.position_manager.positions(token_id)
+        position = self.position_manager.positions(token_id, pool.token_0, pool.token_1)
 
         assert isinstance(position, Position)
 
@@ -218,7 +263,7 @@ class TestUniswapV3PositionManager(Contract):
         assert position_price == Wad(4002000400040001800000)
 
     # https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/base/Multicall.sol
-    # def test_multicall_mint(self):
+    # def test_multicall_permit_mint(self):
     #     amount_0 = 100 * 10 ** 6
     #     amount_1 = 100 * 10 ** 18
     #     # create and intialize pool
@@ -286,11 +331,8 @@ class TestUniswapV3PositionManager(Contract):
 
         multicall_params = MulticallParams(self.web3, self.NonfungiblePositionManager_abi, multicall_calldata).calldata.value
         multicall_receipt = self.position_manager.multicall([multicall_params]).transact()
-        # print("burn multicall calldata", decrease_liquidity_params.calldata, burn_params.calldata)
-        # multicall_receipt = self.position_manager.multicall(multicall_calldata).transact(from_address=self.our_address)
         assert multicall_receipt is not None and multicall_receipt.successful
 
-    # TODO: add support for swaps to generate fees
     def test_collect_exact_output_swap(self, position_manager_helpers):
         # create and intialize pool
         position_manager_helper = position_manager_helpers(self.web3, self.position_manager, self.NonfungiblePositionManager_abi, self.token_dai, self.token_usdc)
@@ -303,7 +345,7 @@ class TestUniswapV3PositionManager(Contract):
         # get the token_id out of the mint transaction receipt
         token_id = mint_receipt.result[0].token_id
         # TODO: need to get a new pool entity that reflects the new ticks[] reflecting the added liquidity
-        minted_position = self.position_manager.positions(token_id)
+        minted_position = self.position_manager.positions(token_id, pool.token_0, pool.token_1)
 
         # execute swaps against the pool to generate fees
         amount_out = 10
@@ -311,7 +353,6 @@ class TestUniswapV3PositionManager(Contract):
         recipient = self.our_address
         # recipient = Address("0x253De0f274677334eC814Fc99794C3F228de6fF3")
         deadline = int(time.time() + 10000)
-        # price_limit = 0
 
         # TODO: figure out why self.token_usdc != pool.token_usdc
         # route = Route([minted_position.pool], self.token_usdc, self.token_dai)
@@ -355,7 +396,7 @@ class TestUniswapV3PositionManager(Contract):
         position_amount_1 = self.position_manager.get_position_info(token_id)[11]
         print("before swap, amounts", position_amount_0, position_amount_1)
         # TODO: need to get a new pool entity that reflects the new ticks[] reflecting the added liquidity
-        minted_position = self.position_manager.positions(token_id)
+        minted_position = self.position_manager.positions(token_id, pool.token_0, pool.token_1)
 
         amount_in = 1
         recipient = self.our_address
@@ -383,9 +424,12 @@ class TestUniswapV3PositionManager(Contract):
 
         assert collect_receipt is not None and collect_receipt.successful
 
-        post_collect_position = self.position_manager.positions(token_id)
-        print("post collect", post_collect_position)
-        assert False
+        # collected_amount_0 = collect_receipt.result[0].amount_0
+        # collected_amount_1 = collect_receipt.result[0].amount_1
+        # print(collected_amount_0, collected_amount_1)
+        # assert collected_amount_0 > 0 and collected_amount_1 > 0
+        # post_collect_position = self.position_manager.positions(token_id, pool.token_0, pool.token_1)
+        # TODO: add test around collected amount
 
     # TODO: multicall[collect, decreaseLiquidity, burn]
     def test_collect_and_burn(self):

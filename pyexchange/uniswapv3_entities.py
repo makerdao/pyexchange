@@ -115,7 +115,7 @@ class CurrencyAmount(Fraction):
 # TODO: diff between CurrencyAmount and PriceFraction?? -> extend CurrencyAmount
 # TODO: add scaling based upon token decimals
 class PriceFraction(Fraction):
-
+    """ It is assumed the amounts have been normalized prior to price calculation and instantiation of PriceFraction object """
     def __init__(self, base_token: Token, quote_token: Token, denominator: int, numerator: int):
         assert isinstance(base_token, Token)
         assert isinstance(quote_token, Token)
@@ -124,15 +124,10 @@ class PriceFraction(Fraction):
 
         self.base_token = base_token
         self.quote_token = quote_token
-        # TODO: best place to normalize? leave this as wad as opposed to converting back to int?
-        # TODO: unfuck this normalization
-        # self.numerator = self.quote_token.normalize_amount(Wad.from_number(numerator)).value # quote token
-        # self.denominator = self.base_token.normalize_amount(Wad.from_number(denominator)).value # base token
 
-        # TODO: check if need to pass through or override the normalized numerator / denominator
         super().__init__(numerator, denominator)
-        self.numerator = self.quote_token.normalize_amount(Wad.from_number(numerator)).value  # quote token
-        self.denominator = self.base_token.normalize_amount(Wad.from_number(denominator)).value  # base token
+        self.numerator = numerator  # quote token
+        self.denominator = denominator  # base token
 
     def get_float_price(self) -> float:
         return float(self.numerator / self.denominator)
@@ -426,6 +421,10 @@ class Position:
     # TODO: remove top level usage of SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)?
     @staticmethod
     def max_liquidity_for_amounts(pool: Pool, sqrt_ratio_current_x96: int, sqrtRatioAX96: int, sqrtRatioBX96: int, amount_0: int, amount_1: int, use_full_precision: bool) -> int:
+        """ Calculate the amount of liquidity received for a given amount of token_0, and token_1
+
+            https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/utils/maxLiquidityForAmounts.ts#L68
+        """
         assert (isinstance(pool, Pool))
         assert (isinstance(sqrtRatioAX96, int))
         assert (isinstance(sqrtRatioBX96, int))
@@ -490,31 +489,62 @@ class Position:
         else:
             return self._mint_amounts
 
-    # TODO: determine if conversion to fractions is necessary
+    # # TODO: determine if conversion to fractions is necessary
+    # def _ratios_after_slippage(self, slippage_tolerance: Fraction) -> Tuple:
+    #     assert isinstance(slippage_tolerance, Fraction)
+    #     assert (1 > slippage_tolerance.float_quotient() > 0)
+    #
+    #     # TODO: ...convert to PriceFraction?
+    #
+    #     # TODO: figure out why the price upper is less than price lower
+    #     print("calc slippage in token 0 price", self.pool.get_token_0_price().float_quotient())
+    #     price_lower_slippage_factor = Fraction(1).subtract(slippage_tolerance)
+    #     price_upper_slippage_factor =slippage_tolerance.add(Fraction(1))
+    #     price_lower = self.pool.get_token_0_price().as_fraction().multiply(price_lower_slippage_factor)
+    #     price_upper = self.pool.get_token_0_price().as_fraction().multiply(price_upper_slippage_factor)
+    #
+    #     print("price slippage fractions", self.pool.get_token_0_price().as_fraction().float_quotient(), price_lower.float_quotient(), price_upper.float_quotient())
+    #     sqrtRatioX96Lower = encodeSqrtRatioX96(price_lower.numerator, price_lower.denominator)
+    #
+    #     if sqrtRatioX96Lower < MIN_SQRT_RATIO:
+    #         sqrtRatioX96Lower = MIN_SQRT_RATIO + 1
+    #
+    #     sqrtRatioX96Upper = encodeSqrtRatioX96(price_upper.numerator, price_upper.denominator)
+    #
+    #     if sqrtRatioX96Upper > MAX_SQRT_RATIO:
+    #         sqrtRatioX96Upper = MAX_SQRT_RATIO - 1
+    #
+    #     return (sqrtRatioX96Lower, sqrtRatioX96Upper)
+
     def _ratios_after_slippage(self, slippage_tolerance: Fraction) -> Tuple:
         assert isinstance(slippage_tolerance, Fraction)
         assert (1 > slippage_tolerance.float_quotient() > 0)
 
         # TODO: ...convert to PriceFraction?
-        price_lower = self.pool.get_token_0_price().as_fraction().multiply(Fraction(1).subtract(slippage_tolerance))
-        price_upper = self.pool.get_token_0_price().as_fraction().multiply(slippage_tolerance.add(Fraction(1)))
-        print(self.pool.get_token_0_price().as_fraction().float_quotient(), price_lower.float_quotient(), price_upper.float_quotient())
-        sqrtRatioX96Lower = encodeSqrtRatioX96(price_lower.numerator, price_lower.denominator)
+
+        # TODO: token 0 price coming back as a tiny number - rounds to 0
+
+        print("calc slippage in token 0 price", self.pool.get_token_0_price().float_quotient())
+        price_lower = int(self.pool.get_token_0_price().float_quotient() * (1 - slippage_tolerance.float_quotient()))
+        price_upper = int(self.pool.get_token_0_price().float_quotient() * (1 + slippage_tolerance.float_quotient()))
+
+        sqrtRatioX96Lower = encodeSqrtRatioX96(price_lower, 1)
 
         if sqrtRatioX96Lower < MIN_SQRT_RATIO:
             sqrtRatioX96Lower = MIN_SQRT_RATIO + 1
 
-        sqrtRatioX96Upper = encodeSqrtRatioX96(price_upper.numerator, price_upper.denominator)
+        sqrtRatioX96Upper = encodeSqrtRatioX96(price_upper, 1)
 
         if sqrtRatioX96Upper > MAX_SQRT_RATIO:
             sqrtRatioX96Upper = MAX_SQRT_RATIO - 1
 
         return (sqrtRatioX96Lower, sqrtRatioX96Upper)
 
+    # TODO: add rounding to tick at sqrt ratio?
     def mint_amounts_with_slippage(self, slippage_tolerance: Fraction) -> Tuple:
         """ Returns amount0; amount1 to mint after accounting for the given slippage_tolerance
 
-            Virtual pools are created for instantiating Position entities that can be used to determin
+            Virtual pools are created for instantiating Position entities that can be used to determine mint amounts
         """
         assert isinstance(slippage_tolerance, Fraction)
         assert (1 > slippage_tolerance.float_quotient() > 0)
@@ -528,6 +558,7 @@ class Position:
         position_to_create_amount_0, position_to_create_amount_1 = self.mint_amounts()
         position_to_create = Position.from_amounts(self.pool, self.tick_lower, self.tick_upper, position_to_create_amount_0, position_to_create_amount_1, False)
 
+        # TODO: why is this 0?
         amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[0]
         amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[1]
 
@@ -622,7 +653,7 @@ class Trade:
         if self.trade_type == TRADE_TYPE.EXACT_OUTPUT.value or self.trade_type == TRADE_TYPE.EXACT_OUTPUT_SINGLE.value:
             return self.output_amount
         else:
-            slippage_adjusted_amount = Fraction(1) \
+            slippage_adjusted_amount = Fraction(100, 100) \
                 .add(slippage_tolerance) \
                 .invert() \
                 .multiply(Fraction(self.output_amount.quotient())) \
@@ -635,10 +666,10 @@ class Trade:
         assert isinstance(slippage_tolerance, Fraction)
         assert 0 < slippage_tolerance.float_quotient() < 1
 
-        if self.trade_type == TRADE_TYPE.EXACT_INPUT.value:
+        if self.trade_type == TRADE_TYPE.EXACT_INPUT.value or self.trade_type == TRADE_TYPE.EXACT_INPUT_SINGLE.value:
             return self.input_amount
         else:
-            slippage_adjusted_amount = Fraction(1) \
+            slippage_adjusted_amount = Fraction(100, 100) \
                 .add(slippage_tolerance) \
                 .multiply(Fraction(self.input_amount.quotient())).quotient()
 
