@@ -48,7 +48,6 @@ def most_significant_bit(x: int) -> int:
     assert (isinstance(x, int))
     return int(math.log(x, 2))
 
-# TODO: check return type
 def mul_shift(value: int, multiply_by: str) -> int:
     """ multiply_by is assumed to be a hex encoded base16 number """
     assert (isinstance(value, int))
@@ -60,6 +59,7 @@ def mul_shift(value: int, multiply_by: str) -> int:
 
 def get_sqrt_ratio_at_tick(tick: int) -> int:
     assert (isinstance(tick, int))
+    assert tick >= MIN_TICK and tick <= MAX_TICK
 
     abs_tick = tick * - 1 if tick < 0 else tick
 
@@ -111,13 +111,11 @@ def get_sqrt_ratio_at_tick(tick: int) -> int:
 
     # convert back to Q64.96
     if ratio % q32 >= ZERO:
-        return int((ratio / q32) + ZERO)
+        return int((ratio / q32) + 1)
     else:
         return int(ratio / q32)
 
 # https://github.com/Uniswap/uniswap-v3-sdk/blob/c8e0d4c56e3b3ebd6446aba66523d20f2ea0fd9c/src/utils/tickMath.ts#L82
-# TODO: add FXP Qm.n typing? Add signing?
-# TODO: clean up Fxp instantiation / add constants -> add support for Fxp templates?
 def get_tick_at_sqrt_ratio(sqrtRatioX96: int) -> int:
     """ return the tick for a given Q64.96 formatted ratio (64 bit word, 96 fractional bits)
 
@@ -125,7 +123,6 @@ def get_tick_at_sqrt_ratio(sqrtRatioX96: int) -> int:
      """
     assert (isinstance(sqrtRatioX96, int))
 
-    # TODO: verify this shouldn't be << Fxp(32)
     square_root_ratio_x128 = sqrtRatioX96 << 32
 
     msb = most_significant_bit(square_root_ratio_x128)
@@ -136,19 +133,15 @@ def get_tick_at_sqrt_ratio(sqrtRatioX96: int) -> int:
         r = square_root_ratio_x128 >> (msb - 127)
     else:
         # left shift
-        # TODO: verify left shifted into Q64.64?
         r = square_root_ratio_x128 << (127 - msb)
 
-    # TODO: figure out how to deal with sign... dealt with by Fxp internals?
     log_2 = (msb - 128) << 64
 
-    # TODO: why is Fxp(Fxp) impactful in here?
     for i in range(14):
         # signed right shift
         r = (r * r) >> 127
         f = r >> 128
 
-        # TODO: figure out why this is changing it's wordsize ... need to also be Fxp?
         # leftshift bitwise OR
         log_2 = log_2 | f << (63 - i)
 
@@ -171,11 +164,13 @@ def get_tick_at_sqrt_ratio(sqrtRatioX96: int) -> int:
 # TODO: determine proper type encoding -- is word size enforcable?
 # https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/utils/encodeSqrtRatioX96.ts
 def encodeSqrtRatioX96(amount_1: int, amount_0: int) -> int:
-    """ Returns a Q64.96 uint160 composed from the ratio of amount1/amount0 """
+    """ Returns a Q64.96 uint160 composed from the ratio of amount1/amount0
+
+        It is assumed the amounts have been normalized for a tokens decimals prior to calling.
+    """
     assert (isinstance(amount_1, int))
     assert (isinstance(amount_0, int))
 
-    # TODO: figure out why this is returning 0
     # TODO: apply bitmask & 256 here to resolve potential wrapping issue?
     numerator = amount_1 << 192
     
@@ -183,7 +178,7 @@ def encodeSqrtRatioX96(amount_1: int, amount_0: int) -> int:
 
     return int(math.sqrt(ratio_x_192))
 
-def mul_div_rounding_up(a: int, b: int, denominator: int):
+def mul_div_rounding_up(a: int, b: int, denominator: int) -> int:
     assert (isinstance(a, int))
     assert (isinstance(b, int))
     assert (isinstance(denominator, int))
@@ -197,7 +192,7 @@ def mul_div_rounding_up(a: int, b: int, denominator: int):
     
     return int(result)
 
-def compute_swap_step(sqrt_ratio_current_price_x96: int, sqrt_ratio_target_price_x96: int, liquidity: int, amount_remaining: int, fee_pips: int) -> Tuple:
+def compute_swap_step(sqrt_ratio_current_price_x96: int, sqrt_ratio_target_price_x96: int, liquidity: int, amount_remaining: Wad, fee_pips: int) -> Tuple:
     """ @returns {sqrt_price_next_x96, amount_in, amount_out, fee_amount} """
     assert isinstance(sqrt_ratio_current_price_x96, int)
     assert isinstance(sqrt_ratio_target_price_x96, int)
@@ -211,7 +206,7 @@ def compute_swap_step(sqrt_ratio_current_price_x96: int, sqrt_ratio_target_price
     exact_in = amount_remaining > 0
 
     if exact_in:
-        amount_remaining_less_fee = (amount_remaining * (MAX_FEE - fee_pips)) / MAX_FEE
+        amount_remaining_less_fee = int((amount_remaining * (MAX_FEE - fee_pips)) / MAX_FEE)
         if zero_or_one:
             return_state["amount_in"] = SqrtPriceMath.get_amount_0_delta(sqrt_ratio_target_price_x96, sqrt_ratio_current_price_x96, liquidity, True)
         else:
@@ -252,7 +247,6 @@ def compute_swap_step(sqrt_ratio_current_price_x96: int, sqrt_ratio_target_price
     else:
         return_state["fee_amount"] = mul_div_rounding_up(return_state["amount_in"], fee_pips, MAX_FEE - fee_pips)
 
-    # TODO: use tuple variables in place of return_state{}
     sqrt_price_next_x96 = return_state["sqrt_price_next_x96"]
     amount_in = return_state["amount_in"]
     amount_out = return_state["amount_out"]
@@ -412,6 +406,29 @@ class Tick:
             next_initalized_tick = min(maximum, index)
             return (next_initalized_tick, next_initalized_tick == index)
 
+    # @staticmethod
+    # def tick_to_price(base_token: Token, quote_token: Token, tick: int) -> PriceFraction:
+    #     pass
+
+    # TODO: move this to PriceFraction class
+    # # https://github.com/Uniswap/uniswap-v3-sdk/blob/6c4242f51a51929b0cd4f4e786ba8a7c8fe68443/src/utils/priceTickConversions.ts
+    # @staticmethod
+    # def price_to_tick(price: PriceFraction) -> int:
+    #     """ returns the closest tick greater than or equal to the current price """
+    #     assert isinstance(price, PriceFraction)
+    #
+    #     already_sorted = price.base_token.address.address < price.quote_token.address.address
+    #
+    #     if already_sorted:
+    #         sqrt_ratio_x96 = encodeSqrtRatioX96(price.numerator, price.denominator)
+    #     else:
+    #         sqrt_ratio_x96 = encodeSqrtRatioX96(price.denominator, price.numerator)
+    #
+    #     tick = get_tick_at_sqrt_ratio(sqrt_ratio_x96)
+    #
+    #     # TODO:
+    #     next_tick_price = Tick.tick_to_price(price.base_token, price.quote_token, tick + 1)
+
 
 class SqrtPriceMath:
 
@@ -429,7 +446,7 @@ class SqrtPriceMath:
         return sqrtRatioAX96, sqrtRatioBX96
 
     @staticmethod
-    def get_amount_0_delta(sqrtRatioAX96: int, sqrtRatioBX96: int, liquidity: int, round_up: bool) -> Wad:
+    def get_amount_0_delta(sqrtRatioAX96: int, sqrtRatioBX96: int, liquidity: int, round_up: bool) -> int:
         assert (isinstance(sqrtRatioAX96, int))
         assert (isinstance(sqrtRatioBX96, int))
         assert (isinstance(liquidity, int))
@@ -437,17 +454,17 @@ class SqrtPriceMath:
         
         sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
         
-        numerator_1 = int(liquidity << 96)
+        numerator_1 = liquidity << 96
         numerator_2 = sqrtRatioBX96 - sqrtRatioAX96
 
         # TODO: cast back to int?
         if round_up:
             return mul_div_rounding_up(mul_div_rounding_up(numerator_1, numerator_2, sqrtRatioBX96), ONE, sqrtRatioAX96)
         else:
-            return ((numerator_1 * numerator_2) / sqrtRatioBX96) / sqrtRatioAX96
+            return int(((numerator_1 * numerator_2) / sqrtRatioBX96) / sqrtRatioAX96)
 
     @staticmethod
-    def get_amount_1_delta(sqrtRatioAX96: int, sqrtRatioBX96: int, liquidity: int, round_up: bool) -> Wad:
+    def get_amount_1_delta(sqrtRatioAX96: int, sqrtRatioBX96: int, liquidity: int, round_up: bool) -> int:
         assert (isinstance(sqrtRatioAX96, int))
         assert (isinstance(sqrtRatioBX96, int))
         assert (isinstance(liquidity, int))
@@ -458,7 +475,7 @@ class SqrtPriceMath:
         if round_up:
             return mul_div_rounding_up(liquidity, (sqrtRatioBX96 - sqrtRatioAX96), Q96)
         else:
-            return (liquidity * (sqrtRatioBX96 - sqrtRatioAX96)) / Q96
+            return int((liquidity * (sqrtRatioBX96 - sqrtRatioAX96)) / Q96)
 
     @staticmethod
     def get_next_sqrt_price_from_input(sqrt_price_x96: int, liquidity: int, amount_in: int, zero_or_one: bool):
@@ -494,7 +511,7 @@ class SqrtPriceMath:
         if amount == 0:
             return sqrt_price_x96
 
-        numerator_1 =  liquidity << 96
+        numerator_1 = liquidity << 96
 
         if add:
             product = multiply_bitwise_and_256(amount, sqrt_price_x96)
@@ -502,7 +519,7 @@ class SqrtPriceMath:
                 denominator = add_bitwise_and_256(numerator_1, product)
                 if denominator >= numerator_1:
                     return mul_div_rounding_up(numerator_1, sqrt_price_x96, denominator)
-            return mul_div_rounding_up(numerator_1, 1, (numerator_1 / sqrt_price_x96) + amount)
+            return mul_div_rounding_up(numerator_1, 1, int((numerator_1 / sqrt_price_x96) + amount))
         else:
             product = multiply_bitwise_and_256(amount, sqrt_price_x96)
 
@@ -521,9 +538,9 @@ class SqrtPriceMath:
 
         if add:
             if amount <= MAX_UINT160:
-                quotient = (amount << 96) / liquidity
+                quotient = int((amount << 96) / liquidity)
             else:
-                quotient = (amount * Q96) / liquidity
+                quotient = int((amount * Q96) / liquidity)
 
             return sqrt_price_x96 + quotient
         else:
