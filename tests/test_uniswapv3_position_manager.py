@@ -29,7 +29,7 @@ from enum import Enum
 from web3 import Web3, HTTPProvider
 
 from pyexchange.uniswapv3 import PositionManager, SwapRouter
-from pyexchange.uniswapv3_constants import FEES, TICK_SPACING, TRADE_TYPE, MIN_TICK
+from pyexchange.uniswapv3_constants import FEES, TICK_SPACING, TRADE_TYPE, MAX_TICK, MAX_SQRT_RATIO, MIN_TICK, MIN_SQRT_RATIO
 from pyexchange.uniswapv3_calldata_params import BurnParams, CollectParams, DecreaseLiquidityParams, MintParams, \
     ExactOutputSingleParams, ExactInputSingleParams, MulticallParams
 from pyexchange.uniswapv3_entities import Pool, Position, Route, Trade, CurrencyAmount, Fraction, PriceFraction
@@ -170,17 +170,6 @@ class TestUniswapV3PositionManager(Contract):
         mint_params = MintParams(self.web3, self.NonfungiblePositionManager_abi, position, recipient, slippage_tolerance, deadline)
         return mint_params
 
-    def test_get_tick_at_sqrt_ratio(self):
-
-        calculated_sqrt_price_ratio = self.get_starting_sqrt_ratio(1900, 1)
-        sqrt_price_ratio_expected = 1817618704642608387686662144
-
-        assert calculated_sqrt_price_ratio == sqrt_price_ratio_expected
-
-        tick = get_tick_at_sqrt_ratio(calculated_sqrt_price_ratio)
-
-        assert tick == -75500
-
     def test_liquidity_given_balance(self):
         test_token_1 = Token("test_1", Address("0x0000000000000000000000000000000000000001"), 18)
         test_token_2 = Token("test_2", Address("0x0000000000000000000000000000000000000002"), 18)
@@ -211,6 +200,42 @@ class TestUniswapV3PositionManager(Contract):
         assert amount_0 == 1
         assert amount_1 == 275
 
+    def xtest_mint_token_pool_low_price_and_slippage(self):
+        """ Test minting a position for a pool that is a small fraction """
+        test_token_1 = Token("test_1", Address("0x0000000000000000000000000000000000000001"), 18)
+        test_token_2 = Token("test_2", Address("0x0000000000000000000000000000000000000002"), 18)
+        # TODO: switch to passing in Wad?
+        token_1_balance = Wad.from_number(10).value
+        token_2_balance = Wad.from_number(100).value
+        # token_1_balance = 10
+        # token_2_balance = 500
+
+        sqrt_price_ratio = self.get_starting_sqrt_ratio(3000, 1)
+        current_tick = get_tick_at_sqrt_ratio(sqrt_price_ratio)
+        ticks = []
+        test_pool = Pool(test_token_1, test_token_2, FEES.MEDIUM.value, sqrt_price_ratio, 0, current_tick, ticks)
+
+        tick_lower = current_tick - TICK_SPACING.MEDIUM.value * 5
+        tick_upper = current_tick + TICK_SPACING.MEDIUM.value * 7
+        rounded_tick_lower = self.position_manager.round_to_nearest_whole_tick(tick_lower, TICK_SPACING.MEDIUM.value)
+        rounded_tick_upper = self.position_manager.round_to_nearest_whole_tick(tick_upper, TICK_SPACING.MEDIUM.value)
+        calculated_position = Position.from_amounts(test_pool, rounded_tick_lower, rounded_tick_upper, token_1_balance, token_2_balance, False)
+
+        test_liquidity = calculated_position.liquidity
+        print("test liquidity", test_liquidity)
+        assert test_liquidity == 5093765668823947264
+
+        test_position = Position(test_pool, rounded_tick_lower, rounded_tick_upper, test_liquidity)
+
+        amount_0, amount_1 = test_position.mint_amounts()
+        assert amount_0 == 6175371658612348928
+        assert amount_1 == 2105050800759086
+        # assert amount_0 == 7
+        # assert amount_1 == 1
+        slippage_tolerance = Fraction(20, 100)
+        amount_0_min, amount_1_min = test_position.mint_amounts_with_slippage(slippage_tolerance)
+        assert amount_0_min > 0 and amount_1_min > 0
+
     # TODO: tie newly minted underlying assets to minted amount
     def test_mint_token_pool(self, position_manager_helpers):
         position_manager_helper = position_manager_helpers(self.web3, self.position_manager, self.NonfungiblePositionManager_abi, self.token_dai, self.token_usdc)
@@ -237,10 +262,6 @@ class TestUniswapV3PositionManager(Contract):
 
         mint_receipt = self.position_manager.mint(mint_params).transact()
         assert mint_receipt is not None and mint_receipt.successful
-
-    def test_mint_token_pool_low_price(self):
-        """ Test minting a position for a pool that is a small fraction """
-        pass
 
     def test_get_position_from_id(self):
         # create and intialize pool

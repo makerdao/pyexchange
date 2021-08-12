@@ -20,12 +20,11 @@ Instantiate either SwapRouter or PositionManager entities that wrap the respecti
 
 
 ### Future Improvements
-- abstract univ3 test fixtures to conftest
 - support permit
 - int() cast rounding issues
-- uniswapv3_math specific tests
 - Add oracle support
 - check for token decimals
+- Add unwrap WETH support
 
 ### Other Libraries
 - https://github.com/Uniswap/uniswap-v3-sdk

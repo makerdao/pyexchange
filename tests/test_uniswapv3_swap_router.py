@@ -135,7 +135,8 @@ class TestUniswapV3SwapRouter(Contract):
         weth_dai_mint_receipt = self.position_manager.mint(weth_dai_mint_params).transact()
         assert weth_dai_mint_receipt is not None and weth_dai_mint_receipt.successful
 
-
+        # mint_result = weth_dai_mint_receipt.result[0]
+        # print("mint result", mint_result, mint_result.liquidity, mint_result.tick_lower, mint_result.tick_upper)
         token_id = weth_dai_mint_receipt.result[0].token_id
         print("minted_pool token_id", token_id)
         minted_position = self.position_manager.positions(token_id, weth_dai_pool.token_0, weth_dai_pool.token_1)
@@ -220,7 +221,6 @@ class TestUniswapV3SwapRouter(Contract):
         print(Wad.from_number(1).value)
         recipient = self.our_address
         slippage_tolerance = Fraction(20, 100)
-        price_limit = 0
         deadline = int(time.time() + 1000)
 
         # define route from weth to usdc via dai
@@ -229,13 +229,12 @@ class TestUniswapV3SwapRouter(Contract):
 
         encoded_path = self.swap_router.encode_route_to_path(route, False)
 
-        print("encoded_path", encoded_path)
-        # TODO: fix this calculation
-        # trade = Trade.from_route(route, CurrencyAmount.from_raw_amount(self.token_weth, weth_in.value), TRADE_TYPE.EXACT_INPUT.value)
-        # usdc_out = trade.minimum_amount_out(slippage_tolerance)
+        trade = Trade.from_route(route, CurrencyAmount.from_raw_amount(self.token_weth, weth_in.value), TRADE_TYPE.EXACT_INPUT.value)
+        usdc_out = trade.minimum_amount_out(slippage_tolerance).quotient()
+        print("usdc out", usdc_out)
 
-        usdc_out = self.swap_router.quote_exact_input(encoded_path, weth_in)
-        print("usdc_out", usdc_out)
+        # usdc_out = self.swap_router.quote_exact_input(encoded_path, weth_in)
+        # print("usdc_out", usdc_out)
         # usdc_out = Wad.from_number(usdc_out - 1).value
 
         exact_input_params = ExactInputParams(self.web3, self.SwapRouter_abi, encoded_path, recipient, deadline, weth_in.value, usdc_out)
@@ -244,16 +243,25 @@ class TestUniswapV3SwapRouter(Contract):
         assert swap is not None and swap.successful
 
     def test_should_find_swap_path_across_multiple_pools_exact_output(self, position_manager_helpers):
-        # deploy both pools
-        weth_dai_pool = self.deploy_and_mint_weth_dai(position_manager_helpers)
-        dai_usdc_pool = self.deploy_and_mint_dai_usdc(position_manager_helpers)
+        # check if pool is already deployed; else retrieve existing pool infromation from the address
+        weth_dai_pool_address = self.position_manager.get_pool_address(self.token_weth, self.token_dai, FEES.MEDIUM.value)
+        dai_usdc_pool_address = self.position_manager.get_pool_address(self.token_dai, self.token_usdc, FEES.LOW.value)
+
+        if isinstance(weth_dai_pool_address, Address):
+            weth_dai_pool = self.position_manager.get_pool(weth_dai_pool_address, self.token_weth, self.token_dai, 1)
+        else:
+            weth_dai_pool = self.deploy_and_mint_weth_dai(position_manager_helpers)
+
+        if isinstance(dai_usdc_pool_address, Address):
+            dai_usdc_pool = self.position_manager.get_pool(dai_usdc_pool_address, self.token_dai, self.token_usdc, 1)
+        else:
+            dai_usdc_pool = self.deploy_and_mint_dai_usdc(position_manager_helpers)
 
         # set trade params
         weth_out = Wad.from_number(.000000000001)
         # weth_out = Wad.from_number(1)
         recipient = self.our_address
         slippage_tolerance = Fraction(20, 100)
-        price_limit = 0
         deadline = int(time.time() + 1000)
 
         # define route from weth to usdc via dai
@@ -261,26 +269,17 @@ class TestUniswapV3SwapRouter(Contract):
         route = Route(path, self.token_weth, self.token_usdc)
         encoded_path = self.swap_router.encode_route_to_path(route, True)
 
-        print("encoded_path", encoded_path)
+        trade = Trade.from_route(route, CurrencyAmount.from_raw_amount(self.token_weth, weth_out.value), TRADE_TYPE.EXACT_INPUT.value)
+        usdc_in = trade.minimum_amount_out(slippage_tolerance).quotient()
 
-        # trade = Trade.from_route(route, CurrencyAmount.from_raw_amount(self.token_weth, weth_out), TRADE_TYPE.EXACT_INPUT.value)
-        # usdc_in = trade.minimum_amount_out(slippage_tolerance)
+        # usdc_in = self.swap_router.quote_exact_output(encoded_path, weth_out)
+        # print("usdc_in", usdc_in)
 
-        usdc_in = self.swap_router.quote_exact_output(encoded_path, weth_out)
-        print("usdc_in", usdc_in)
-
-        # usdc_in = 1
         exact_output_params = ExactOutputParams(self.web3, self.SwapRouter_abi, encoded_path, recipient, deadline, weth_out.value,
                                               usdc_in)
 
         swap = self.swap_router.swap_exact_output(exact_output_params).transact()
         assert swap is not None and swap.successful
-
-    # def test_should_revert_if_insufficient_output_liquidity(self):
-    #     pass
-
-    def test_should_swap_when_eth_is_output(self):
-        pass
 
     def test_should_error_when_pools_on_different_networks(self):
         test_token_1 = Token("test_1", Address("0x0000000000000000000000000000000000000001"), 18)
@@ -297,5 +296,9 @@ class TestUniswapV3SwapRouter(Contract):
     def test_permit(self):
         pass
 
+    def test_swap_with_quoter(self):
+        pass
+
     def test_trade_amount_out_match_quoter(self):
         """ check on chain calls to quoter methods matches local Trade entity calculations """
+        pass

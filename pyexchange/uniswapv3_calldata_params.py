@@ -77,9 +77,6 @@ class MulticallParams(Params):
         return Calldata.from_multicall_calldata(self.web3, arguments)
 
 
-# TODO: construct callback to be passed to mint()
-## https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.ts#L162
-## https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.ts#L44
 class MintParams(Params):
 
     # https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.test.ts
@@ -98,12 +95,9 @@ class MintParams(Params):
 
         self.deadline = deadline if deadline is not None else self._deadline()
 
-        # TODO: figure out most effective way to calculate amount0desired, amount1Desired
         amount_0, amount_1 = self.position.mint_amounts()
-        # amount_0, amount_1 = self.position.mint_amounts_with_slippage(slippage_tolerance)
 
         amount_0_min, amount_1_min = self.position.mint_amounts_with_slippage(slippage_tolerance)
-        # TODO: determine why mint_amounts() and mint_amounts_with_slippage() are reversed...?
         print("desired amounts", amount_0, amount_1)
         print("min amounts", amount_0_min, amount_1_min)
 
@@ -368,5 +362,3 @@ class ExactOutputParams(Params):
         self.method = "exactOutput(bytes,address,uint256,uint256,uint256)"
         self.calldata = self.encode_calldata(self.web3, self.method, [tuple(self.calldata_args)], contract_abi)
 
-
-# TODO: add support for sweep and unwrap eth functions
