@@ -1,6 +1,6 @@
 # UniswapV3 Python Client
 
-A python client for interacting with UniswapV3. It supports swapping, and position management.
+A python client for interacting with UniswapV3. It supports swapping, and position management. This client is build upon the Pymaker framework.
 
 ## Guides
 Interacting with pool, router, and if deploying a new pool, factory contracts.
@@ -12,9 +12,28 @@ Interacting with pool, router, and if deploying a new pool, factory contracts.
 
 Documentation is available here: https://docs.uniswap.org/concepts/V3-overview/glossary
 
+Pymaker repository is available here: https://github.com/makerdao/pymaker 
+
 ## Usage
 
-Instantiate either SwapRouter or PositionManager entities that wrap the respective uniswap-v3-periphery contracts.
+Instantiate either `SwapRouter` or `PositionManager` entities that wrap the respective uniswap-v3-periphery contracts, passing in a Web3 provider that has private keys registered.
+
+Methods on these classes return `pymaker.Transact` objects, which need to be invoked externally with a `.transact()` method call.
+
+If managing liquidity:
+1. Construct a `Pool` object. You can either instantiate manually, or execute `position_manager.get_pool()`.
+2. Construct a `Position` object. This requires setting the lower and upper ticks for the desired position. The tick range must be contiguous. Calculate the desired amount of liquidity to add using `Position.from_amounts()` or manually entering desired liquidity.
+3. Pass the previously instantiate `Pool` and `Position` objects into the desired liquidity operation. In the case of adding liquidity, this would be`MintParams`.
+4. Call the desired liquidity method in `PositionManager`, e.g. `position_manager.mint(mint_params).transact()`
+
+If executing swaps:
+
+1. Construct a `Pool` object. You can either instantiate manually, or execute `position_manager.get_pool()`.  
+2. Build `Route` object. If the route will hop across multiple pools, call `swap_router.encode_route_to_path(route, <input/output>)`
+3. Build `Trade` object from the previously instantiated `Route` object, along with the desired trade amount, and the type of trade.
+4. Construct trade params, e.g. `ExactOutputParams` from the trade objects slippage adjusted swap amount calculations, and use as input to `SwapRouter` transact methods.
+
+*The above steps utilize client side methods in `Trade` to calculate swap amounts which adjust for slippage on the client. You can also call the Quoter contract directly to get non slippage adjusted trade amounts.*
 
 ## Design
 
