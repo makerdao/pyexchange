@@ -348,7 +348,7 @@ class Tick:
         rounded = round(tick / tick_spacing) * tick_spacing
         if rounded < MIN_TICK:
             return rounded + tick_spacing
-        elif round > MAX_TICK:
+        elif rounded > MAX_TICK:
             return rounded - tick_spacing
         else:
             return rounded

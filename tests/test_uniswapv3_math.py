@@ -18,8 +18,9 @@ import time
 
 import pytest
 
-from pyexchange.uniswapv3_constants import MIN_SQRT_RATIO, MAX_SQRT_RATIO, MIN_TICK, MAX_TICK, Q96
-from pyexchange.uniswapv3_math import get_tick_at_sqrt_ratio, get_sqrt_ratio_at_tick, encodeSqrtRatioX96
+from pyexchange.uniswapv3_constants import MIN_SQRT_RATIO, MAX_SQRT_RATIO, MIN_TICK, MAX_TICK, Q96, FEES, TICK_SPACING
+from pyexchange.uniswapv3_math import get_tick_at_sqrt_ratio, get_sqrt_ratio_at_tick, encodeSqrtRatioX96, Tick
+
 
 def test_get_tick_at_sqrt_ratio():
     calculated_sqrt_price_ratio = encodeSqrtRatioX96(1, 1900)
@@ -38,9 +39,21 @@ def test_sqrt_ratio_at_tick():
     # assert get_sqrt_ratio_at_tick(MAX_TICK) == MAX_SQRT_RATIO
 
 def test_encode_srt_ratio():
-    time.sleep(10)
+    # time.sleep(10)
     assert encodeSqrtRatioX96(1, 1) == Q96
     assert encodeSqrtRatioX96(100, 1) == 792281625142643375935439503360
     # assert encodeSqrtRatioX96(1, 100) == 7922816251426433759354395033
     # assert encodeSqrtRatioX96(111, 333) == 45742400955009932534161870629
     # assert encodeSqrtRatioX96(333, 111) == 137227202865029797602485611888
+
+def test_nearest_usable_tick():
+    # given
+    current_tick = 74999
+    tick_spacing = TICK_SPACING.MEDIUM.value
+
+    # when
+    rounded_tick = Tick.nearest_usable_tick(current_tick, tick_spacing)
+
+    # then
+    assert rounded_tick % tick_spacing == 0
+

@@ -20,13 +20,19 @@ Instantiate either `SwapRouter` or `PositionManager` entities that wrap the resp
 
 Methods on these classes return `pymaker.Transact` objects, which need to be invoked externally with a `.transact()` method call.
 
-If managing liquidity:
+&nbsp;
+
+**If managing liquidity:**
 1. Construct a `Pool` object. You can either instantiate manually, or execute `position_manager.get_pool()`.
 2. Construct a `Position` object. This requires setting the lower and upper ticks for the desired position. The tick range must be contiguous. Calculate the desired amount of liquidity to add using `Position.from_amounts()` or manually entering desired liquidity.
 3. Pass the previously instantiate `Pool` and `Position` objects into the desired liquidity operation. In the case of adding liquidity, this would be`MintParams`.
 4. Call the desired liquidity method in `PositionManager`, e.g. `position_manager.mint(mint_params).transact()`
 
-If executing swaps:
+An example script can be seen in: [manual_test_uniswapv3_liquidity_management.py](../tests/manual_test_uniswapv3_liquidity_management.py)
+
+&nbsp;
+
+**If executing swaps:**
 
 1. Construct a `Pool` object. You can either instantiate manually, or execute `position_manager.get_pool()`.  
 2. Build `Route` object. If the route will hop across multiple pools, call `swap_router.encode_route_to_path(route, <input/output>)`
@@ -34,6 +40,10 @@ If executing swaps:
 4. Construct trade params, e.g. `ExactOutputParams` from the trade objects slippage adjusted swap amount calculations, and use as input to `SwapRouter` transact methods.
 
 *The above steps utilize client side methods in `Trade` to calculate swap amounts which adjust for slippage on the client. You can also call the Quoter contract directly to get non slippage adjusted trade amounts.*
+
+An example script can be seen in: [manual_test_uniswapv3_swap.py](../tests/manual_test_uniswapv3_swap.py)
+
+&nbsp;
 
 ## Design
 
@@ -44,6 +54,7 @@ If executing swaps:
 - Add oracle support
 - check for token decimals
 - Add unwrap WETH support
+- Implement UniV3NFT class for interacting with position NFTs externally from PositionManager.
 
 ### Other Libraries
 - https://github.com/Uniswap/uniswap-v3-sdk
