@@ -47,6 +47,9 @@ An example script can be seen in: [manual_test_uniswapv3_swap.py](../tests/manua
 
 ## Design
 
+![Client Architecture](UniV3ClientArchitecture.png)
+
+&nbsp;
 
 ### Future Improvements
 - support permit
