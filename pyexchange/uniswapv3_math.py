@@ -65,55 +65,55 @@ def get_sqrt_ratio_at_tick(tick: int) -> int:
 
     ratio = int('0xfffcb933bd6fad37aa2d162d1a594001', 16) if (abs_tick & int('0x1', 16)) != 0 else int('0x100000000000000000000000000000000', 16)
 
-    if abs_tick & int('0x2', 16) != 0:
+    if (abs_tick & int('0x2', 16)) != 0:
         ratio = mul_shift(ratio, '0xfff97272373d413259a46990580e213a')
-    if abs_tick & int('0x4', 16) != 0:
+    if (abs_tick & int('0x4', 16)) != 0:
         ratio = mul_shift(ratio, '0xfff2e50f5f656932ef12357cf3c7fdcc')
-    if abs_tick & int('0x8', 16) != 0:
+    if (abs_tick & int('0x8', 16)) != 0:
         ratio = mul_shift(ratio, '0xffe5caca7e10e4e61c3624eaa0941cd0')
-    if abs_tick & int('0x10', 16) != 0:
+    if (abs_tick & int('0x10', 16)) != 0:
         ratio = mul_shift(ratio, '0xffcb9843d60f6159c9db58835c926644')
-    if abs_tick & int('0x20', 16) != 0:
+    if (abs_tick & int('0x20', 16)) != 0:
         ratio = mul_shift(ratio, '0xff973b41fa98c081472e6896dfb254c0')
-    if abs_tick & int('0x40', 16) != 0:
+    if (abs_tick & int('0x40', 16)) != 0:
         ratio = mul_shift(ratio, '0xff2ea16466c96a3843ec78b326b52861')
-    if abs_tick & int('0x80', 16) != 0:
+    if (abs_tick & int('0x80', 16)) != 0:
         ratio = mul_shift(ratio, '0xfe5dee046a99a2a811c461f1969c3053')
-    if abs_tick & int('0x100', 16) != 0:
+    if (abs_tick & int('0x100', 16)) != 0:
         ratio = mul_shift(ratio, '0xfcbe86c7900a88aedcffc83b479aa3a4')
-    if abs_tick & int('0x200', 16) != 0:
+    if (abs_tick & int('0x200', 16)) != 0:
         ratio = mul_shift(ratio, '0xf987a7253ac413176f2b074cf7815e54')
-    if abs_tick & int('0x400', 16) != 0:
+    if (abs_tick & int('0x400', 16)) != 0:
         ratio = mul_shift(ratio, '0xf3392b0822b70005940c7a398e4b70f3')
-    if abs_tick & int('0x800', 16) != 0:
+    if (abs_tick & int('0x800', 16)) != 0:
         ratio = mul_shift(ratio, '0xe7159475a2c29b7443b29c7fa6e889d9')
-    if abs_tick & int('0x1000', 16) != 0:
+    if (abs_tick & int('0x1000', 16)) != 0:
         ratio = mul_shift(ratio, '0xd097f3bdfd2022b8845ad8f792aa5825')
-    if abs_tick & int('0x2000', 16) != 0:
+    if (abs_tick & int('0x2000', 16)) != 0:
         ratio = mul_shift(ratio, '0xa9f746462d870fdf8a65dc1f90e061e5')
-    if abs_tick & int('0x4000', 16) != 0:
+    if (abs_tick & int('0x4000', 16)) != 0:
         ratio = mul_shift(ratio, '0x70d869a156d2a1b890bb3df62baf32f7')
-    if abs_tick & int('0x8000', 16) != 0:
+    if (abs_tick & int('0x8000', 16)) != 0:
         ratio = mul_shift(ratio, '0x31be135f97d08fd981231505542fcfa6')
-    if abs_tick & int('0x10000', 16) != 0:
+    if (abs_tick & int('0x10000', 16)) != 0:
         ratio = mul_shift(ratio, '0x9aa508b5b7a84e1c677de54f3e99bc9')
-    if abs_tick & int('0x20000', 16) != 0:
+    if (abs_tick & int('0x20000', 16)) != 0:
         ratio = mul_shift(ratio, '0x5d6af8dedb81196699c329225ee604')
-    if abs_tick & int('0x40000', 16) != 0:
+    if (abs_tick & int('0x40000', 16)) != 0:
         ratio = mul_shift(ratio, '0x2216e584f5fa1ea926041bedfe98')
-    if abs_tick & int('0x80000', 16) != 0:
+    if (abs_tick & int('0x80000', 16)) != 0:
         ratio = mul_shift(ratio, '0x48a170391f7dc42444e8fa2')
 
     if tick > 0:
-        ratio = int(MAX_UINT256 / ratio)
+        ratio = int(MAX_UINT256 // ratio)
 
     q32 = 2 ** 32
 
     # convert back to Q64.96
-    if ratio % q32 >= ZERO:
-        return int((ratio / q32) + 1)
+    if ratio % q32 > ZERO:
+        return int((ratio // q32) + 1)
     else:
-        return int(ratio / q32)
+        return int(ratio // q32)
 
 # https://github.com/Uniswap/uniswap-v3-sdk/blob/c8e0d4c56e3b3ebd6446aba66523d20f2ea0fd9c/src/utils/tickMath.ts#L82
 def get_tick_at_sqrt_ratio(sqrtRatioX96: int) -> int:
@@ -174,7 +174,7 @@ def encodeSqrtRatioX96(amount_1: int, amount_0: int) -> int:
     # TODO: apply bitmask & 256 here to resolve potential wrapping issue?
     numerator = amount_1 << 192
     
-    ratio_x_192 = numerator / amount_0
+    ratio_x_192 = numerator // amount_0
 
     return int(math.sqrt(ratio_x_192))
 
@@ -184,13 +184,12 @@ def mul_div_rounding_up(a: int, b: int, denominator: int) -> int:
     assert (isinstance(denominator, int))
     
     product = a * b
-    # TODO: does result need to be cast to int? currently returning a percentage here...
-    result = product / denominator
-    # TODO: check equality here
+    result = product // denominator
+
     if product % denominator != ZERO:
         result += ONE
     
-    return int(result)
+    return result
 
 def compute_swap_step(sqrt_ratio_current_price_x96: int, sqrt_ratio_target_price_x96: int, liquidity: int, amount_remaining: Wad, fee_pips: int) -> Tuple:
     """ @returns {sqrt_price_next_x96, amount_in, amount_out, fee_amount} """

@@ -36,7 +36,7 @@ def test_get_tick_at_sqrt_ratio():
 
 def test_sqrt_ratio_at_tick():
     assert get_sqrt_ratio_at_tick(MIN_TICK) == MIN_SQRT_RATIO
-    # assert get_sqrt_ratio_at_tick(MAX_TICK) == MAX_SQRT_RATIO
+    assert get_sqrt_ratio_at_tick(MAX_TICK) == MAX_SQRT_RATIO
 
 def test_encode_srt_ratio():
     # time.sleep(10)
@@ -57,3 +57,4 @@ def test_nearest_usable_tick():
     # then
     assert rounded_tick % tick_spacing == 0
 
+# TODO: add tests for Fraction operations
