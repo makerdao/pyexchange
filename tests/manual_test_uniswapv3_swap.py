@@ -69,15 +69,16 @@ weth_dai_kovan_pool = position_manager_kovan.get_pool(weth_dai_medium_fee_pool_a
 print("mainnet pool", weth_dai_kovan_pool)
 
 ### approve tokens for use by SwapRouter
-# swap_router_kovan.approve(dai_token_kovan)
-# swap_router_kovan.approve(weth_token_kovan)
+swap_router_kovan.approve(dai_token_kovan)
+swap_router_kovan.approve(weth_token_kovan)
 
 ### wrap eth to weth
 # wrap_eth_receipt = position_manager_kovan.wrap_eth(Wad.from_number(.2)).transact()
 # assert wrap_eth_receipt is not None and wrap_eth_receipt.successful
 
 ## swap exact output weth -> dai
-desired_amount_out = Wad.from_number(182).value
+# desired_amount_out = Wad.from_number(182).value
+desired_amount_out = 10
 slippage_tolerance = Fraction(10, 100)
 deadline = int(time.time() + 1000)
 
@@ -90,7 +91,12 @@ sqrt_price_limit = int(weth_dai_kovan_pool.square_root_ratio_x96 * (1 + slippage
 weth_dai_kovan_route = Route([weth_dai_kovan_pool], weth_dai_kovan_pool.token_0, weth_dai_kovan_pool.token_1)
 trade = Trade.from_route(weth_dai_kovan_route, CurrencyAmount.from_raw_amount(weth_dai_kovan_pool.token_1, desired_amount_out), TRADE_TYPE.EXACT_OUTPUT_SINGLE.value)
 max_amount_in = trade.maximum_amount_in(slippage_tolerance).quotient()
-print("max amount in", max_amount_in)
+print("max amount in Trade calculation", max_amount_in)
+
+amount_in = swap_router_kovan.quote_exact_output_single(weth_dai_kovan_pool.token_0, weth_dai_kovan_pool.token_1, weth_dai_kovan_pool.fee, desired_amount_out,
+                                                       sqrt_price_limit)
+
+print("amount in Quoter calculation", amount_in)
 
 exact_output_single_params = ExactOutputSingleParams(web3, SwapRouter_abi, trade.route.token_path[0],
                                                      trade.route.token_path[1], trade.route.pools[0].fee, Address(web3.eth.defaultAccount),

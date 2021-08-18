@@ -53,11 +53,11 @@ An example script can be seen in: [manual_test_uniswapv3_swap.py](../tests/manua
 
 ### Future Improvements
 - support permit
-- int() cast rounding issues
 - Add oracle support
 - check for token decimals
 - Add unwrap WETH support
 - Implement UniV3NFT class for interacting with position NFTs externally from PositionManager.
+- Implement flashbot support
 
 ### Other Libraries
 - https://github.com/Uniswap/uniswap-v3-sdk

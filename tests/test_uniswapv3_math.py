@@ -18,13 +18,14 @@ import time
 
 import pytest
 
+from pyexchange.uniswapv3_entities import Fraction
 from pyexchange.uniswapv3_constants import MIN_SQRT_RATIO, MAX_SQRT_RATIO, MIN_TICK, MAX_TICK, Q96, FEES, TICK_SPACING
 from pyexchange.uniswapv3_math import get_tick_at_sqrt_ratio, get_sqrt_ratio_at_tick, encodeSqrtRatioX96, Tick
 
 
 def test_get_tick_at_sqrt_ratio():
     calculated_sqrt_price_ratio = encodeSqrtRatioX96(1, 1900)
-    sqrt_price_ratio_expected = 1817618704642608387686662144
+    sqrt_price_ratio_expected = 1817618704642608503278368873
 
     assert calculated_sqrt_price_ratio == sqrt_price_ratio_expected
 
@@ -38,13 +39,13 @@ def test_sqrt_ratio_at_tick():
     assert get_sqrt_ratio_at_tick(MIN_TICK) == MIN_SQRT_RATIO
     assert get_sqrt_ratio_at_tick(MAX_TICK) == MAX_SQRT_RATIO
 
+
 def test_encode_srt_ratio():
-    # time.sleep(10)
     assert encodeSqrtRatioX96(1, 1) == Q96
     assert encodeSqrtRatioX96(100, 1) == 792281625142643375935439503360
-    # assert encodeSqrtRatioX96(1, 100) == 7922816251426433759354395033
-    # assert encodeSqrtRatioX96(111, 333) == 45742400955009932534161870629
-    # assert encodeSqrtRatioX96(333, 111) == 137227202865029797602485611888
+    assert encodeSqrtRatioX96(1, 100) == 7922816251426433759354395033
+    assert encodeSqrtRatioX96(111, 333) == 45742400955009932534161870629
+    assert encodeSqrtRatioX96(333, 111) == 137227202865029797602485611888
 
 def test_nearest_usable_tick():
     # given
@@ -57,4 +58,38 @@ def test_nearest_usable_tick():
     # then
     assert rounded_tick % tick_spacing == 0
 
-# TODO: add tests for Fraction operations
+
+def test_fraction_add():
+    fraction_1 = Fraction(20, 100)
+    fraction_2 = Fraction(30, 100)
+
+    output_fraction = fraction_1.add(fraction_2)
+
+    assert output_fraction.float_quotient() == .5
+
+
+def test_fraction_subtract():
+    fraction_1 = Fraction(50, 100)
+    fraction_2 = Fraction(30, 100)
+
+    output_fraction = fraction_1.subtract(fraction_2)
+
+    assert output_fraction.float_quotient() == .2
+
+
+def test_fraction_multiply():
+    fraction_1 = Fraction(20, 100)
+    fraction_2 = Fraction(30, 100)
+
+    output_fraction = fraction_1.multiply(fraction_2)
+
+    assert output_fraction.float_quotient() == .06
+
+
+def test_fraction_divide():
+    fraction_1 = Fraction(60, 100)
+    fraction_2 = Fraction(30, 100)
+
+    output_fraction = fraction_1.divide(fraction_2)
+
+    assert output_fraction.float_quotient() == 2
