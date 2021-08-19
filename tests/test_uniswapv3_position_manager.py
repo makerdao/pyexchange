@@ -18,14 +18,11 @@
 import json
 import time
 import logging
-from typing import List
 
 import pkg_resources
 import pytest
 import unittest
 
-from fxpmath import Fxp
-from enum import Enum
 from web3 import Web3, HTTPProvider
 
 from pyexchange.uniswapv3 import PositionManager, SwapRouter
@@ -42,8 +39,6 @@ from pymaker.numeric import Wad
 from pymaker.token import DSToken, ERC20Token
 
 
-# TODO: update to use snake case
-# TODO: generalize / split out tests for SwapRouter?
 class TestUniswapV3PositionManager(Contract):
 
     """ Deployment docs available here: https://github.com/Uniswap/uniswap-v3-periphery/blob/main/deploys.md """
@@ -107,8 +102,8 @@ class TestUniswapV3PositionManager(Contract):
         self.swap_router.approve(self.token_weth)
 
         # TODO: normalize amounts for decimals
-        dai_balance = Wad.from_number(10000)
-        usdc_balance = Wad.from_number(10000)
+        dai_balance = Wad.from_number(10000000)
+        usdc_balance = Wad.from_number(10000000)
 
         self.ds_dai.mint(dai_balance).transact(from_address=self.our_address)
         self.ds_usdc.mint(self.token_usdc.unnormalize_amount(usdc_balance)).transact(from_address=self.our_address)
@@ -223,24 +218,24 @@ class TestUniswapV3PositionManager(Contract):
 
         test_liquidity = calculated_position.liquidity
         print("test liquidity", test_liquidity)
-        assert test_liquidity == 5093765668823947264
+        assert test_liquidity == 5093765668823942144
 
         test_position = Position(test_pool, rounded_tick_lower, rounded_tick_upper, test_liquidity)
 
         amount_0, amount_1 = test_position.mint_amounts()
-        assert amount_0 == 6175371658612348928
-        assert amount_1 == 2105050800759086
+        assert amount_0 == 6175371658612320855
+        assert amount_1 == 2105050800759076
         # assert amount_0 == 7
         # assert amount_1 == 1
         slippage_tolerance = Fraction(20, 100)
         amount_0_min, amount_1_min = test_position.mint_amounts_with_slippage(slippage_tolerance)
         assert amount_0_min > 0 and amount_1_min > 0
 
-    # TODO: tie newly minted underlying assets to minted amount
     def test_mint_token_pool(self, position_manager_helpers):
         position_manager_helper = position_manager_helpers(self.web3, self.position_manager, self.NonfungiblePositionManager_abi, self.token_dai, self.token_usdc)
         pool = position_manager_helper.create_and_initialize_pool(self.get_starting_sqrt_ratio(1, 1), FEES.LOW.value)
 
+        #
         mint_params = position_manager_helper.generate_mint_params(pool, Position(pool, -10, 10, 10), self.our_address, Fraction(20, 100))
 
         gas_price = FixedGasPrice(gas_price=20000000000000000)
@@ -254,6 +249,7 @@ class TestUniswapV3PositionManager(Contract):
 
         position_manager_helper = position_manager_helpers(self.web3, self.position_manager, self.NonfungiblePositionManager_abi, self.token_weth, self.token_dai)
 
+        # starting pool price for weth-dai 1900
         pool = position_manager_helper.create_and_initialize_pool(self.get_starting_sqrt_ratio(1, 1900), FEES.MEDIUM.value)
 
         position_manager_helper.wrap_eth(Wad.from_number(1), self.our_address)
@@ -360,7 +356,7 @@ class TestUniswapV3PositionManager(Contract):
         pool = position_manager_helper.create_and_initialize_pool(self.get_starting_sqrt_ratio(1, 1), FEES.LOW.value)
 
         # mint initial liquidity
-        mint_params = position_manager_helper.generate_mint_params(pool, Position(pool, -10, 10, 1000), self.our_address, Fraction(20, 100))
+        mint_params = position_manager_helper.generate_mint_params(pool, Position(pool, -10, 10, 100000000000000), self.our_address, Fraction(20, 100))
         mint_receipt = self.position_manager.mint(mint_params).transact()
 
         # get the token_id out of the mint transaction receipt

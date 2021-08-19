@@ -93,7 +93,6 @@ class Permit:
             return permit_calldata
 
 
-# TODO: add registering keys directly to SwapRouter?
 # TODO: Inherit from permit class as well
 class SwapRouter(Contract):
     """ Class to handle any interactions with UniswapV3 SwapRouter
@@ -430,7 +429,8 @@ class PositionManager(Contract):
         return ticks
 
     def get_initialized_ticklist(self, tick_lower: int, tick_upper: int, tick_spacing: int, pool_address: Address) -> List:
-        """ https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/entities/tickListDataProvider.ts """
+        """ Given a tick range, use TickLens contract to find initialized ticks in the given range
+        """
         assert isinstance(tick_lower, int)
         assert isinstance(tick_upper, int)
         assert isinstance(tick_spacing, int)
@@ -444,9 +444,15 @@ class PositionManager(Contract):
             tick_range.append(current_tick)
 
         tick_list = []
+        bitmap_indices = []
         for tick in tick_range:
-            bitmap_index = tick >> 8
-            tick_list.append(self.get_ticks(pool_address, bitmap_index))
+            bitmap_index = tick // tick_spacing >> 8
+            if bitmap_index not in bitmap_indices:
+                bitmap_indices.append(bitmap_index)
+                # retrieve ticks at a given bitmap index
+                ticks = self.get_ticks(pool_address, bitmap_index)
+                if len(ticks) > 0:
+                    tick_list.extend(ticks)
 
         return tick_list
 
@@ -471,30 +477,15 @@ class PositionManager(Contract):
         pool_price = pool_state[0]
         tick_current = pool_state[1]
 
-        # test_ticks = []
-        # for i in range(500):
-        #     t = self.get_ticks(pool_address, i)
-        #     test_ticks.append(t)
-        #     if len(t) > 0:
-        #         print("bitmap i", i)
-        # print(test_ticks)
-
-        # TODO: determine best way to get pools tick range
-        ticks = self.get_initialized_ticklist(tick_current - tick_spacing, tick_current + tick_spacing, tick_spacing, pool_address)
-
-        # TODO: remove this
-        if token_0.name == "WETH" or token_1.name == "WETH":
-            tick_bitmap_index = 4
-        else:
-            tick_bitmap_index = 0
-        ticks = self.get_ticks(pool_address, tick_bitmap_index)
+        # TODO: determine best way to get pools tick range - currently getting 20000 ticks above and below. Will this cause issues with MAX tick or MIN TICK?
+        ticks = self.get_initialized_ticklist(tick_current - tick_spacing * 20000, tick_current + tick_spacing * 20000, tick_spacing, pool_address)
 
         pool = Pool(token_0, token_1, fee, pool_price, liquidity, tick_current, ticks, chain_id)
         return pool
 
     # TODO: rename
     def positions(self, token_id: int, token_0: Token, token_1: Token) -> Position:
-        """ Return position information for a given positions token_id, and token pair
+        """ Return an instantiated Position entity for a given positions token_id, and token pair
 
             pool information is retrieved with getters defined: https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/interfaces/pool/IUniswapV3PoolState.sol
         """
@@ -503,7 +494,6 @@ class PositionManager(Contract):
         assert isinstance(token_1, Token)
 
         position = self.get_position_info(token_id)
-        print(position)
         assert token_0.address == Address(position[2]) and token_1.address == Address(position[3])
 
         fee = position[4]
@@ -515,36 +505,14 @@ class PositionManager(Contract):
         price_sqrt_ratio_x96 = pool_state[0]
         tick_current = pool_state[1]
 
-        calculated_current_tick = get_tick_at_sqrt_ratio(price_sqrt_ratio_x96)
-        print("calculated current tick", calculated_current_tick)
-        print("pool state", pool_state)
-        # TODO: figure out how to dynamically retrieve bitmap index
-        rounded_tick_index = self.round_to_nearest_whole_tick(tick_current, TICK_SPACING[FEES(fee).name].value)
-
-        ticks = self.get_tick_state(pool_contract, rounded_tick_index)
-        print("current tick status?", ticks)
-
-        tick_bitmap = self.get_tick_bitmap(pool_contract, tick_current >> 8)
-        print("tick bitmap", tick_bitmap)
-        # right shift current tick by 8 bits to get bitmap index
-        tick_bitmap_index = rounded_tick_index >> 8
-        print("index", tick_bitmap_index)
-        ticks_bitmap = self.get_ticks(pool_address, tick_bitmap)
-        ticks_bitmap_0 = self.get_ticks(pool_address, 0)
-        print("ticks at bitmap", ticks_bitmap, ticks_bitmap_0)
-        if token_0.name == "WETH" or token_1.name == "WETH":
-            tick_bitmap_index = 4
-        ticks = self.get_ticks(pool_address, tick_bitmap_index)
-
+        # get current initialized tick list
         tick_lower = position[5]
         tick_upper = position[6]
         tick_spacing = TICK_SPACING[FEES(fee).name].value
-        tick_list_calc = self.get_initialized_ticklist(tick_lower, tick_upper, tick_spacing, pool_address)
-        print("dank", tick_list_calc)
+        ticks = self.get_initialized_ticklist(tick_lower, tick_upper, tick_spacing, pool_address)
 
         # get current in range liquidity
         pool_liquidity = pool_contract.functions.liquidity().call()
-        print("pool liquidity", pool_liquidity)
         pool = Pool(token_0, token_1, fee, price_sqrt_ratio_x96, pool_liquidity, tick_current, ticks)
 
         position_liquidity = position[7]
@@ -646,7 +614,7 @@ class PositionManager(Contract):
         return f"UniswapV3PositionManager"
 
 
-# TODO: figure out which nft will handle abi loading
+# TODO: implement
 class UniV3NFT(NFT):
     """ Instantiate a UniswapV3 position NFT 
 

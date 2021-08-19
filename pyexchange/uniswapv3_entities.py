@@ -15,11 +15,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import time
-
-from fxpmath import Fxp
 from typing import List, Optional, Tuple
-from web3 import Web3
 
 from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, \
     SqrtPriceMath, compute_swap_step, Tick, add_liquidity_delta
@@ -41,10 +37,9 @@ class Fraction:
     def invert(self):
         return self.__class__(self.denominator, self.numerator)
 
-    # TODO: investigate for potential rounding issues
     # https://github.com/Uniswap/uniswap-sdk-core/blob/8385914b682b79489f1aa8014288fa1d4f6d6d49/src/entities/fractions/fraction.ts#L123
     def quotient(self) -> int:
-        return int(self.numerator / self.denominator)
+        return self.numerator // self.denominator
 
     def float_quotient(self) -> float:
         return self.numerator / self.denominator
@@ -108,6 +103,7 @@ class CurrencyAmount(Fraction):
         assert isinstance(amount, int)
 
         # assume denominator is 1 when constructing fractional instance from a raw amount
+        # return CurrencyAmount(token, token.normalize_amount(amount), 1)
         return CurrencyAmount(token, amount, 1)
 
     @staticmethod
@@ -186,7 +182,6 @@ class Pool:
         self.token_1_price = self.get_token_1_price()
         self.tick_spacing = TICK_SPACING[FEES(self.fee).name].value
 
-    # TODO: improve naming
     def _map_ticks_to_tick(self, ticks: List[Tuple]) -> List:
         """ Convert tuple retrieved from tickLens to List[Tick] """
         assert isinstance(ticks, List)
@@ -220,43 +215,45 @@ class Pool:
     def get_token_1_price(self) -> PriceFraction:
         return PriceFraction(self.token_0, self.token_1, (self.square_root_ratio_x96 * self.square_root_ratio_x96), Q192)
 
-    # TODO: figure out best way to update pool.ticks
     def get_output_amount(self, input_amount: CurrencyAmount, sqrt_price_limit_x96: Optional[int]) -> Tuple:
         """ given an input amount of a token, calculate how much output liquidity is available, and the resulting pool state"""
         assert isinstance(input_amount, CurrencyAmount)
         assert (isinstance(sqrt_price_limit_x96, int) or sqrt_price_limit_x96 is None)
         assert self.contains_token(input_amount.token)
 
-        zero_or_one = input_amount.token.address.address == self.token_0.address.address
+        zero_or_one = input_amount.token.address == self.token_0.address
 
-        # calculate result of executing a swap with given parameters
+        # execute a virtual swap with the given information, and get the resulting pool state
         pool_swap_state = self.swap(zero_or_one, input_amount.quotient(), sqrt_price_limit_x96)
 
         output_token = self.token_1 if zero_or_one else self.token_0
         output_amount = CurrencyAmount.from_raw_amount(output_token, pool_swap_state["amount_calculated"] * - 1)
         # TODO: update with the new tick state
+        # TODO: since tick_lens will provide the global state, we need to calculate how the tick liquidity will shfit given this swap information
         new_pool = Pool(self.token_0, self.token_1, self.fee, pool_swap_state["sqrt_price_x96"], pool_swap_state["liquidity"], pool_swap_state["tick_current"], self.ticks)
 
         return output_amount, new_pool
 
     def get_input_amount(self, output_amount: CurrencyAmount, sqrt_price_limit_x96: Optional[int]) -> Tuple:
+        """ given a desired output amount, return a Tuple of the required input amount, and the resultant pool"""
         assert isinstance(output_amount, CurrencyAmount)
         assert (isinstance(sqrt_price_limit_x96, int) or sqrt_price_limit_x96 is None)
         assert self.contains_token(output_amount.token)
 
         # calculate result of executing a swap with given parameters
-        zero_or_one = output_amount.token.address.address == self.token_1.address.address
+        zero_or_one = output_amount.token.address == self.token_1.address
 
+        # execute a virtual swap with the given information, and get the resulting pool state
         pool_swap_state = self.swap(zero_or_one, output_amount.quotient() * - 1, sqrt_price_limit_x96)
 
         input_token = self.token_0 if zero_or_one else self.token_1
         input_amount = CurrencyAmount.from_raw_amount(input_token, pool_swap_state["amount_calculated"])
-        # TODO: update self.ticks with self.get_ticks(pool_address, current_tick)
+        ## TODO: update self.ticks with self.get_ticks(pool_address, current_tick)
+        # TODO: since tick_lens will provide the global state, we need to calculate how the tick liquidity will shfit given this swap information
         new_pool = Pool(self.token_0, self.token_1, self.fee, pool_swap_state["sqrt_price_x96"], pool_swap_state["liquidity"], pool_swap_state["tick_current"], self.ticks)
 
         return input_amount, new_pool
 
-    # TODO: determine if pool.ticks needs to be updated within as well - i.e. add TickDataProvider?
     def swap(self, zero_or_one: bool, swap_amount: int, sqrt_price_limit_x96: int) -> dict:
         """ Calculate a swap and output pool state
             @param zero_or_one boolean indicating swapping in token_0 or token_1
@@ -299,17 +296,20 @@ class Pool:
                 "tick_initalized": tick_initalized
             }
 
+            # check to see if swap would reach the end of the space
             if step_state["tick_next"] < MIN_TICK:
                 step_state["tick_next"] = MIN_TICK
             elif step_state["tick_next"] > MAX_TICK:
                 step_state["tick_next"] = MAX_TICK
 
+            # identify price at the next tick with available liquidity
             step_state["sqrt_price_next_x96"] = get_sqrt_ratio_at_tick(step_state["tick_next"])
+
+            # calculate which target price to use when computing where the next swap will lead the pool state
             if zero_or_one:
                 use_price_limit = step_state["sqrt_price_next_x96"] < sqrt_price_limit_x96
             else:
                 use_price_limit = step_state["sqrt_price_next_x96"] > sqrt_price_limit_x96
-
             target_price = sqrt_price_limit_x96 if use_price_limit else step_state["sqrt_price_next_x96"]
 
             pool_swap_state["sqrt_price_x96"], step_state["amount_in"], step_state["amount_out"], step_state["fee_amount"] = compute_swap_step(pool_swap_state["sqrt_price_x96"], target_price, pool_swap_state["liquidity"], pool_swap_state["swap_amount_remaining"], self.fee)
@@ -395,7 +395,7 @@ class Position:
     def max_liquidity_for_amount_0(sqrtRatioAX96: int, sqrtRatioBX96: int, amount_0: int, use_full_precision: bool) -> int:
         assert (isinstance(sqrtRatioAX96, int))
         assert (isinstance(sqrtRatioBX96, int))
-        # assert (isinstance(amount_0, int))
+        assert (isinstance(amount_0, int))
         assert (isinstance(use_full_precision, bool))
 
         sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
@@ -403,26 +403,25 @@ class Position:
         if use_full_precision:
             numerator = (amount_0 * sqrtRatioAX96) * sqrtRatioBX96
             denominator = Q96 * (sqrtRatioBX96 - sqrtRatioAX96)
-            result = int(numerator / denominator)
+            result = numerator // denominator
             return result
         else:
-            intermediate = (sqrtRatioAX96 * sqrtRatioBX96) / Q96
-            result = int((amount_0 * intermediate) / (sqrtRatioBX96 - sqrtRatioAX96))
+            intermediate = (sqrtRatioAX96 * sqrtRatioBX96) // Q96
+            result = (amount_0 * intermediate) // (sqrtRatioBX96 - sqrtRatioAX96)
             return result
 
     @staticmethod
     def max_liquidity_for_amount_1(sqrtRatioAX96: int, sqrtRatioBX96: int, amount_1: int) -> int:
         assert (isinstance(sqrtRatioAX96, int))
         assert (isinstance(sqrtRatioBX96, int))
-        # assert (isinstance(amount_1, int))
+        assert (isinstance(amount_1, int))
 
         sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
 
-        result = int((amount_1 * Q96) / (sqrtRatioBX96 - sqrtRatioAX96))
+        result = (amount_1 * Q96) // (sqrtRatioBX96 - sqrtRatioAX96)
         return result
 
     # TODO: move these methods to uniswapv3_math?
-    # TODO: remove top level usage of SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)?
     @staticmethod
     def max_liquidity_for_amounts(pool: Pool, sqrt_ratio_current_x96: int, sqrtRatioAX96: int, sqrtRatioBX96: int, amount_0: int, amount_1: int, use_full_precision: bool) -> int:
         """ Calculate the amount of liquidity received for a given amount of token_0, and token_1
@@ -432,13 +431,12 @@ class Position:
         assert (isinstance(pool, Pool))
         assert (isinstance(sqrtRatioAX96, int))
         assert (isinstance(sqrtRatioBX96, int))
-        # assert (isinstance(amount_0, int))
-        # assert (isinstance(amount_1, int))
+        assert (isinstance(amount_0, int))
+        assert (isinstance(amount_1, int))
         assert (isinstance(use_full_precision, bool))
 
         sqrtRatioAX96, sqrtRatioBX96 = SqrtPriceMath.invert_ratio_if_needed(sqrtRatioAX96, sqrtRatioBX96)
 
-        # TODO: determine if there's a decimal issue with sqrt_ratio_current_x96
         if sqrt_ratio_current_x96 <= sqrtRatioAX96:
             return Position.max_liquidity_for_amount_0(sqrtRatioAX96, sqrtRatioBX96, amount_0, use_full_precision)
         elif sqrt_ratio_current_x96 < sqrtRatioBX96:
@@ -447,12 +445,11 @@ class Position:
             # determine maximum amount of liquidity that doesn't exceed other side
             return liquidity_0 if liquidity_0 < liquidity_1 else liquidity_1
         else:
-            # TODO: figure out why amount_1 is 0?
             return Position.max_liquidity_for_amount_1(sqrtRatioAX96, sqrtRatioBX96, amount_1)
 
     @staticmethod
     def from_amounts(pool: Pool, tick_lower: int, tick_upper: int, amount_0, amount_1, use_full_precision):
-        """ """
+        """ Determine maximum amount of liquidity to add based upon available amounts """
         assert (isinstance(pool, Pool))
         assert (isinstance(tick_lower, int))
         assert (isinstance(tick_upper, int))
@@ -493,7 +490,6 @@ class Position:
         else:
             return self._mint_amounts
 
-    # # TODO: determine if conversion to fractions is necessary
     def _ratios_after_slippage(self, slippage_tolerance: Fraction) -> Tuple:
         assert isinstance(slippage_tolerance, Fraction)
         assert (1 > slippage_tolerance.float_quotient() > 0)
@@ -504,7 +500,6 @@ class Position:
         price_lower = pool_token_0_price_fraction.multiply(price_lower_slippage_factor)
         price_upper = pool_token_0_price_fraction.multiply(price_upper_slippage_factor)
 
-        print("price slippage fractions", self.pool.get_token_0_price().as_fraction().float_quotient(), price_lower.float_quotient(), price_upper.float_quotient())
         sqrtRatioX96Lower = encodeSqrtRatioX96(price_lower.numerator, price_lower.denominator)
 
         if sqrtRatioX96Lower < MIN_SQRT_RATIO:
@@ -532,11 +527,12 @@ class Position:
         pool_lower = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Lower, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Lower), [])
         pool_upper = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Upper, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Upper), [])
 
+        # TODO: ensure we aren't just returning the stale previous mint amounts
         position_to_create_amount_0, position_to_create_amount_1 = self.mint_amounts()
         position_to_create = Position.from_amounts(self.pool, self.tick_lower, self.tick_upper, position_to_create_amount_0, position_to_create_amount_1, False)
 
         # TODO: why is this 0? - liquidity off?
-        # calculate mint amounts given the current tick and liquidity at the slippage adjusted price
+        # calculate mint amounts given the current tick and slippage adjusted liquidity
         amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[0]
         amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[1]
 
@@ -631,7 +627,7 @@ class Trade:
         if self.trade_type == TRADE_TYPE.EXACT_OUTPUT.value or self.trade_type == TRADE_TYPE.EXACT_OUTPUT_SINGLE.value:
             return self.output_amount
         else:
-            slippage_adjusted_amount = Fraction(100, 100) \
+            slippage_adjusted_amount = Fraction(1) \
                 .add(slippage_tolerance) \
                 .invert() \
                 .multiply(Fraction(self.output_amount.quotient())) \
@@ -647,7 +643,7 @@ class Trade:
         if self.trade_type == TRADE_TYPE.EXACT_INPUT.value or self.trade_type == TRADE_TYPE.EXACT_INPUT_SINGLE.value:
             return self.input_amount
         else:
-            slippage_adjusted_amount = Fraction(100, 100) \
+            slippage_adjusted_amount = Fraction(1) \
                 .add(slippage_tolerance) \
                 .multiply(Fraction(self.input_amount.quotient())).quotient()
 

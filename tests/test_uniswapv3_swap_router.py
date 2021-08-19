@@ -247,12 +247,12 @@ class TestUniswapV3SwapRouter(Contract):
         weth_dai_pool_address = self.position_manager.get_pool_address(self.token_weth, self.token_dai, FEES.MEDIUM.value)
         dai_usdc_pool_address = self.position_manager.get_pool_address(self.token_dai, self.token_usdc, FEES.LOW.value)
 
-        if isinstance(weth_dai_pool_address, Address):
+        if isinstance(weth_dai_pool_address, Address) and weth_dai_pool_address != Address("0x0000000000000000000000000000000000000000"):
             weth_dai_pool = self.position_manager.get_pool(weth_dai_pool_address, self.token_weth, self.token_dai, 1)
         else:
             weth_dai_pool = self.deploy_and_mint_weth_dai(position_manager_helpers)
 
-        if isinstance(dai_usdc_pool_address, Address):
+        if isinstance(dai_usdc_pool_address, Address) and dai_usdc_pool_address != Address("0x0000000000000000000000000000000000000000"):
             dai_usdc_pool = self.position_manager.get_pool(dai_usdc_pool_address, self.token_dai, self.token_usdc, 1)
         else:
             dai_usdc_pool = self.deploy_and_mint_dai_usdc(position_manager_helpers)
