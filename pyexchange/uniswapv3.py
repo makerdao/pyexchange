@@ -392,7 +392,6 @@ class PositionManager(Contract):
     def get_pool_state(self, pool_contract) -> List:
         """ Get the current pool state from slot0 """
         struct = pool_contract.functions.slot0().call()
-        print(struct)
         return struct
 
     def get_pool_fee(self, pool_contract) -> int:
@@ -483,6 +482,19 @@ class PositionManager(Contract):
         pool = Pool(token_0, token_1, fee, pool_price, liquidity, tick_current, ticks, chain_id)
         return pool
 
+    def get_token_ids_by_address(self, address: Address) -> List[int]:
+        assert isinstance(address, Address)
+
+        extant_positions = self.nft_position_manager_contract.functions.balanceOf(address.address).call()
+        token_ids = []
+        if extant_positions > 0:
+            for i in range(0, extant_positions):
+                token_id = self.nft_position_manager_contract.functions.tokenOfOwnerByIndex(address.address, i).call()
+                token_ids.append(token_id)
+            return token_ids
+        else:
+            return []
+
     # TODO: rename
     def positions(self, token_id: int, token_0: Token, token_1: Token) -> Position:
         """ Return an instantiated Position entity for a given positions token_id, and token pair
@@ -497,7 +509,6 @@ class PositionManager(Contract):
         assert token_0.address == Address(position[2]) and token_1.address == Address(position[3])
 
         fee = position[4]
-        print(token_0, token_1, fee)
         pool_address = self.get_pool_address(token_0, token_1, fee)
         pool_contract = self.get_pool_contract(pool_address)
         pool_state = self.get_pool_state(pool_contract)
@@ -541,8 +552,8 @@ class PositionManager(Contract):
         position_info = self.get_position_info(token_id)
 
         liquidity = position_info[7]
-        price_upper_tick = 1.0001 ** position_info[5]
-        price_lower_tick = 1.0001 ** position_info[6]
+        price_upper_tick = 1.0001 ** position_info[5] # 1.0001 ** tick_upper
+        price_lower_tick = 1.0001 ** position_info[6] # 1.0001 ** tick_lower
 
         position_token_0 = liquidity / math.sqrt(price_upper_tick)  # L / sqrt(pUpper)
         position_token_1 = liquidity * math.sqrt(price_lower_tick)  # L * sqrt(pLower)

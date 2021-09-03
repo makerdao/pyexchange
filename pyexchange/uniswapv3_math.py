@@ -19,8 +19,9 @@ import math
 
 from pyexchange.uniswapv3_constants import Q96, Q192, MAX_SQRT_RATIO, MIN_SQRT_RATIO, MAX_UINT256, ZERO, ONE, MAX_FEE, \
     MAX_UINT160, MIN_TICK, MAX_TICK
+
+from pymaker.model import Token
 from pymaker.numeric import Wad
-from fxpmath import Fxp
 from typing import List, Tuple
 
 
@@ -145,6 +146,8 @@ def get_tick_at_sqrt_ratio(sqrtRatioX96: int) -> int:
 
 def isqrt(n: int) -> int:
     """ use Newton's method to find the integer sqrt of the given number """
+    assert isinstance(n, int)
+
     if n > 0:
         x = 1 << (n.bit_length() + 1 >> 1)
         while True:
@@ -272,6 +275,7 @@ def add_liquidity_delta(x: int, y: int) -> int:
     else:
         return x + y
 
+
 # TODO: rename this to TickList? group above methods into Tick
 class Tick:
 
@@ -335,7 +339,7 @@ class Tick:
     # https://github.com/Uniswap/uniswap-v3-sdk/blob/c8e0d4c56e3b3ebd6446aba66523d20f2ea0fd9c/src/utils/nearestUsableTick.ts
     @staticmethod
     def nearest_usable_tick(tick: int, tick_spacing: int) -> int:
-        """ Return the nearest initalized tick given a tick, and pool tick_spacing """
+        """ Return the nearest initialized tick given a tick index, and pool tick_spacing """
         assert (isinstance(tick, int))
         assert (isinstance(tick_spacing, int) and tick_spacing > 0)
         assert MIN_TICK < tick < MAX_TICK
@@ -400,29 +404,6 @@ class Tick:
             index = Tick.next_initialized_tick(ticks, tick, zero_or_one).index
             next_initalized_tick = min(maximum, index)
             return next_initalized_tick, next_initalized_tick == index
-
-    # @staticmethod
-    # def tick_to_price(base_token: Token, quote_token: Token, tick: int) -> PriceFraction:
-    #     pass
-
-    # TODO: move this to PriceFraction class
-    # # https://github.com/Uniswap/uniswap-v3-sdk/blob/6c4242f51a51929b0cd4f4e786ba8a7c8fe68443/src/utils/priceTickConversions.ts
-    # @staticmethod
-    # def price_to_tick(price: PriceFraction) -> int:
-    #     """ returns the closest tick greater than or equal to the current price """
-    #     assert isinstance(price, PriceFraction)
-    #
-    #     already_sorted = price.base_token.address.address < price.quote_token.address.address
-    #
-    #     if already_sorted:
-    #         sqrt_ratio_x96 = encodeSqrtRatioX96(price.numerator, price.denominator)
-    #     else:
-    #         sqrt_ratio_x96 = encodeSqrtRatioX96(price.denominator, price.numerator)
-    #
-    #     tick = get_tick_at_sqrt_ratio(sqrt_ratio_x96)
-    #
-    #     # TODO:
-    #     next_tick_price = Tick.tick_to_price(price.base_token, price.quote_token, tick + 1)
 
 
 class SqrtPriceMath:

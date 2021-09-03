@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from decimal import Decimal, ROUND_HALF_UP, Context, setcontext, ROUND_DOWN
 from typing import List, Optional, Tuple
 
 from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, \
@@ -37,7 +38,6 @@ class Fraction:
     def invert(self):
         return self.__class__(self.denominator, self.numerator)
 
-    # https://github.com/Uniswap/uniswap-sdk-core/blob/8385914b682b79489f1aa8014288fa1d4f6d6d49/src/entities/fractions/fraction.ts#L123
     def quotient(self) -> int:
         return self.numerator // self.denominator
 
@@ -83,12 +83,34 @@ class Fraction:
         new_denominator = (self.denominator * other.numerator)
         return Fraction(new_numerator, new_denominator)
 
+    def less_than(self, other) -> bool:
+        assert isinstance(other, Fraction)
+
+        return (self.numerator * other.denominator) < (other.numerator * self.denominator)
+
+    def greater_than(self, other) -> bool:
+        assert isinstance(other, Fraction)
+
+        return (self.numerator * other.denominator) > (other.numerator * self.denominator)
+
     def as_fraction(self):
         """ Used be inheriting classes to create a raw Fraction instance """
         return Fraction(self.numerator, self.denominator)
 
-class CurrencyAmount(Fraction):
+    def to_significant(self, sig_digits: int, format, rounding=ROUND_HALF_UP) -> Decimal:
+        assert isinstance(sig_digits, int)
+        assert sig_digits > 0, "significant digits must be positive"
 
+        context = Context(prec=sig_digits + 1, rounding=rounding)
+        setcontext(context)
+
+        quotient = Decimal(self.numerator) / Decimal(self.denominator)
+        sig_digits = quotient.quantize()
+        return sig_digits
+
+
+class CurrencyAmount(Fraction):
+    """ Instantiate a CurrencyAmount object used for slippage calculations on fractionalized integers """
     def __init__(self, token: Token, numerator: int, denominator: int):
         assert isinstance(token, Token)
         assert isinstance(numerator, int)
@@ -97,13 +119,15 @@ class CurrencyAmount(Fraction):
         super().__init__(numerator, denominator)
         self.token = token
 
+        self.decimal_scale = (10 ** token.decimals)
+
     @staticmethod
     def from_raw_amount(token: Token, amount: int):
+        """ Amounts are assumed to be normalized for token decimals prior to input"""
         assert isinstance(token, Token)
         assert isinstance(amount, int)
 
         # assume denominator is 1 when constructing fractional instance from a raw amount
-        # return CurrencyAmount(token, token.normalize_amount(amount), 1)
         return CurrencyAmount(token, amount, 1)
 
     @staticmethod
@@ -114,9 +138,19 @@ class CurrencyAmount(Fraction):
 
         return CurrencyAmount(token, numerator, denominator)
 
+    def to_significant(self, digits: int=6, format={}, rounding=ROUND_DOWN) -> Decimal:
+        assert isinstance(digits, int)
+        assert digits > 0
 
-# TODO: diff between CurrencyAmount and PriceFraction?? -> extend CurrencyAmount
-# TODO: add scaling based upon token decimals
+        return self.divide(self.decimal_scale).to_significant(digits, format, rounding)
+
+    def to_fixed(self, digits: int, format={}, rounding=ROUND_DOWN) -> int:
+        assert isinstance(digits, int)
+        assert digits > 0
+
+        return int(round(self.divide(self.decimal_scale).float_quotient(), digits))
+
+
 class PriceFraction(Fraction):
     """ It is assumed the amounts have been normalized prior to price calculation and instantiation of PriceFraction object """
     def __init__(self, base_token: Token, quote_token: Token, denominator: int, numerator: int):
@@ -132,6 +166,8 @@ class PriceFraction(Fraction):
         self.numerator = numerator  # quote token
         self.denominator = denominator  # base token
 
+        self.scalar = Fraction(10 ** base_token.decimals, 10 ** quote_token.decimals)
+
     def get_float_price(self) -> float:
         return float(self.numerator / self.denominator)
 
@@ -146,12 +182,68 @@ class PriceFraction(Fraction):
         return self.__class__(self.base_token, other.quote_token, numerator_result, denominator_result)
 
     @staticmethod
+    def get_price_at_tick(base_token: Token, quote_token: Token, tick: int):
+        """ https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/utils/priceTickConversions.ts """
+        assert isinstance(base_token, Token)
+        assert isinstance(quote_token, Token)
+        assert isinstance(tick, int)
+
+        sqrt_ratio_at_tick = get_sqrt_ratio_at_tick(tick)
+
+        ratio_x192 = sqrt_ratio_at_tick * sqrt_ratio_at_tick
+
+        if int(base_token.address.address, 16) < int(quote_token.address.address, 16):
+            return PriceFraction(base_token, quote_token, Q192, ratio_x192)
+        else:
+            return PriceFraction(base_token, quote_token, ratio_x192, Q192)
+
+    # TODO: make not static
+    @staticmethod
+    def get_tick_at_price(price) -> int:
+        """ returns the first tick whose price is greater than or equal to the input tick price """
+        assert isinstance(price, PriceFraction)
+
+        sorted = int(price.base_token.address.address, 16) < int(price.quote_token.address.address, 16)
+
+        sqrt_ratio_x96 = encodeSqrtRatioX96(price.numerator, price.denominator) if sorted else encodeSqrtRatioX96(
+            price.denominator, price.numerator)
+
+        tick = get_tick_at_sqrt_ratio(sqrt_ratio_x96)
+
+        next_tick_price = PriceFraction.get_price_at_tick(price.base_token, price.quote_token, tick + 1)
+
+        if sorted:
+            if not price.less_than(next_tick_price):
+                tick += 1
+        else:
+            if not price.greater_than(next_tick_price):
+                tick += 1
+
+        return tick
+
+    @staticmethod
     def from_fraction(fraction: Fraction, base_token: Token, quote_token: Token):
         assert isinstance(fraction, Fraction)
         assert isinstance(base_token, Token)
         assert isinstance(quote_token, Token)
 
         return PriceFraction(base_token, quote_token, fraction.denominator, fraction.numerator)
+
+    def adjust_for_decimals(self):
+        """ Return a new PriceFraction that has been scaled by the pairings respective decimals """
+        return self.multiply(self.scalar)
+
+    def to_significant(self, digits: int=6, format={}, rounding=ROUND_HALF_UP) -> Decimal:
+        assert isinstance(digits, int)
+        assert digits > 0
+
+        return self.adjust_for_decimals().to_significant(digits, format, rounding)
+
+    def to_fixed(self, digits: int, format, rounding) -> int:
+        assert isinstance(digits, int)
+        assert digits > 0
+
+        return int(round(self.adjust_for_decimals().float_quotient(), digits))
 
 
 # TODO: add pool address?
@@ -164,7 +256,6 @@ class Pool:
         assert isinstance(square_root_ratio_x96, int)
         assert isinstance(liquidity, int)
         assert isinstance(tick_current, int)
-        # TODO: remove None check?
         assert (isinstance(ticks, List) or (ticks is None))
         assert isinstance(chain_id, int)
 
@@ -367,29 +458,29 @@ class Position:
         """ return the token_0 price at the upper tick """
         pass
 
-    def amount_in_token_0(self) -> Wad:
+    def amount_in_token_0(self) -> CurrencyAmount:
         """ Returns the amount of token0 that this position's liquidity could be burned for at the current pool price """
         if self.token_0_amount == None:
             if self.pool.tick_current < self.tick_lower:
-                self.token_0_amount = SqrtPriceMath.get_amount_0_delta(
-                    get_sqrt_ratio_at_tick(self.tick_lower),
-                    get_sqrt_ratio_at_tick(self.tick_upper),
-                    self.liquidity,
-                    False
-                )
+                self.token_0_amount = CurrencyAmount.from_raw_amount(self.pool.token_0, SqrtPriceMath.get_amount_0_delta(get_sqrt_ratio_at_tick(self.tick_lower), get_sqrt_ratio_at_tick(self.tick_upper), self.liquidity, False))
             elif self.pool.tick_current < self.tick_upper:
-                self.token_0_amount = SqrtPriceMath.get_amount_0_delta(
-                    get_sqrt_ratio_at_tick(self.tick_lower),
-                    get_sqrt_ratio_at_tick(self.tick_upper),
-                    self.liquidity,
-                    False
-                )
+                self.token_0_amount = CurrencyAmount.from_raw_amount(self.pool.token_0, SqrtPriceMath.get_amount_0_delta(self.pool.square_root_ratio_x96, get_sqrt_ratio_at_tick(self.tick_upper), self.liquidity, False))
             else:
-                self.token_0_amount = Wad.from_number(0)
+                self.token_0_amount = CurrencyAmount.from_raw_amount(self.pool.token_0, 0)
 
-    def amount_in_token_1(self) -> Wad:
-        """ """
-        pass
+        return self.token_0_amount
+
+    def amount_in_token_1(self) -> CurrencyAmount:
+        """ Returns the amount of token_1 that the position could be burned for at current prices """
+        if self.token_1_amount is None:
+            if self.pool.tick_current < self.tick_lower:
+                self.token_1_amount = CurrencyAmount.from_raw_amount(self.pool.token_1, 0)
+            elif self.pool.tick_current < self.tick_upper:
+                self.token_1_amount = CurrencyAmount.from_raw_amount(self.pool.token_1, SqrtPriceMath.get_amount_1_delta(get_sqrt_ratio_at_tick(self.tick_lower), self.pool.square_root_ratio_x96, self.liquidity, False))
+            else:
+                self.token_1_amount = CurrencyAmount.from_raw_amount(self.pool.token_1, SqrtPriceMath.get_amount_1_delta(get_sqrt_ratio_at_tick(self.tick_lower), get_sqrt_ratio_at_tick(self.tick_upper), self.liquidity, False))
+
+        return self.token_1_amount
 
     @staticmethod
     def max_liquidity_for_amount_0(sqrtRatioAX96: int, sqrtRatioBX96: int, amount_0: int, use_full_precision: bool) -> int:
@@ -448,11 +539,16 @@ class Position:
             return Position.max_liquidity_for_amount_1(sqrtRatioAX96, sqrtRatioBX96, amount_1)
 
     @staticmethod
-    def from_amounts(pool: Pool, tick_lower: int, tick_upper: int, amount_0, amount_1, use_full_precision):
-        """ Determine maximum amount of liquidity to add based upon available amounts """
+    def from_amounts(pool: Pool, tick_lower: int, tick_upper: int, amount_0: int, amount_1: int, use_full_precision: bool):
+        """ Determine maximum amount of liquidity to add based upon available amounts. Useful for creating a position where the amount of liquidity to add hasn't been calculated.
+
+            Incoming token amounts are assumed to have already been normalized for the given token's decimals.
+        """
         assert (isinstance(pool, Pool))
         assert (isinstance(tick_lower, int))
         assert (isinstance(tick_upper, int))
+        assert (isinstance(amount_0, int))
+        assert (isinstance(amount_1, int))
 
         sqrtRatioAX96 = get_sqrt_ratio_at_tick(tick_lower)
         sqrtRatioBX96 = get_sqrt_ratio_at_tick(tick_upper)
@@ -468,6 +564,7 @@ class Position:
         ))
 
     def mint_amounts(self) -> Tuple:
+        """ calculate amounts to be minted for a given amount of liquidity, within a given tick range. """
         if self._mint_amounts == None:
             if self.pool.tick_current < self.tick_lower:
                 amount_0_delta = SqrtPriceMath.get_amount_0_delta(get_sqrt_ratio_at_tick(self.tick_lower), get_sqrt_ratio_at_tick(self.tick_upper), self.liquidity, True)
@@ -477,7 +574,7 @@ class Position:
                 return self._mint_amounts
             elif self.pool.tick_current < self.tick_upper:
                 amount_0_delta = SqrtPriceMath.get_amount_0_delta(self.pool.square_root_ratio_x96, get_sqrt_ratio_at_tick(self.tick_upper), self.liquidity, True)
-                amount_1_delta = SqrtPriceMath.get_amount_1_delta(get_sqrt_ratio_at_tick(self.tick_upper), self.pool.square_root_ratio_x96, self.liquidity, True)
+                amount_1_delta = SqrtPriceMath.get_amount_1_delta(get_sqrt_ratio_at_tick(self.tick_lower), self.pool.square_root_ratio_x96, self.liquidity, True)
                 self._mint_amounts = amount_0_delta, amount_1_delta
                 
                 return self._mint_amounts
@@ -512,7 +609,6 @@ class Position:
 
         return (sqrtRatioX96Lower, sqrtRatioX96Upper)
 
-    # TODO: add rounding to tick at sqrt ratio?
     def mint_amounts_with_slippage(self, slippage_tolerance: Fraction) -> Tuple:
         """ Returns amount0; amount1 to mint after accounting for the given slippage_tolerance
 
@@ -527,11 +623,9 @@ class Position:
         pool_lower = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Lower, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Lower), [])
         pool_upper = Pool(self.pool.token_0, self.pool.token_1, self.pool.fee, sqrtRatioX96Upper, 0, get_tick_at_sqrt_ratio(sqrtRatioX96Upper), [])
 
-        # TODO: ensure we aren't just returning the stale previous mint amounts
         position_to_create_amount_0, position_to_create_amount_1 = self.mint_amounts()
         position_to_create = Position.from_amounts(self.pool, self.tick_lower, self.tick_upper, position_to_create_amount_0, position_to_create_amount_1, False)
 
-        # TODO: why is this 0? - liquidity off?
         # calculate mint amounts given the current tick and slippage adjusted liquidity
         amount_0 = Position(pool_upper, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[0]
         amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[1]
@@ -545,7 +639,7 @@ class Position:
 
 
 class Route:
-    """ """
+    """ Route object representing the path across pools to be used for executing a swap """
     def __init__(self, pools: List[Pool], input_token: Token, output_token: Token):
         assert (isinstance(pools, List) and len(pools) > 0)
         assert isinstance(input_token, Token)

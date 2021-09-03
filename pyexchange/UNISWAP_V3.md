@@ -14,11 +14,18 @@ Documentation is available here: https://docs.uniswap.org/concepts/V3-overview/g
 
 Pymaker repository is available here: https://github.com/makerdao/pymaker 
 
+Helpful links:
+- https://mellowprotocol.medium.com/uniswap-v3-liquidity-providing-101-f1db3822f16d
+
 ## Usage
 
 Instantiate either `SwapRouter` or `PositionManager` entities that wrap the respective uniswap-v3-periphery contracts, passing in a Web3 provider that has private keys registered.
 
 Methods on these classes return `pymaker.Transact` objects, which need to be invoked externally with a `.transact()` method call.
+
+All calculations are performed on integers. When floats or percentages are expected, `uniswapv3_entities.Fraction` math operations are used instead. 
+
+The EVM operates on wei amounts, so amount calculated use `pymaker.numeric.Wad` to convert between human readable, and EVM understandable terms. Inputs to methods like `Position.from_amounts()` or `Trade.from_route` are asuumed to be normalized for the given tokens decimals on call, and Wadified. This primarily comes into play when swapping, or calculating price. Otherwise liquidity management is largely decimal agnostic.
 
 &nbsp;
 
@@ -54,7 +61,9 @@ An example script can be seen in: [manual_test_uniswapv3_swap.py](../tests/manua
 ### Future Improvements
 - support permit
 - Add oracle support
-- check for token decimals
+- check for token decimals -> require inputting Wad type numbers into amount calculations
+  - Ensure all Wad conversion are done prior to calling functions
+- improve tickList updating -> add capability for a data provider to calculate the effects of swaps on a pools ticks offchain
 - Add unwrap WETH support
 - Implement UniV3NFT class for interacting with position NFTs externally from PositionManager.
 - Implement flashbot support
@@ -63,4 +72,3 @@ An example script can be seen in: [manual_test_uniswapv3_swap.py](../tests/manua
 - https://github.com/Uniswap/uniswap-v3-sdk
 - https://github.com/uniswap-python/uniswap-python
 - https://github.com/thanpolas/univ3prices
-

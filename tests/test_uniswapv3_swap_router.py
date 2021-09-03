@@ -184,6 +184,7 @@ class TestUniswapV3SwapRouter(Contract):
         # assert swap is not None and swap.successful
 
     def test_encode_route_to_path_multihop_input(self):
+        """ Create 3 tokens, and two pools with one shared token between them. Encode the exact input path across these pools."""
         test_token_1 = Token("test_1", Address("0x0000000000000000000000000000000000000001"), 18)
         test_token_2 = Token("test_2", Address("0x0000000000000000000000000000000000000002"), 18)
         test_token_3 = Token("test_3", Address("0x0000000000000000000000000000000000000003"), 18)
@@ -197,6 +198,7 @@ class TestUniswapV3SwapRouter(Contract):
         assert encoded_path == '0x0000000000000000000000000000000000000001000bb800000000000000000000000000000000000000020001f40000000000000000000000000000000000000003'
 
     def test_encode_route_to_path_multihop_output(self):
+        """ Create 3 tokens, and two pools with one shared token between them. Encode the exact output path across these pools."""
         test_token_1 = Token("test_1", Address("0x0000000000000000000000000000000000000001"), 18)
         test_token_2 = Token("test_2", Address("0x0000000000000000000000000000000000000002"), 18)
         test_token_3 = Token("test_3", Address("0x0000000000000000000000000000000000000003"), 18)
@@ -282,6 +284,7 @@ class TestUniswapV3SwapRouter(Contract):
         assert swap is not None and swap.successful
 
     def test_should_error_when_pools_on_different_networks(self):
+        """ test that both pools have matching chain_id value """
         test_token_1 = Token("test_1", Address("0x0000000000000000000000000000000000000001"), 18)
         test_token_2 = Token("test_2", Address("0x0000000000000000000000000000000000000002"), 18)
         test_token_3 = Token("test_3", Address("0x0000000000000000000000000000000000000003"), 18)
