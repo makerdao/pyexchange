@@ -2,6 +2,8 @@
 
 A python client for interacting with UniswapV3. It supports swapping, and position management. This client is build upon the Pymaker framework.
 
+THIS SOFTWARE IS AN ALPHA STATE AND SHOULD BE USED WITH EXTREME CAUTION.
+
 ## Guides
 Interacting with pool, router, and if deploying a new pool, factory contracts.
 - Pool: https://github.com/Uniswap/uniswap-v3-core/blob/main/contracts/UniswapV3Pool.sol

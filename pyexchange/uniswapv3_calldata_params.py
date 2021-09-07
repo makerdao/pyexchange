@@ -20,7 +20,9 @@ from typing import List
 
 from pymaker import Address, Calldata, Invocation
 from pymaker.model import Token
+from pymaker.numeric import Wad
 from pymaker.util import bytes_to_hexstring, int_to_bytes32
+
 from web3 import Web3
 
 from pyexchange.uniswapv3_entities import Pool, Position, PriceFraction, Fraction
@@ -38,21 +40,12 @@ class Params:
         assert isinstance(fn_signature, str)
         assert isinstance(arguments, List)
 
-        # TODO: add Invocation support
         return Calldata.from_contract_abi(web3, fn_signature, arguments, contract_abi)
-
-    # TODO: remove method if unnecessary?
-    # TODO: figure out how to handle multicall calldata
-    @staticmethod
-    def prepare_invocation(contract_address: Address, calldata: Calldata):
-        return Invocation(contract_address, calldata)
 
     def _deadline(self) -> int:
         """Get a predefined deadline."""
         return int(time.time()) + 1000
 
-    # TODO: simplify conversion path from int -> hexstring
-    # TODO: call self.convert_to_bytes?
     def _to_hex(self, num: int) -> str:
         return bytes_to_hexstring(int_to_bytes32(num))
 
@@ -64,23 +57,13 @@ class MulticallParams(Params):
         assert (isinstance(calldata, List))
 
         self.web3 = web3
-        # self.calldata = self.encode_multicall_calldata(calldata)
 
         self.method = "multicall(bytes[])"
         self.calldata = self.encode_calldata(self.web3, self.method, [calldata], contract_abi)
-        print("encoded calldata", self.calldata)
-
-    def encode_multicall_calldata(self, arguments: List[bytes]) -> bytes:
-        assert isinstance(arguments, List)
-
-        # TODO: add Invocation support
-        return Calldata.from_multicall_calldata(self.web3, arguments)
 
 
 class MintParams(Params):
-
-    # https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/nonfungiblePositionManager.test.ts
-
+    """ Construct a params struct to be sued in mint() smart contract call """
     def __init__(self, web3: Web3, contract_abi: List, position: Position, recipient: Address, slippage_tolerance: Fraction, deadline: int):
         assert(isinstance(web3, Web3))
         assert(isinstance(contract_abi, List))
@@ -98,8 +81,6 @@ class MintParams(Params):
         amount_0, amount_1 = self.position.mint_amounts()
 
         amount_0_min, amount_1_min = self.position.mint_amounts_with_slippage(slippage_tolerance)
-        print("desired amounts", amount_0, amount_1)
-        print("min amounts", amount_0_min, amount_1_min)
 
         self.calldata_args = [
             position.pool.token_0.address.address,
@@ -118,7 +99,6 @@ class MintParams(Params):
         # https://github.com/ethereum/web3.py/issues/829
         self.method = "mint(address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,address,uint256)"
         self.calldata = self.encode_calldata(web3, self.method, [tuple(self.calldata_args)], contract_abi)
-        print(self.calldata)
 
 
 class BurnParams(Params):
@@ -136,7 +116,7 @@ class BurnParams(Params):
 
 
 class CollectParams(Params):
-
+    """ Collects fees from an extant LP position """
     def __init__(self, web3: Web3, contract_abi: List, token_id: int, recipient: Address, amount_0_max: int, amount_1_max: int):
         assert(isinstance(web3, Web3))
         assert(isinstance(contract_abi, List))

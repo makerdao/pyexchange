@@ -16,36 +16,28 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import math
-import time
 import logging
 
 from web3 import Web3
 from typing import List, Tuple, Optional
 from hexbytes import HexBytes
 
-from eth_abi import encode_abi
 from eth_abi.packed import encode_abi_packed
 
 from pyexchange.uniswapv3_calldata_params import BurnParams, CollectParams, DecreaseLiquidityParams, \
     IncreaseLiquidityParams, MintParams, ExactInputSingleParams, ExactInputParams, ExactOutputSingleParams, \
-    ExactOutputParams, Params
+    ExactOutputParams
 from pyexchange.uniswapv3_constants import TICK_SPACING, FEES
-from pyexchange.uniswapv3_entities import Pool, Position, Trade, Route, PriceFraction, Fraction
+from pyexchange.uniswapv3_entities import Pool, Position, Route
 from pymaker import Calldata, Contract, Address, Transact, Wad, Receipt
 from pymaker.approval import directly
 from pymaker.model import Token
 from pymaker.token import ERC20Token, NFT
 from pymaker.util import bytes_to_hexstring
 
-# TODO: move this elsewhere when LogEvent location is determined
-from eth_abi.codec import ABICodec
-from eth_abi.registry import registry as default_registry
-from web3._utils.events import get_event_data
-from web3.types import EventData
 
 from pyexchange.uniswapv3_logs import LogIncreaseLiquidity, LogDecreaseLiquidity, LogCollect, LogInitialize, LogMint, \
     LogSwap
-from pyexchange.uniswapv3_math import encodeSqrtRatioX96, get_tick_at_sqrt_ratio
 
 
 class PermitOptions:
@@ -367,14 +359,6 @@ class PositionManager(Contract):
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         'multicall', [calldata])
 
-    # TODO: move this to uniswap_math?
-    # TODO: replace with Tick.nearest_usable_tick()
-    def round_to_nearest_whole_tick(self, tick: int, tick_spacing: int) -> int:
-        assert isinstance(tick, int)
-        assert isinstance(tick_spacing, int)
-
-        return int(tick_spacing * round(tick / tick_spacing))
-
     def get_pool_address(self, token_0: Token, token_1: Token, fee: int) -> Address:
         assert isinstance(token_0, Token)
         assert isinstance(token_1, Token)
@@ -483,6 +467,7 @@ class PositionManager(Contract):
         return pool
 
     def get_token_ids_by_address(self, address: Address) -> List[int]:
+        """ Retrieve a list of position NFT IDs owned by the given address """
         assert isinstance(address, Address)
 
         extant_positions = self.nft_position_manager_contract.functions.balanceOf(address.address).call()
@@ -495,7 +480,6 @@ class PositionManager(Contract):
         else:
             return []
 
-    # TODO: rename
     def positions(self, token_id: int, token_0: Token, token_1: Token) -> Position:
         """ Return an instantiated Position entity for a given positions token_id, and token pair
 

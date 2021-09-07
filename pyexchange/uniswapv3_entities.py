@@ -197,7 +197,6 @@ class PriceFraction(Fraction):
         else:
             return PriceFraction(base_token, quote_token, ratio_x192, Q192)
 
-    # TODO: make not static
     @staticmethod
     def get_tick_at_price(price) -> int:
         """ returns the first tick whose price is greater than or equal to the input tick price """
@@ -246,7 +245,6 @@ class PriceFraction(Fraction):
         return int(round(self.adjust_for_decimals().float_quotient(), digits))
 
 
-# TODO: add pool address?
 class Pool:
     """ https://github.com/Uniswap/uniswap-v3-sdk/blob/main/src/entities/pool.ts """
     def __init__(self, token_0: Token, token_1: Token, fee: int, square_root_ratio_x96: int, liquidity: int, tick_current: int, ticks: List, chain_id: int = 1):
@@ -267,7 +265,6 @@ class Pool:
         self.square_root_ratio_x96 = square_root_ratio_x96
         self.liquidity = liquidity
         self.tick_current = tick_current
-        # TODO: call ticks() function here
         self.ticks = self._map_ticks_to_tick(ticks)
         self.token_0_price = self.get_token_0_price()
         self.token_1_price = self.get_token_1_price()
@@ -319,8 +316,7 @@ class Pool:
 
         output_token = self.token_1 if zero_or_one else self.token_0
         output_amount = CurrencyAmount.from_raw_amount(output_token, pool_swap_state["amount_calculated"] * - 1)
-        # TODO: update with the new tick state
-        # TODO: since tick_lens will provide the global state, we need to calculate how the tick liquidity will shfit given this swap information
+
         new_pool = Pool(self.token_0, self.token_1, self.fee, pool_swap_state["sqrt_price_x96"], pool_swap_state["liquidity"], pool_swap_state["tick_current"], self.ticks)
 
         return output_amount, new_pool
@@ -339,8 +335,7 @@ class Pool:
 
         input_token = self.token_0 if zero_or_one else self.token_1
         input_amount = CurrencyAmount.from_raw_amount(input_token, pool_swap_state["amount_calculated"])
-        ## TODO: update self.ticks with self.get_ticks(pool_address, current_tick)
-        # TODO: since tick_lens will provide the global state, we need to calculate how the tick liquidity will shfit given this swap information
+
         new_pool = Pool(self.token_0, self.token_1, self.fee, pool_swap_state["sqrt_price_x96"], pool_swap_state["liquidity"], pool_swap_state["tick_current"], self.ticks)
 
         return input_amount, new_pool
@@ -512,7 +507,6 @@ class Position:
         result = (amount_1 * Q96) // (sqrtRatioBX96 - sqrtRatioAX96)
         return result
 
-    # TODO: move these methods to uniswapv3_math?
     @staticmethod
     def max_liquidity_for_amounts(pool: Pool, sqrt_ratio_current_x96: int, sqrtRatioAX96: int, sqrtRatioBX96: int, amount_0: int, amount_1: int, use_full_precision: bool) -> int:
         """ Calculate the amount of liquidity received for a given amount of token_0, and token_1
@@ -631,11 +625,6 @@ class Position:
         amount_1 = Position(pool_lower, self.tick_lower, self.tick_upper, position_to_create.liquidity).mint_amounts()[1]
 
         return amount_0, amount_1
-
-    # TODO: is this still necessary?
-    def as_NFT(self):
-        """ return erc-721 representation of position"""
-        pass
 
 
 class Route:

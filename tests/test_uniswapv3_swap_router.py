@@ -18,6 +18,7 @@
 import time
 import logging
 import pytest
+import requests
 
 from web3 import Web3, HTTPProvider
 
@@ -32,7 +33,7 @@ from pymaker.model import Token
 from pymaker.numeric import Wad
 from pymaker.token import DSToken, ERC20Token
 
-from pyexchange.uniswapv3_math import encodeSqrtRatioX96
+from pyexchange.uniswapv3_math import encodeSqrtRatioX96, Tick
 
 
 class TestUniswapV3SwapRouter(Contract):
@@ -54,12 +55,23 @@ class TestUniswapV3SwapRouter(Contract):
     Quoter_bin = Contract._load_bin(__name__, '../pyexchange/abi/Quoter.bin')
 
     def setup_class(self):
-        time.sleep(10)
         self.web3 = Web3(HTTPProvider("http://0.0.0.0:8555", request_kwargs={'timeout': 10}))
         self.web3.eth.defaultAccount = Web3.toChecksumAddress("0x9596C16D7bF9323265C2F2E22f43e6c80eB3d943")
         register_private_key(self.web3, "0x91cf2cc3671a365fcbf38010ff97ee31a5b7e674842663c56769e41600696ead")
 
         self.our_address = Address(self.web3.eth.defaultAccount)
+
+        # reset ganache EVM state to genesis
+        session = requests.Session()
+        method = 'evm_revert'
+        params = [1]
+        payload = {"jsonrpc": "2.0",
+                   "method": method,
+                   "params": params,
+                   "id": 1}
+        headers = {'Content-type': 'application/json'}
+        response = session.post('http://0.0.0.0:8555', json=payload, headers=headers)
+        print("revert response: ", response)
 
         # constructor args for SwapRouter
         self.factory_address: Address = self._deploy(self.web3, self.UniswapV3Factory_abi, self.UniswapV3Factory_bin, [])
@@ -93,8 +105,8 @@ class TestUniswapV3SwapRouter(Contract):
         self.swap_router.approve(self.token_weth)
 
         # TODO: normalize amounts for decimals
-        dai_balance = Wad.from_number(10000000000000)
-        usdc_balance = Wad.from_number(1000000000000)
+        dai_balance = Wad.from_number(9000000000000000)
+        usdc_balance = Wad.from_number(900000000000000)
 
         self.ds_dai.mint(dai_balance).transact(from_address=self.our_address)
         self.ds_usdc.mint(self.token_usdc.unnormalize_amount(usdc_balance)).transact(from_address=self.our_address)
@@ -108,8 +120,6 @@ class TestUniswapV3SwapRouter(Contract):
                                                                    self.NonfungiblePositionManager_abi, self.token_weth,
                                                                    self.token_dai)
 
-        # TODO: Resolve issues with minted value in wad being screwed up...
-
         starting_price = self.get_starting_sqrt_ratio(1, 1900)
         weth_dai_pool = position_manager_helper_wethdai.create_and_initialize_pool(
             starting_price, FEES.MEDIUM.value)
@@ -121,8 +131,8 @@ class TestUniswapV3SwapRouter(Contract):
 
         tick_lower = weth_dai_pool.tick_current - TICK_SPACING.MEDIUM.value * 3
         tick_upper = weth_dai_pool.tick_current + TICK_SPACING.MEDIUM.value * 5
-        rounded_tick_lower = self.position_manager.round_to_nearest_whole_tick(tick_lower, TICK_SPACING.MEDIUM.value)
-        rounded_tick_upper = self.position_manager.round_to_nearest_whole_tick(tick_upper, TICK_SPACING.MEDIUM.value)
+        rounded_tick_lower = Tick.nearest_usable_tick(tick_lower, TICK_SPACING.MEDIUM.value)
+        rounded_tick_upper = Tick.nearest_usable_tick(tick_upper, TICK_SPACING.MEDIUM.value)
 
         # TODO: calculate liquidity at a given price, with available balances
         # current liquidity levels result in too small of a balance being minted - need to determine why higher liquidity fails price slippage check
@@ -130,7 +140,7 @@ class TestUniswapV3SwapRouter(Contract):
 
         weth_dai_mint_params = position_manager_helper_wethdai.generate_mint_params(weth_dai_pool,
                                                                                     Position(weth_dai_pool, rounded_tick_lower, rounded_tick_upper,
-                                                                                             900000000000000000), self.our_address,
+                                                                                             9000000000000000000), self.our_address,
                                                                                     Fraction(20, 100))
         weth_dai_mint_receipt = self.position_manager.mint(weth_dai_mint_params).transact()
         assert weth_dai_mint_receipt is not None and weth_dai_mint_receipt.successful
@@ -155,7 +165,7 @@ class TestUniswapV3SwapRouter(Contract):
         liquidity_to_mint = 1000000000
         dai_usdc_mint_params = position_manager_helper_daiusdc.generate_mint_params(dai_usdc_pool,
                                                                                     Position(dai_usdc_pool, -10, 10,
-                                                                                             100000000000000000), self.our_address,
+                                                                                             900000000000000000), self.our_address,
                                                                                     Fraction(10, 100))
         dai_usdc_mint_receipt = self.position_manager.mint(dai_usdc_mint_params).transact()
         assert dai_usdc_mint_receipt is not None and dai_usdc_mint_receipt.successful
@@ -166,22 +176,6 @@ class TestUniswapV3SwapRouter(Contract):
         minted_position = self.position_manager.positions(token_id, dai_usdc_pool.token_0, dai_usdc_pool.token_1)
         print("minted dai_usdc value", self.position_manager.price_position(token_id, 1))
         return minted_position.pool
-
-    # def test_should_swap_usdc_for_dai_exact_output_single(self):
-        # amount_out = 100
-        # pool = Pool()
-        # route = Route(pool, self.token_usdc, self.token_dai)
-        # trade = Trade.from_route(route, CurrencyAmount.from_raw_amount(self.token_dai, amount_out), TRADE_TYPE.EXACT_OUTPUT_SINGLE.value)
-        # recipient = self.our_address
-        # slippage_tolerance = Fraction(20, 100) # equivalent to 0.2
-        # amount_in = trade.maximum_amount_in(slippage_tolerance)
-        # deadline = int(time.time() + 10000)
-        # price_limit = None
-        # exact_output_single_params = ExactOutputSingleParams(self.web3, trade.route.token_path[0], trade.route.token_path[1], trade.route.pools[0].fee, recipient, deadline, amount_out, amount_in, price_limit)
-        #
-        # swap = self.swap_router.swap_exact_output_single(exact_output_single_params).transact()
-        #
-        # assert swap is not None and swap.successful
 
     def test_encode_route_to_path_multihop_input(self):
         """ Create 3 tokens, and two pools with one shared token between them. Encode the exact input path across these pools."""
@@ -233,11 +227,12 @@ class TestUniswapV3SwapRouter(Contract):
 
         trade = Trade.from_route(route, CurrencyAmount.from_raw_amount(self.token_weth, weth_in.value), TRADE_TYPE.EXACT_INPUT.value)
         usdc_out = trade.minimum_amount_out(slippage_tolerance).quotient()
-        print("usdc out", usdc_out)
+        print("usdc out trade", usdc_out)
 
-        # usdc_out = self.swap_router.quote_exact_input(encoded_path, weth_in)
-        # print("usdc_out", usdc_out)
-        # usdc_out = Wad.from_number(usdc_out - 1).value
+        assert usdc_out > 0
+
+        usdc_out_quoter = self.swap_router.quote_exact_input(encoded_path, weth_in)
+        print("usdc_out quoter", usdc_out_quoter)
 
         exact_input_params = ExactInputParams(self.web3, self.SwapRouter_abi, encoded_path, recipient, deadline, weth_in.value, usdc_out)
 
@@ -273,9 +268,12 @@ class TestUniswapV3SwapRouter(Contract):
 
         trade = Trade.from_route(route, CurrencyAmount.from_raw_amount(self.token_weth, weth_out.value), TRADE_TYPE.EXACT_INPUT.value)
         usdc_in = trade.minimum_amount_out(slippage_tolerance).quotient()
+        print("usdc_in trade: ", usdc_in)
 
-        # usdc_in = self.swap_router.quote_exact_output(encoded_path, weth_out)
-        # print("usdc_in", usdc_in)
+        assert usdc_in > 0
+
+        # usdc_in_quoter = self.swap_router.quote_exact_output(encoded_path, weth_out)
+        # print("usdc_in quoter", usdc_in_quoter)
 
         exact_output_params = ExactOutputParams(self.web3, self.SwapRouter_abi, encoded_path, recipient, deadline, weth_out.value,
                                               usdc_in)
@@ -295,13 +293,3 @@ class TestUniswapV3SwapRouter(Contract):
 
         with pytest.raises(Exception):
             route = Route(path, test_token_1, test_token_3)
-
-    def test_permit(self):
-        pass
-
-    def test_swap_with_quoter(self):
-        pass
-
-    def test_trade_amount_out_match_quoter(self):
-        """ check on chain calls to quoter methods matches local Trade entity calculations """
-        pass

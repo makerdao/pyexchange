@@ -17,6 +17,7 @@
 import math
 import time
 import logging
+import requests
 
 import pkg_resources
 import pytest
@@ -60,13 +61,23 @@ class TestUniswapV3PositionManager(Contract):
     Quoter_bin = Contract._load_bin(__name__, '../pyexchange/abi/Quoter.bin')
 
     def setup_class(self):
-        time.sleep(10)
         # Use Ganache docker container
         self.web3 = Web3(HTTPProvider("http://0.0.0.0:8555", request_kwargs={'timeout': 60}))
         self.web3.eth.defaultAccount = Web3.toChecksumAddress("0x9596C16D7bF9323265C2F2E22f43e6c80eB3d943")
         register_private_key(self.web3, "0x91cf2cc3671a365fcbf38010ff97ee31a5b7e674842663c56769e41600696ead")
 
         self.our_address = Address(self.web3.eth.defaultAccount)
+
+        # take snapshot of ganache EVM state at genesis
+        session = requests.Session()
+        method = 'evm_snapshot'
+        params = []
+        payload = {"jsonrpc": "2.0",
+                   "method": method,
+                   "params": params,
+                   "id": 1}
+        headers = {'Content-type': 'application/json'}
+        response = session.post('http://0.0.0.0:8555', json=payload, headers=headers)
 
         # constructor args for nonfungiblePositionManager
         self.factory_address: Address = self._deploy(self.web3, self.UniswapV3Factory_abi, self.UniswapV3Factory_bin, [])
@@ -149,25 +160,25 @@ class TestUniswapV3PositionManager(Contract):
         token_1_balance = test_token_1.unnormalize_amount(Wad.from_number(10))
         token_2_balance = test_token_2.unnormalize_amount(Wad.from_number(500))
 
-        sqrt_price_ratio = self.get_starting_sqrt_ratio(1, 3000)
+        sqrt_price_ratio = self.get_starting_sqrt_ratio(Wad.from_number(1).value, test_token_2.unnormalize_amount(Wad.from_number(3000)).value)
         current_tick = get_tick_at_sqrt_ratio(sqrt_price_ratio)
         ticks = []
         test_pool = Pool(test_token_1, test_token_2, FEES.MEDIUM.value, sqrt_price_ratio, 0, current_tick, ticks)
 
         tick_lower = current_tick - TICK_SPACING.MEDIUM.value * 5
         tick_upper = current_tick + TICK_SPACING.MEDIUM.value * 7
-        rounded_tick_lower = self.position_manager.round_to_nearest_whole_tick(tick_lower, TICK_SPACING.MEDIUM.value)
-        rounded_tick_upper = self.position_manager.round_to_nearest_whole_tick(tick_upper, TICK_SPACING.MEDIUM.value)
+        rounded_tick_lower = Tick.nearest_usable_tick(tick_lower, TICK_SPACING.MEDIUM.value)
+        rounded_tick_upper = Tick.nearest_usable_tick(tick_upper, TICK_SPACING.MEDIUM.value)
         calculated_position = Position.from_amounts(test_pool, rounded_tick_lower, rounded_tick_upper, token_1_balance.value, token_2_balance.value, False)
 
         test_liquidity = calculated_position.liquidity
-        assert test_liquidity == 253164804
+        assert test_liquidity == 252860870269028
 
         test_position = Position(test_pool, rounded_tick_lower, rounded_tick_upper, test_liquidity)
 
         amount_0, amount_1 = test_position.mint_amounts()
-        assert amount_0 == 89781
-        assert amount_1 == 225324227
+        assert amount_0 == 95107120950731527
+        assert amount_1 == 208677042
 
     def test_mint_token_pool_low_price_and_slippage(self):
         """ Test minting a position for a pool that is a small fraction """
@@ -186,8 +197,8 @@ class TestUniswapV3PositionManager(Contract):
         # set Position.from_amounts() params
         tick_lower = current_tick - TICK_SPACING.MEDIUM.value * 5
         tick_upper = current_tick + TICK_SPACING.MEDIUM.value * 7
-        rounded_tick_lower = self.position_manager.round_to_nearest_whole_tick(tick_lower, TICK_SPACING.MEDIUM.value)
-        rounded_tick_upper = self.position_manager.round_to_nearest_whole_tick(tick_upper, TICK_SPACING.MEDIUM.value)
+        rounded_tick_lower = Tick.nearest_usable_tick(tick_lower, TICK_SPACING.MEDIUM.value)
+        rounded_tick_upper = Tick.nearest_usable_tick(tick_upper, TICK_SPACING.MEDIUM.value)
         calculated_position = Position.from_amounts(test_pool, rounded_tick_lower, rounded_tick_upper, token_1_balance.value, token_2_balance.value, False)
 
         test_liquidity = calculated_position.liquidity
