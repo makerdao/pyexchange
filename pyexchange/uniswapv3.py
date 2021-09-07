@@ -32,7 +32,7 @@ from pyexchange.uniswapv3_entities import Pool, Position, Route
 from pymaker import Calldata, Contract, Address, Transact, Wad, Receipt
 from pymaker.approval import directly
 from pymaker.model import Token
-from pymaker.token import ERC20Token, NFT
+from pymaker.token import ERC20Token
 from pymaker.util import bytes_to_hexstring
 
 
@@ -347,11 +347,6 @@ class PositionManager(Contract):
         return Transact(self, self.web3, self.NonfungiblePositionManager_abi, self.nft_position_manager_address, self.nft_position_manager_contract,
                         'mint', [tuple(params.calldata_args)], None, self._get_increase_liquidity_result_function())
 
-    # TODO: implement && change return type to UniV3NFT
-    def migrate_position(self, lp_token_address: Address) -> NFT:
-        """ migrate UniV2LP tokens to a v3 NFT """
-        assert (isinstance(lp_token_address, Address))
-
     def multicall(self, calldata: List[bytes]) -> Transact:
         """ multicall takes as input List[bytes[]] corresponding to each method call to be bundled """
         assert(isinstance(calldata, List))
@@ -608,30 +603,4 @@ class PositionManager(Contract):
     def __repr__(self):
         return f"UniswapV3PositionManager"
 
-
-# TODO: implement
-class UniV3NFT(NFT):
-    """ Instantiate a UniswapV3 position NFT 
-
-    Inherit from pymaker.NFT
-    
-    """
-
-    def __init__(self, NFT_uri: str, token_id: int):
-        pass
-
-    def get_owner_of(self, token_id: int):
-        pass
-
-    def get_balance_of(self, owner: Address) -> Wad:
-        pass
-
-    def get_token_description(self) -> Wad:
-        pass
-
-    def get_current_price(self) -> Wad:
-        pass
-
-    def collect_fees(self):
-        pass
 
