@@ -2,7 +2,7 @@
 
 A python client for interacting with UniswapV3. It supports swapping, and position management. This client is build upon the Pymaker framework.
 
-THIS SOFTWARE IS AN ALPHA STATE AND SHOULD BE USED WITH EXTREME CAUTION.
+THIS SOFTWARE IS AN ALPHA STATE AND SHOULD BE USED WITH EXTREME CAUTION. ANY OPERATIONS SHOULD BE CONDUCTED AND VERIFIED ON TEST NETWORKS (i.e. Kovan, Goerli, etc.) PRIOR TO MAINNET.
 
 ## Guides
 Interacting with pool, router, and if deploying a new pool, factory contracts.
@@ -49,6 +49,8 @@ An example script can be seen in: [manual_test_uniswapv3_liquidity_management.py
 4. Construct trade params, e.g. `ExactOutputParams` from the trade objects slippage adjusted swap amount calculations, and use as input to `SwapRouter` transact methods.
 
 *The above steps utilize client side methods in `Trade` to calculate swap amounts which adjust for slippage on the client. You can also call the Quoter contract directly to get non slippage adjusted trade amounts.*
+
+Usage of the quoter contract is the currently recommended approach to calculating swap parameters.
 
 An example script can be seen in: [manual_test_uniswapv3_swap.py](../tests/manual_test_uniswapv3_swap.py)
 
