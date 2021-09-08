@@ -1,6 +1,6 @@
 # UniswapV3 Python Client
 
-A python client for interacting with UniswapV3. It supports swapping, and position management. This client is build upon the Pymaker framework.
+A python client for interacting with UniswapV3. It supports swapping and position management. This client is built upon the Pymaker framework.
 
 THIS SOFTWARE IS AN ALPHA STATE AND SHOULD BE USED WITH EXTREME CAUTION. ANY OPERATIONS SHOULD BE CONDUCTED AND VERIFIED ON TEST NETWORKS (i.e. Kovan, Goerli, etc.) PRIOR TO MAINNET.
 
