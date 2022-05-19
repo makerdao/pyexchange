@@ -18,7 +18,7 @@
 import json
 import os
 import time
-
+import pytest
 from pyflex import Wad
 from pyexchange.dydx import DydxApi, Order, Trade
 
@@ -75,6 +75,7 @@ class DydxMockServer:
     def handle_get_trades(**kwargs):
         return MockedResponse(text=DydxMockServer.responses["trades"]).json()
 
+@pytest.mark.skip("deprecated?")
 class TestDydx:
     def setup_method(self):
         self.dydx = DydxApi(
